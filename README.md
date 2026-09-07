@@ -1,25 +1,42 @@
 # OPAL
 
-OPAL is a local-first music library designed to make a personal collection feel collected, not catalogued.
+> A local-first music library with a little more atmosphere.
 
-The current product work lives in [`opal-prototype/`](opal-prototype/), a Vite + React prototype with a Tauri desktop foundation.
+OPAL keeps a personal collection on the Mac and gives it a listening-room shape: sleeves, notes, a persistent queue, and playback that stays put while you move around.
 
-## Start the prototype
+This repository holds the current Tauri desktop prototype. It is an early macOS alpha. Accounts, sync, and sharing are deliberately out of scope for now.
 
-```bash
+## Run it
+
+```sh
 cd opal-prototype
 npm install
 npm run dev
 ```
 
-## Verify
+For the desktop shell:
 
-```bash
+```sh
+npm run tauri:dev
+```
+
+## Check it
+
+```sh
+npm run build
 npm run test:sites
 npm run test:playback
 npm run test:waveform
 npm run test:notes
-npm run build
+cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
-Additional focused test scripts are available in `opal-prototype/package.json`.
+## In the box
+
+- Vite and React frontend
+- Tauri 2 desktop shell
+- SQLite projects and tracks
+- Local managed audio and artwork
+- Persistent queue and webview playback
+
+The prototype boundary and visual language live in [`opal-prototype/design-contract.md`](opal-prototype/design-contract.md). Desktop architecture and platform notes are in [`opal-prototype/desktop-foundation.md`](opal-prototype/desktop-foundation.md).
