@@ -17,6 +17,7 @@ target/
 # Local tooling state
 .vite/
 .turbo/
+.local/
 
 # Temporary Icon Composer output
 opal-prototype/src-tauri/icons/.icon.icns-*
