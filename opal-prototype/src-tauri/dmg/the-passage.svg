@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="720" height="480" viewBox="0 0 1440 960">
+  <defs>
+    <linearGradient id="ground" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0a0713"/>
+      <stop offset="0.44" stop-color="#160d29"/>
+      <stop offset="1" stop-color="#0c0718"/>
+    </linearGradient>
+    <radialGradient id="lavenderGlow" cx="15%" cy="18%" r="70%">
+      <stop offset="0" stop-color="#987fe0" stop-opacity="0.24"/>
+      <stop offset="0.45" stop-color="#5a3f9a" stop-opacity="0.09"/>
+      <stop offset="1" stop-color="#2a164d" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="blushGlow" cx="84%" cy="32%" r="66%">
+      <stop offset="0" stop-color="#d68fb6" stop-opacity="0.22"/>
+      <stop offset="0.42" stop-color="#74356d" stop-opacity="0.1"/>
+      <stop offset="1" stop-color="#2a164d" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ribbon" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#9f8ae8" stop-opacity="0.08"/>
+      <stop offset="0.28" stop-color="#b6a1f0" stop-opacity="0.72"/>
+      <stop offset="0.58" stop-color="#f0b9d0" stop-opacity="0.86"/>
+      <stop offset="0.82" stop-color="#c7a0e8" stop-opacity="0.58"/>
+      <stop offset="1" stop-color="#9f8ae8" stop-opacity="0.06"/>
+    </linearGradient>
+    <linearGradient id="ribbonCore" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#f4ecff" stop-opacity="0"/>
+      <stop offset="0.23" stop-color="#ded2ff" stop-opacity="0.74"/>
+      <stop offset="0.54" stop-color="#ffe4ed" stop-opacity="0.92"/>
+      <stop offset="0.84" stop-color="#ddd0ff" stop-opacity="0.64"/>
+      <stop offset="1" stop-color="#f4ecff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="pedestal" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.18"/>
+      <stop offset="0.48" stop-color="#b8a4e6" stop-opacity="0.07"/>
+      <stop offset="1" stop-color="#5e3c8b" stop-opacity="0.12"/>
+    </linearGradient>
+    <linearGradient id="pedestalStroke" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f5ebff" stop-opacity="0.38"/>
+      <stop offset="0.5" stop-color="#bfa7ed" stop-opacity="0.15"/>
+      <stop offset="1" stop-color="#d391bd" stop-opacity="0.28"/>
+    </linearGradient>
+    <filter id="softBlur" x="-30%" y="-60%" width="160%" height="220%">
+      <feGaussianBlur stdDeviation="24"/>
+    </filter>
+    <filter id="coreBlur" x="-15%" y="-30%" width="130%" height="160%">
+      <feGaussianBlur stdDeviation="7"/>
+    </filter>
+    <filter id="grain" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.82" numOctaves="2" seed="19"/>
+      <feColorMatrix type="saturate" values="0"/>
+      <feComponentTransfer>
+        <feFuncA type="table" tableValues="0 0.08"/>
+      </feComponentTransfer>
+    </filter>
+    <filter id="shadow" x="-40%" y="-40%" width="180%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="20"/>
+      <feOffset dy="15"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.45"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1440" height="960" fill="url(#ground)"/>
+  <rect width="1440" height="960" fill="url(#lavenderGlow)"/>
+  <rect width="1440" height="960" fill="url(#blushGlow)"/>
+
+  <g fill="none" stroke="#bba7eb" opacity="0.08">
+    <ellipse cx="720" cy="474" rx="585" ry="330" stroke-width="1"/>
+    <ellipse cx="720" cy="474" rx="460" ry="252" stroke-width="1"/>
+    <path d="M120 460 C350 270 502 285 720 452 C940 620 1095 640 1320 450" stroke-width="2"/>
+  </g>
+
+  <g fill="none" stroke-linecap="round">
+    <path d="M70 484 C205 382 304 398 420 486 S634 588 765 474 S996 365 1110 475 S1240 558 1370 454" stroke="url(#ribbon)" stroke-width="54" opacity="0.28" filter="url(#softBlur)"/>
+    <path d="M70 484 C205 382 304 398 420 486 S634 588 765 474 S996 365 1110 475 S1240 558 1370 454" stroke="url(#ribbon)" stroke-width="18" opacity="0.6" filter="url(#coreBlur)"/>
+    <path d="M70 484 C205 382 304 398 420 486 S634 588 765 474 S996 365 1110 475 S1240 558 1370 454" stroke="url(#ribbonCore)" stroke-width="3" opacity="0.9"/>
+    <path d="M86 501 C218 420 300 432 421 507 S639 610 770 495 S992 397 1117 494 S1252 579 1358 473" stroke="#dfd0ff" stroke-width="1" opacity="0.42"/>
+    <path d="M112 457 C222 356 325 382 430 462 S625 548 760 451 S985 335 1117 454 S1247 522 1340 432" stroke="#ffcfe2" stroke-width="1" opacity="0.28"/>
+  </g>
+
+  <g opacity="0.34" fill="url(#pedestal)" stroke="url(#pedestalStroke)" stroke-width="3" filter="url(#shadow)">
+    <circle cx="360" cy="480" r="153"/>
+    <circle cx="1080" cy="480" r="153"/>
+  </g>
+  <g fill="none" stroke="#f7efff" opacity="0.12">
+    <circle cx="360" cy="480" r="128" stroke-width="1"/>
+    <circle cx="1080" cy="480" r="128" stroke-width="1"/>
+  </g>
+
+  <image x="566" y="72" width="308" height="103" opacity="0.86" preserveAspectRatio="xMidYMid meet" xlink:href="../../brand-assets/OPAL.icon/Assets/exec-af13d9c3-5929-46c0-a608-1fc1f0d5fb22.png"/>
+  <text x="720" y="292" text-anchor="middle" fill="#f8f0e7" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="32" font-weight="500" letter-spacing="0.2">Your music, held beautifully.</text>
+  <text x="720" y="765" text-anchor="middle" fill="#f8f0e7" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="25" font-weight="600" letter-spacing="0.3">Drag OPAL to Applications</text>
+  <text x="720" y="817" text-anchor="middle" fill="#d9cdea" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif" font-size="17" font-weight="400" letter-spacing="0.5">Local music stays on your Mac</text>
+  <rect width="1440" height="960" filter="url(#grain)" opacity="0.42"/>
+</svg>
