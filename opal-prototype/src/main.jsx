@@ -8,6 +8,7 @@ import "./pass7.css";
 import "./pass8.css";
 import "./pass9.css";
 import "./pass10.css";
+import "./pass11.css";
 
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>

@@ -20,7 +20,7 @@ use tauri::{Emitter, Manager};
 use uuid::Uuid;
 
 const APP_VERSION: &str = "0.1.0-alpha.1";
-const DATABASE_VERSION: i64 = 6;
+const DATABASE_VERSION: i64 = 7;
 
 #[cfg(target_os = "macos")]
 use tauri::TitleBarStyle;
@@ -124,6 +124,42 @@ struct TransitionDto {
     gap_ms: i64,
     note: String,
     updated_at: i64,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct CapsuleResponseDto {
+    id: String,
+    capsule_id: String,
+    track_id: String,
+    moment_id: String,
+    time_ms: i64,
+    state: String,
+    text: String,
+    created_at: i64,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct CapsuleDto {
+    id: String,
+    project_id: String,
+    project_title: String,
+    project_description: String,
+    title: String,
+    message: String,
+    artwork_path: Option<String>,
+    include_notes: bool,
+    has_password: bool,
+    expires_at: Option<i64>,
+    created_at: i64,
+    updated_at: i64,
+    share_reference: String,
+    is_expired: bool,
+    tracks: Vec<TrackDto>,
+    project_note: Option<NoteDto>,
+    transitions: Vec<TransitionDto>,
+    responses: Vec<CapsuleResponseDto>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -350,6 +386,55 @@ fn migrate_sequence_schema(connection: &mut Connection) -> Result<(), String> {
     Ok(())
 }
 
+fn migrate_capsules_schema(connection: &mut Connection) -> Result<(), String> {
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("Could not begin capsule migration: {error}"))?;
+    transaction
+        .execute_batch(
+            "
+          CREATE TABLE listening_capsules (
+            id TEXT PRIMARY KEY NOT NULL,
+            project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            title TEXT NOT NULL,
+            message TEXT NOT NULL DEFAULT '',
+            include_notes INTEGER NOT NULL DEFAULT 0,
+            password_hash TEXT,
+            expires_at INTEGER,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+          );
+          CREATE INDEX listening_capsules_project ON listening_capsules(project_id, updated_at);
+          CREATE TABLE capsule_tracks (
+            capsule_id TEXT NOT NULL REFERENCES listening_capsules(id) ON DELETE CASCADE,
+            track_id TEXT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+            position INTEGER NOT NULL,
+            created_at INTEGER NOT NULL,
+            PRIMARY KEY(capsule_id, track_id),
+            UNIQUE(capsule_id, position)
+          );
+          CREATE INDEX capsule_tracks_position ON capsule_tracks(capsule_id, position);
+          CREATE TABLE capsule_responses (
+            id TEXT PRIMARY KEY NOT NULL,
+            capsule_id TEXT NOT NULL REFERENCES listening_capsules(id) ON DELETE CASCADE,
+            track_id TEXT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+            moment_id TEXT NOT NULL REFERENCES moments(id) ON DELETE CASCADE,
+            time_ms INTEGER NOT NULL DEFAULT 0,
+            state TEXT NOT NULL CHECK (state IN ('keep', 'change', 'question', 'idea')),
+            text TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+          );
+          CREATE INDEX capsule_responses_capsule ON capsule_responses(capsule_id, created_at);
+          PRAGMA user_version = 7;
+        ",
+        )
+        .map_err(|error| format!("Could not migrate OPAL capsules: {error}"))?;
+    transaction
+        .commit()
+        .map_err(|error| format!("Could not commit OPAL capsule migration: {error}"))?;
+    Ok(())
+}
+
 fn initialise_database(path: &Path) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
@@ -449,7 +534,39 @@ fn initialise_database(path: &Path) -> Result<(), String> {
             CHECK (from_group_id <> to_group_id)
           );
           CREATE INDEX sequence_transitions_project ON sequence_transitions(project_id);
-          PRAGMA user_version = 6;
+          CREATE TABLE listening_capsules (
+            id TEXT PRIMARY KEY NOT NULL,
+            project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            title TEXT NOT NULL,
+            message TEXT NOT NULL DEFAULT '',
+            include_notes INTEGER NOT NULL DEFAULT 0,
+            password_hash TEXT,
+            expires_at INTEGER,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+          );
+          CREATE INDEX listening_capsules_project ON listening_capsules(project_id, updated_at);
+          CREATE TABLE capsule_tracks (
+            capsule_id TEXT NOT NULL REFERENCES listening_capsules(id) ON DELETE CASCADE,
+            track_id TEXT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+            position INTEGER NOT NULL,
+            created_at INTEGER NOT NULL,
+            PRIMARY KEY(capsule_id, track_id),
+            UNIQUE(capsule_id, position)
+          );
+          CREATE INDEX capsule_tracks_position ON capsule_tracks(capsule_id, position);
+          CREATE TABLE capsule_responses (
+            id TEXT PRIMARY KEY NOT NULL,
+            capsule_id TEXT NOT NULL REFERENCES listening_capsules(id) ON DELETE CASCADE,
+            track_id TEXT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+            moment_id TEXT NOT NULL REFERENCES moments(id) ON DELETE CASCADE,
+            time_ms INTEGER NOT NULL DEFAULT 0,
+            state TEXT NOT NULL CHECK (state IN ('keep', 'change', 'question', 'idea')),
+            text TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+          );
+          CREATE INDEX capsule_responses_capsule ON capsule_responses(capsule_id, created_at);
+          PRAGMA user_version = 7;
         ",
             )
             .map_err(|error| format!("Could not migrate OPAL database: {error}"))?;
@@ -588,6 +705,12 @@ fn initialise_database(path: &Path) -> Result<(), String> {
         .map_err(|error| format!("Could not read moments database version: {error}"))?;
     if current_version == 5 {
         migrate_sequence_schema(&mut connection)?;
+    }
+    let current_version: i64 = connection
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .map_err(|error| format!("Could not read sequence database version: {error}"))?;
+    if current_version == 6 {
+        migrate_capsules_schema(&mut connection)?;
     } else if current_version > DATABASE_VERSION {
         return Err(format!(
             "RECOVERY_REQUIRED: OPAL database version {current_version} is newer than this app."
@@ -1013,6 +1136,195 @@ fn load_projects(roots: &StorageRoots) -> Result<Vec<ProjectDto>, String> {
         .collect()
 }
 
+fn capsule_response_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CapsuleResponseDto> {
+    Ok(CapsuleResponseDto {
+        id: row.get(0)?,
+        capsule_id: row.get(1)?,
+        track_id: row.get(2)?,
+        moment_id: row.get(3)?,
+        time_ms: row.get(4)?,
+        state: row.get(5)?,
+        text: row.get(6)?,
+        created_at: row.get(7)?,
+    })
+}
+
+fn load_capsule_responses(
+    connection: &Connection,
+    capsule_id: &str,
+) -> Result<Vec<CapsuleResponseDto>, String> {
+    let mut statement = connection
+        .prepare(
+            "SELECT id, capsule_id, track_id, moment_id, time_ms, state, text, created_at
+             FROM capsule_responses WHERE capsule_id = ?1 ORDER BY created_at ASC",
+        )
+        .map_err(|error| format!("Could not load capsule responses: {error}"))?;
+    let responses = statement
+        .query_map(params![capsule_id], capsule_response_from_row)
+        .map_err(|error| format!("Could not read capsule responses: {error}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("Could not decode capsule responses: {error}"))?;
+    Ok(responses)
+}
+
+fn capsule_password_hash(capsule_id: &str, password: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(capsule_id.as_bytes());
+    hasher.update([0]);
+    hasher.update(password.as_bytes());
+    hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+fn load_capsule_record(
+    connection: &Connection,
+    capsule_id: &str,
+) -> Result<
+    (
+        String,
+        String,
+        String,
+        bool,
+        Option<String>,
+        Option<i64>,
+        i64,
+        i64,
+    ),
+    String,
+> {
+    connection
+        .query_row(
+            "SELECT project_id, title, message, include_notes, password_hash, expires_at, created_at, updated_at
+             FROM listening_capsules WHERE id = ?1",
+            params![capsule_id],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get::<_, i64>(3)? != 0,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                    row.get(7)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(|error| format!("Could not load capsule: {error}"))?
+        .ok_or_else(|| "This capsule no longer exists.".to_string())
+}
+
+fn ensure_capsule_access(
+    connection: &Connection,
+    capsule_id: &str,
+    password: Option<&str>,
+) -> Result<
+    (
+        String,
+        String,
+        String,
+        bool,
+        Option<String>,
+        Option<i64>,
+        i64,
+        i64,
+    ),
+    String,
+> {
+    let record = load_capsule_record(connection, capsule_id)?;
+    if record.5.is_some_and(|expires_at| expires_at <= now_ms()) {
+        return Err("This capsule has expired.".to_string());
+    }
+    if let Some(expected_hash) = record.4.as_deref() {
+        let supplied = password.unwrap_or_default();
+        if supplied.trim().is_empty()
+            || capsule_password_hash(capsule_id, supplied) != expected_hash
+        {
+            return Err("This capsule needs its password before it can be opened.".to_string());
+        }
+    }
+    Ok(record)
+}
+
+fn load_capsule(
+    connection: &Connection,
+    roots: &StorageRoots,
+    capsule_id: &str,
+) -> Result<CapsuleDto, String> {
+    let record = load_capsule_record(connection, capsule_id)?;
+    let project = load_project(connection, roots, &record.0)?;
+    let selected_ids = {
+        let mut statement = connection
+            .prepare(
+                "SELECT track_id FROM capsule_tracks WHERE capsule_id = ?1 ORDER BY position ASC",
+            )
+            .map_err(|error| format!("Could not load capsule sequence: {error}"))?;
+        let selected_ids = statement
+            .query_map(params![capsule_id], |row| row.get::<_, String>(0))
+            .map_err(|error| format!("Could not read capsule sequence: {error}"))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("Could not decode capsule sequence: {error}"))?;
+        selected_ids
+    };
+    let mut track_map = project
+        .tracks
+        .into_iter()
+        .map(|track| (track.id.clone(), track))
+        .collect::<HashMap<_, _>>();
+    let mut tracks = Vec::with_capacity(selected_ids.len());
+    for track_id in selected_ids {
+        let mut track = track_map
+            .remove(&track_id)
+            .ok_or_else(|| "A version in this capsule is no longer available.".to_string())?;
+        if !record.3 {
+            track.note = None;
+            track.moments.clear();
+        }
+        tracks.push(track);
+    }
+    let selected_groups = tracks
+        .iter()
+        .map(|track| track.group_id.clone())
+        .collect::<HashSet<_>>();
+    let project_note = record.3.then_some(project.project_note).flatten();
+    let transitions = if record.3 {
+        project
+            .transitions
+            .into_iter()
+            .filter(|transition| {
+                selected_groups.contains(&transition.from_group_id)
+                    && selected_groups.contains(&transition.to_group_id)
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    Ok(CapsuleDto {
+        id: capsule_id.to_string(),
+        project_id: record.0,
+        project_title: project.title,
+        project_description: project.description,
+        title: record.1,
+        message: record.2,
+        artwork_path: project.artwork_path,
+        include_notes: record.3,
+        has_password: record.4.is_some(),
+        expires_at: record.5,
+        created_at: record.6,
+        updated_at: record.7,
+        share_reference: format!("opal://capsule/{capsule_id}"),
+        is_expired: record.5.is_some_and(|expires_at| expires_at <= now_ms()),
+        tracks,
+        project_note,
+        transitions,
+        responses: load_capsule_responses(connection, capsule_id)?,
+    })
+}
+
 fn valid_moment_state(state: &str) -> bool {
     matches!(state, "keep" | "change" | "question" | "idea")
 }
@@ -1217,6 +1529,187 @@ fn update_transition(
         )
         .map_err(|error| format!("Could not update project timestamp: {error}"))?;
     load_project(&connection, &roots, &project_id)
+}
+
+#[tauri::command(rename = "createCapsule", rename_all = "camelCase")]
+fn create_capsule(
+    app: tauri::AppHandle,
+    project_id: String,
+    track_ids: Vec<String>,
+    include_notes: bool,
+    password: Option<String>,
+    expires_at: Option<i64>,
+    title: Option<String>,
+    message: Option<String>,
+) -> Result<CapsuleDto, String> {
+    let roots = prepare_storage(&app)?;
+    if track_ids.is_empty() {
+        return Err("Choose at least one version for the capsule.".to_string());
+    }
+    if expires_at.is_some_and(|value| value <= now_ms()) {
+        return Err("Choose an expiry in the future.".to_string());
+    }
+    let mut connection = open_database(&roots.db_path)?;
+    let project_title: String = connection
+        .query_row(
+            "SELECT title FROM projects WHERE id = ?1",
+            params![project_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| format!("Could not verify capsule project: {error}"))?
+        .ok_or_else(|| "Project no longer exists.".to_string())?;
+    let mut seen_groups = HashSet::new();
+    for track_id in &track_ids {
+        let group_id: String = connection
+            .query_row(
+                "SELECT COALESCE(group_id, id) FROM tracks WHERE id = ?1 AND project_id = ?2",
+                params![track_id, project_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| format!("Could not verify capsule versions: {error}"))?
+            .ok_or_else(|| "A selected version no longer exists in this project.".to_string())?;
+        if !seen_groups.insert(group_id) {
+            return Err("Choose only one version from each track for a capsule.".to_string());
+        }
+    }
+    let capsule_id = Uuid::new_v4().to_string();
+    let timestamp = now_ms();
+    let title = title.unwrap_or_default().trim().to_string();
+    let title = if title.is_empty() {
+        project_title
+    } else {
+        title
+    };
+    let message = message.unwrap_or_default().trim().to_string();
+    let password_hash = password
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| capsule_password_hash(&capsule_id, value));
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("Could not begin capsule creation: {error}"))?;
+    transaction
+        .execute(
+            "INSERT INTO listening_capsules (id, project_id, title, message, include_notes, password_hash, expires_at, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)",
+            params![
+                capsule_id,
+                project_id,
+                title,
+                message,
+                include_notes,
+                password_hash,
+                expires_at,
+                timestamp
+            ],
+        )
+        .map_err(|error| format!("Could not save capsule: {error}"))?;
+    for (position, track_id) in track_ids.iter().enumerate() {
+        transaction
+            .execute(
+                "INSERT INTO capsule_tracks (capsule_id, track_id, position, created_at) VALUES (?1, ?2, ?3, ?4)",
+                params![capsule_id, track_id, position as i64, timestamp],
+            )
+            .map_err(|error| format!("Could not save capsule sequence: {error}"))?;
+    }
+    transaction
+        .commit()
+        .map_err(|error| format!("Could not commit capsule: {error}"))?;
+    load_capsule(&connection, &roots, &capsule_id)
+}
+
+#[tauri::command(rename = "getCapsule", rename_all = "camelCase")]
+fn get_capsule(
+    app: tauri::AppHandle,
+    capsule_id: String,
+    password: Option<String>,
+) -> Result<CapsuleDto, String> {
+    let roots = prepare_storage(&app)?;
+    let connection = open_database(&roots.db_path)?;
+    ensure_capsule_access(&connection, &capsule_id, password.as_deref())?;
+    load_capsule(&connection, &roots, &capsule_id)
+}
+
+#[tauri::command(rename = "addCapsuleResponse", rename_all = "camelCase")]
+fn add_capsule_response(
+    app: tauri::AppHandle,
+    capsule_id: String,
+    track_id: String,
+    time_ms: i64,
+    state: String,
+    text: String,
+    password: Option<String>,
+) -> Result<CapsuleDto, String> {
+    let roots = prepare_storage(&app)?;
+    let state = state.trim().to_lowercase();
+    if !valid_moment_state(&state) {
+        return Err("Choose a valid response state.".to_string());
+    }
+    let text = text.trim().to_string();
+    if text.is_empty() {
+        return Err("Write a response before sending it back to OPAL.".to_string());
+    }
+    let mut connection = open_database(&roots.db_path)?;
+    ensure_capsule_access(&connection, &capsule_id, password.as_deref())?;
+    let duration_ms: i64 = connection
+        .query_row(
+            "SELECT tracks.duration_ms FROM capsule_tracks
+             JOIN tracks ON tracks.id = capsule_tracks.track_id
+             WHERE capsule_tracks.capsule_id = ?1 AND capsule_tracks.track_id = ?2",
+            params![capsule_id, track_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| format!("Could not verify capsule response track: {error}"))?
+        .ok_or_else(|| "That version is not part of this capsule.".to_string())?;
+    let timestamp = now_ms();
+    let moment_id = Uuid::new_v4().to_string();
+    let response_id = Uuid::new_v4().to_string();
+    let time_ms = time_ms.max(0).min(duration_ms.max(0));
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("Could not begin capsule response: {error}"))?;
+    transaction
+        .execute(
+            "INSERT INTO moments (id, track_id, lineage_id, time_ms, state, text, is_resolved, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, ?7, ?7)",
+            params![
+                moment_id,
+                track_id,
+                format!("capsule-response:{response_id}"),
+                time_ms,
+                state,
+                text,
+                timestamp
+            ],
+        )
+        .map_err(|error| format!("Could not add response moment: {error}"))?;
+    transaction
+        .execute(
+            "INSERT INTO capsule_responses (id, capsule_id, track_id, moment_id, time_ms, state, text, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![response_id, capsule_id, track_id, moment_id, time_ms, state, text, timestamp],
+        )
+        .map_err(|error| format!("Could not save capsule response: {error}"))?;
+    transaction
+        .execute(
+            "UPDATE listening_capsules SET updated_at = ?1 WHERE id = ?2",
+            params![timestamp, capsule_id],
+        )
+        .map_err(|error| format!("Could not update capsule timestamp: {error}"))?;
+    transaction
+        .execute(
+            "UPDATE projects SET updated_at = ?1 WHERE id = (SELECT project_id FROM listening_capsules WHERE id = ?2)",
+            params![timestamp, capsule_id],
+        )
+        .map_err(|error| format!("Could not update project timestamp: {error}"))?;
+    transaction
+        .commit()
+        .map_err(|error| format!("Could not commit capsule response: {error}"))?;
+    load_capsule(&connection, &roots, &capsule_id)
 }
 
 fn safe_managed_path(roots: &StorageRoots, managed_path: &str) -> Result<PathBuf, String> {
@@ -3028,6 +3521,9 @@ pub fn run() {
             create_moment,
             update_moment,
             update_transition,
+            create_capsule,
+            get_capsule,
+            add_capsule_response,
             save_note,
             delete_track,
             delete_project,
@@ -3062,7 +3558,7 @@ mod tests {
         let version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("version");
-        assert_eq!(version, 6);
+        assert_eq!(version, 7);
         connection.execute("INSERT INTO projects (id, title, created_at, updated_at) VALUES ('p', 'Project', 1, 1)", []).expect("project insert");
         connection.execute("INSERT INTO tracks (id, project_id, title, position, format, managed_file_ref, source_hash, created_at) VALUES ('t', 'p', 'Track', 0, 'WAV', 'audio/p/t.wav', 'hash', 1)", []).expect("track insert");
         let title: String = connection
@@ -3260,7 +3756,7 @@ mod tests {
         let version: i64 = migrated
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("version");
-        assert_eq!(version, 6);
+        assert_eq!(version, 7);
         let cleanup_table: String = migrated
             .query_row(
                 "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'cleanup_queue'",
