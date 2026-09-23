@@ -20,7 +20,7 @@ use tauri::{Emitter, Manager};
 use uuid::Uuid;
 
 const APP_VERSION: &str = "0.1.0-alpha.1";
-const DATABASE_VERSION: i64 = 5;
+const DATABASE_VERSION: i64 = 6;
 
 #[cfg(target_os = "macos")]
 use tauri::TitleBarStyle;
@@ -116,6 +116,18 @@ struct MomentDto {
 
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
+struct TransitionDto {
+    id: String,
+    project_id: String,
+    from_group_id: String,
+    to_group_id: String,
+    gap_ms: i64,
+    note: String,
+    updated_at: i64,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
 struct ProjectDto {
     id: String,
     title: String,
@@ -132,6 +144,7 @@ struct ProjectDto {
     duration: String,
     tracks: Vec<TrackDto>,
     project_note: Option<NoteDto>,
+    transitions: Vec<TransitionDto>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -308,6 +321,35 @@ fn migrate_moments_schema(connection: &mut Connection) -> Result<(), String> {
     Ok(())
 }
 
+fn migrate_sequence_schema(connection: &mut Connection) -> Result<(), String> {
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("Could not begin sequence migration: {error}"))?;
+    transaction
+        .execute_batch(
+            "
+          CREATE TABLE sequence_transitions (
+            id TEXT PRIMARY KEY NOT NULL,
+            project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            from_group_id TEXT NOT NULL REFERENCES track_groups(id) ON DELETE CASCADE,
+            to_group_id TEXT NOT NULL REFERENCES track_groups(id) ON DELETE CASCADE,
+            gap_ms INTEGER NOT NULL DEFAULT 0 CHECK (gap_ms >= 0 AND gap_ms <= 600000),
+            note TEXT NOT NULL DEFAULT '',
+            updated_at INTEGER NOT NULL,
+            UNIQUE(project_id, from_group_id, to_group_id),
+            CHECK (from_group_id <> to_group_id)
+          );
+          CREATE INDEX sequence_transitions_project ON sequence_transitions(project_id);
+          PRAGMA user_version = 6;
+        ",
+        )
+        .map_err(|error| format!("Could not migrate OPAL sequence transitions: {error}"))?;
+    transaction
+        .commit()
+        .map_err(|error| format!("Could not commit OPAL sequence migration: {error}"))?;
+    Ok(())
+}
+
 fn initialise_database(path: &Path) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
@@ -395,7 +437,19 @@ fn initialise_database(path: &Path) -> Result<(), String> {
           );
           CREATE INDEX moments_track_time ON moments(track_id, time_ms);
           CREATE INDEX moments_lineage ON moments(lineage_id);
-          PRAGMA user_version = 5;
+          CREATE TABLE sequence_transitions (
+            id TEXT PRIMARY KEY NOT NULL,
+            project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            from_group_id TEXT NOT NULL REFERENCES track_groups(id) ON DELETE CASCADE,
+            to_group_id TEXT NOT NULL REFERENCES track_groups(id) ON DELETE CASCADE,
+            gap_ms INTEGER NOT NULL DEFAULT 0 CHECK (gap_ms >= 0 AND gap_ms <= 600000),
+            note TEXT NOT NULL DEFAULT '',
+            updated_at INTEGER NOT NULL,
+            UNIQUE(project_id, from_group_id, to_group_id),
+            CHECK (from_group_id <> to_group_id)
+          );
+          CREATE INDEX sequence_transitions_project ON sequence_transitions(project_id);
+          PRAGMA user_version = 6;
         ",
             )
             .map_err(|error| format!("Could not migrate OPAL database: {error}"))?;
@@ -528,6 +582,12 @@ fn initialise_database(path: &Path) -> Result<(), String> {
         .map_err(|error| format!("Could not read migrated database version: {error}"))?;
     if current_version == 4 {
         migrate_moments_schema(&mut connection)?;
+    }
+    let current_version: i64 = connection
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .map_err(|error| format!("Could not read moments database version: {error}"))?;
+    if current_version == 5 {
+        migrate_sequence_schema(&mut connection)?;
     } else if current_version > DATABASE_VERSION {
         return Err(format!(
             "RECOVERY_REQUIRED: OPAL database version {current_version} is newer than this app."
@@ -809,6 +869,36 @@ fn load_track_moments(connection: &Connection, track_id: &str) -> Result<Vec<Mom
     Ok(moments)
 }
 
+fn transition_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<TransitionDto> {
+    Ok(TransitionDto {
+        id: row.get(0)?,
+        project_id: row.get(1)?,
+        from_group_id: row.get(2)?,
+        to_group_id: row.get(3)?,
+        gap_ms: row.get(4)?,
+        note: row.get(5)?,
+        updated_at: row.get(6)?,
+    })
+}
+
+fn load_project_transitions(
+    connection: &Connection,
+    project_id: &str,
+) -> Result<Vec<TransitionDto>, String> {
+    let mut statement = connection
+        .prepare(
+            "SELECT id, project_id, from_group_id, to_group_id, gap_ms, note, updated_at
+             FROM sequence_transitions WHERE project_id = ?1 ORDER BY updated_at ASC",
+        )
+        .map_err(|error| format!("Could not load sequence transitions: {error}"))?;
+    let transitions = statement
+        .query_map(params![project_id], transition_from_row)
+        .map_err(|error| format!("Could not read sequence transitions: {error}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("Could not decode sequence transitions: {error}"))?;
+    Ok(transitions)
+}
+
 fn load_project(
     connection: &Connection,
     roots: &StorageRoots,
@@ -872,6 +962,7 @@ fn load_project(
         track.moments = load_track_moments(connection, &track.id)?;
     }
     let project_note = load_project_note(connection, project_id)?;
+    let transitions = load_project_transitions(connection, project_id)?;
     let group_count = tracks
         .iter()
         .map(|track| track.group_id.as_str())
@@ -903,6 +994,7 @@ fn load_project(
         duration: format_project_duration(duration_ms),
         tracks,
         project_note,
+        transitions,
     })
 }
 
@@ -1067,6 +1159,57 @@ fn update_moment(
     if changed == 0 {
         return Err("Moment no longer exists in this project.".to_string());
     }
+    connection
+        .execute(
+            "UPDATE projects SET updated_at = ?1 WHERE id = ?2",
+            params![timestamp, project_id],
+        )
+        .map_err(|error| format!("Could not update project timestamp: {error}"))?;
+    load_project(&connection, &roots, &project_id)
+}
+
+#[tauri::command(rename = "updateTransition", rename_all = "camelCase")]
+fn update_transition(
+    app: tauri::AppHandle,
+    project_id: String,
+    from_group_id: String,
+    to_group_id: String,
+    gap_ms: i64,
+    note: String,
+) -> Result<ProjectDto, String> {
+    let roots = prepare_storage(&app)?;
+    if from_group_id == to_group_id {
+        return Err("A transition needs two different tracks.".to_string());
+    }
+    let connection = open_database(&roots.db_path)?;
+    let group_count: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM track_groups WHERE project_id = ?1 AND id IN (?2, ?3)",
+            params![project_id, from_group_id, to_group_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| format!("Could not verify transition tracks: {error}"))?;
+    if group_count != 2 {
+        return Err("Those tracks no longer exist in this project.".to_string());
+    }
+    let timestamp = now_ms();
+    connection
+        .execute(
+            "INSERT INTO sequence_transitions (id, project_id, from_group_id, to_group_id, gap_ms, note, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+             ON CONFLICT(project_id, from_group_id, to_group_id)
+             DO UPDATE SET gap_ms = excluded.gap_ms, note = excluded.note, updated_at = excluded.updated_at",
+            params![
+                Uuid::new_v4().to_string(),
+                project_id,
+                from_group_id,
+                to_group_id,
+                gap_ms.max(0).min(600_000),
+                note,
+                timestamp
+            ],
+        )
+        .map_err(|error| format!("Could not save sequence transition: {error}"))?;
     connection
         .execute(
             "UPDATE projects SET updated_at = ?1 WHERE id = ?2",
@@ -2884,6 +3027,7 @@ pub fn run() {
             delete_track_version,
             create_moment,
             update_moment,
+            update_transition,
             save_note,
             delete_track,
             delete_project,
@@ -2918,7 +3062,7 @@ mod tests {
         let version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("version");
-        assert_eq!(version, 5);
+        assert_eq!(version, 6);
         connection.execute("INSERT INTO projects (id, title, created_at, updated_at) VALUES ('p', 'Project', 1, 1)", []).expect("project insert");
         connection.execute("INSERT INTO tracks (id, project_id, title, position, format, managed_file_ref, source_hash, created_at) VALUES ('t', 'p', 'Track', 0, 'WAV', 'audio/p/t.wav', 'hash', 1)", []).expect("track insert");
         let title: String = connection
@@ -2964,6 +3108,14 @@ mod tests {
                 "Check the vocal entrance".to_string()
             )
         );
+        let transition_table: String = connection
+            .query_row(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'sequence_transitions'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("sequence transition table");
+        assert_eq!(transition_table, "sequence_transitions");
         connection
             .execute(
                 "INSERT INTO notes (id, project_id, text, updated_at) VALUES ('n', 'p', 'A note', 2)",
@@ -3108,7 +3260,7 @@ mod tests {
         let version: i64 = migrated
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("version");
-        assert_eq!(version, 5);
+        assert_eq!(version, 6);
         let cleanup_table: String = migrated
             .query_row(
                 "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'cleanup_queue'",
@@ -3123,6 +3275,58 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn sequence_transitions_load_with_their_project() {
+        let directory = tempdir().expect("temporary sequence directory");
+        let database = directory.path().join("opal.sqlite");
+        initialise_database(&database).expect("migration");
+        let roots = StorageRoots {
+            root: directory.path().to_path_buf(),
+            db_path: database.clone(),
+            audio_dir: directory.path().join("audio"),
+            artwork_dir: directory.path().join("artwork"),
+            staging_dir: directory.path().join(".staging"),
+        };
+        let connection = open_database(&database).expect("database");
+        connection
+            .execute(
+                "INSERT INTO projects (id, title, created_at, updated_at) VALUES ('p', 'Sequence', 1, 1)",
+                [],
+            )
+            .expect("project insert");
+        for (id, title, position) in [("g1", "Intro", 0), ("g2", "Resolve", 1)] {
+            connection
+                .execute(
+                    "INSERT INTO track_groups (id, project_id, title, position, created_at) VALUES (?1, 'p', ?2, ?3, 1)",
+                    params![id, title, position],
+                )
+                .expect("track group insert");
+        }
+        for (id, group_id, title, position) in
+            [("t1", "g1", "Intro", 0), ("t2", "g2", "Resolve", 1)]
+        {
+            connection
+                .execute(
+                    "INSERT INTO tracks (id, project_id, group_id, title, position, version_name, version_position, is_current, format, managed_file_ref, source_hash, created_at) VALUES (?1, 'p', ?2, ?3, ?4, 'Original', 0, 1, 'WAV', ?5, ?1, 1)",
+                    params![id, group_id, title, position, format!("audio/p/{id}.wav")],
+                )
+                .expect("track insert");
+        }
+        connection
+            .execute(
+                "INSERT INTO sequence_transitions (id, project_id, from_group_id, to_group_id, gap_ms, note, updated_at) VALUES ('transition', 'p', 'g1', 'g2', 1800, 'Let the reverb breathe', 2)",
+                [],
+            )
+            .expect("transition insert");
+
+        let project = load_project(&connection, &roots, "p").expect("load project");
+        assert_eq!(project.transitions.len(), 1);
+        assert_eq!(project.transitions[0].from_group_id, "g1");
+        assert_eq!(project.transitions[0].to_group_id, "g2");
+        assert_eq!(project.transitions[0].gap_ms, 1800);
+        assert_eq!(project.transitions[0].note, "Let the reverb breathe");
     }
 
     #[test]
