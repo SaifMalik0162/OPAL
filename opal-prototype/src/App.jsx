@@ -7,7 +7,8 @@ import { isCurrentPlaybackRequest, previousQueueIndex, repeatQueueIndex, shuffle
 import { reconcilePlayingQueue } from "./queue-state.js";
 import { shouldApplyNoteSave } from "./note-revisions.js";
 import { createNoteStore, noteKeyParts } from "./note-store.js";
-import { createWaveform, waveformFromAudioBuffer, waveformSeed } from "./waveform.js";
+import { createWaveform, waveformSeed } from "./waveform.js";
+import { cacheWaveform, readCachedWaveform } from "./waveform-cache.js";
 import {
   ArrowLeft,
   ArrowSquareOut,
@@ -15,7 +16,6 @@ import {
   CaretDown,
   CaretLeft,
   CaretRight,
-  CaretUp,
   Check,
   CircleNotch,
   CloudCheck,
@@ -31,7 +31,6 @@ import {
   MagnifyingGlass,
   NotePencil,
   Pause,
-  PencilSimple,
   Play,
   Plus,
   Queue,
@@ -164,6 +163,7 @@ function App() {
   const noteTextRef = useRef("");
   const noteRevisionRef = useRef(0);
   const noteStoreRef = useRef(null);
+  const searchInputRef = useRef(null);
   const allowWindowCloseRef = useRef(false);
   const importActiveProjectsRef = useRef(new Set());
   const lastImportRequestRef = useRef(null);
@@ -242,6 +242,79 @@ function App() {
     if (audioRef.current) audioRef.current.volume = muted ? 0 : Math.max(0, Math.min(1, volume / 100));
     window.localStorage.setItem(PLAYBACK_STORAGE_KEY, JSON.stringify({ projectId: playingProjectId, trackId: playingTrackId, volume, muted }));
   }, [playingProjectId, playingTrackId, volume, muted]);
+
+  useEffect(() => {
+    const mediaSession = navigator.mediaSession;
+    if (!mediaSession || !displayProject || !displayTrack) return undefined;
+    try {
+      mediaSession.metadata = new MediaMetadata({
+        title: displayTrack.title,
+        artist: "OPAL",
+        album: displayProject.title,
+        artwork: displayProject.artwork ? [{ src: displayProject.artwork, sizes: "512x512", type: "image/png" }] : [],
+      });
+      mediaSession.playbackState = playbackState === "playing" ? "playing" : "paused";
+      const handlers = {
+        play: () => { if (playbackState !== "playing") togglePlayback(); },
+        pause: () => {
+          if (playbackState === "playing") {
+            audioRef.current?.pause();
+            setPlaybackState("paused");
+          }
+        },
+        previoustrack: playPrevious,
+        nexttrack: playNext,
+        seekbackward: () => seekBy(-10),
+        seekforward: () => seekBy(10),
+      };
+      Object.entries(handlers).forEach(([action, handler]) => {
+        try { mediaSession.setActionHandler(action, handler); } catch { /* WebKit exposes a partial action set. */ }
+      });
+      return () => {
+        Object.keys(handlers).forEach((action) => {
+          try { mediaSession.setActionHandler(action, null); } catch { /* Ignore unsupported actions. */ }
+        });
+      };
+    } catch {
+      return undefined;
+    }
+  }, [displayProject?.id, displayProject?.title, displayProject?.artwork, displayTrack?.id, displayTrack?.title, playbackState, playingProjectId, playingTrackId]);
+
+  useEffect(() => {
+    const mediaSession = navigator.mediaSession;
+    if (!mediaSession || !durationMs || !Number.isFinite(elapsedMs)) return;
+    try {
+      mediaSession.setPositionState({ duration: Math.max(0.001, durationMs / 1000), playbackRate: 1, position: Math.min(durationMs / 1000, Math.max(0, elapsedMs / 1000)) });
+    } catch {
+      // Position state is optional and can be rejected while metadata is loading.
+    }
+  }, [durationMs, elapsedMs]);
+
+  useEffect(() => {
+    function isEditableTarget(target) {
+      return target?.matches?.("input, textarea, select, button, [contenteditable='true']");
+    }
+    function handleKeyboardShortcuts(event) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+        return;
+      }
+      if (isEditableTarget(event.target)) return;
+      if (event.key === " ") {
+        event.preventDefault();
+        togglePlayback();
+      } else if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        seekBy(-5);
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        seekBy(5);
+      }
+    }
+    document.addEventListener("keydown", handleKeyboardShortcuts);
+    return () => document.removeEventListener("keydown", handleKeyboardShortcuts);
+  }, [displayProject?.id, displayTrack?.id, playbackState, durationMs, playingProjectId, playingTrackId]);
 
   useEffect(() => {
     window.localStorage.setItem(SORT_STORAGE_KEY, sortMode);
@@ -598,6 +671,14 @@ function App() {
     else if (displayProject && displayTrack) startPlayback(displayProject, displayTrack, displayTrackIndex >= 0 ? displayTrackIndex : 0);
   }
 
+  function seekBy(seconds) {
+    const audio = audioRef.current;
+    if (!audio || !durationMs) return;
+    const nextElapsed = Math.min(durationMs, Math.max(0, (audio.currentTime * 1000) + (seconds * 1000)));
+    audio.currentTime = nextElapsed / 1000;
+    setElapsedMs(nextElapsed);
+  }
+
   function seekPlayback(event) {
     const audio = audioRef.current;
     if (!audio || !durationMs) return;
@@ -893,7 +974,13 @@ function App() {
     setImportProgress({ projectId, current: 0, total: paths.length, fileName: "", status: "processing", message: "", results: [] });
     try {
       const summary = await invoke("importAudioFiles", { projectId, paths, allowDuplicates });
-      await reloadProjects(projectId);
+      const refreshedProjects = await reloadProjects(projectId);
+      const importedIds = new Set(summary.results.map((result) => result.track?.id).filter(Boolean));
+      const importedTracks = refreshedProjects.find((project) => project.id === projectId)?.tracks.filter((track) => importedIds.has(track.id)) ?? [];
+      importedTracks.forEach((track) => {
+        if (!track.managedFilePath || readCachedWaveform(track)) return;
+        void cacheWaveform(track, convertFileSrc(track.managedFilePath)).catch(() => {});
+      });
       setDuplicatePaths(summary.duplicatePaths ?? []);
       setImportProgress((current) => ({ ...(current ?? {}), current: paths.length, total: paths.length, status: summary.duplicatePaths?.length ? "duplicates" : "complete", message: summary.duplicatePaths?.length ? "Duplicate files found." : `${summary.importedCount} imported.`, results: summary.results ?? [] }));
       setError("");
@@ -915,7 +1002,7 @@ function App() {
   return <div className="opal-app">
     <div className="ambient-field" aria-hidden="true" />
     <header className="topbar" data-tauri-drag-region="deep" onMouseDown={handleWindowMouseDown}>
-      <div className="topbar-left"><button className="brand-lockup" type="button" onClick={returnToLibrary} aria-label="Open OPAL library"><span className="brand-mark">O</span><span className="brand-name">OPAL</span></button><label className="search-field"><MagnifyingGlass size={14} weight="regular" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search" />{query && <button type="button" className="clear-search" onClick={() => setQuery("")} aria-label="Clear search"><X size={13} /></button>}</label></div>
+      <div className="topbar-left"><button className="brand-lockup" type="button" onClick={returnToLibrary} aria-label="Open OPAL library"><span className="brand-mark">O</span><span className="brand-name">OPAL</span></button><label className="search-field"><MagnifyingGlass size={14} weight="regular" /><input ref={searchInputRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search" />{query && <button type="button" className="clear-search" onClick={() => setQuery("")} aria-label="Clear search"><X size={13} /></button>}</label></div>
       <nav className="top-navigation" aria-label="Primary navigation"><button type="button" className={activeView === "library" ? "is-active" : ""} onClick={returnToLibrary}>Library</button><button type="button" className={activeView === "projects" ? "is-active" : ""} onClick={openProjectsView}>Projects</button></nav>
       <div className="topbar-actions"><button type="button" className={`topbar-import ${importActive ? "is-busy" : ""}`} onClick={() => importActive ? setImportOpen(true) : (selectedProject ? pickAudioFiles() : setCreateOpen(true))}><Plus size={14} />{importActive ? "Importing…" : "Import"}</button><button type="button" className="profile-button" onClick={openProfile} aria-label="Open OPAL settings" aria-expanded={profileOpen}>SM</button>{profileOpen && <ProfilePopover nativeAvailable={isTauri()} storageInfo={storageInfo} storageError={storageError} preferences={preferences} importProgress={importProgress} onTogglePreference={togglePreference} onRevealFolder={revealStorageFolder} onExportBackup={exportLibraryBackup} onRestoreBackup={restoreLibraryBackup} onRetryStorage={refreshStorageInfo} onDiagnostics={openDiagnostics} onClose={() => setProfileOpen(false)} />}</div>
     </header>
@@ -952,14 +1039,26 @@ function LibraryView({ loading, projects: visibleProjects, selectedId, query, so
     return <section className="library-screen view-stack empty-library-screen"><div className="empty-library glass"><NotePencil size={27} weight="thin" /><h1>{hasSearch ? "No projects found" : "Your library is empty"}</h1><p>{hasSearch ? <>No project matches “{query}”.</> : "Create a project to start."}</p><div className="empty-library-actions"><button className="button button-primary" type="button" onClick={hasSearch ? onClearSearch : onCreateProject}>{hasSearch ? "Clear search" : "Create project"}</button>{!hasSearch && <button className="text-action" type="button" onClick={onImport}>Import audio <Plus size={14} /></button>}</div></div></section>;
   }
   const selected = visibleProjects.find((project) => project.id === selectedId) ?? visibleProjects[0];
+  if (visibleProjects.length > 6) {
+    return <SleeveWall projects={visibleProjects} selectedId={selected.id} query={query} sortMode={sortMode} trackMatches={trackMatches} onSortChange={onSortChange} onProjectSelect={onProjectSelect} onOpenProject={onOpenProject} onCreateProject={onCreateProject} onImport={onImport} />;
+  }
   const cards = [selected, ...visibleProjects.filter((project) => project.id !== selected.id).slice(0, 3)];
   return <section className="library-screen view-stack"><div className="library-hero-copy"><div className="library-heading-row"><h1>Library</h1><label className="sort-control"><span>Sort</span><select value={sortMode} onChange={(event) => onSortChange(event.target.value)} aria-label="Sort projects"><option value="updated">Recently updated</option><option value="newest">Newest</option><option value="alphabetical">A–Z</option></select><CaretDown size={13} /></label></div></div><div className="carousel-wrap"><button type="button" className="carousel-control carousel-control-left" onClick={() => onStep(-1)} aria-label="Previous project"><CaretLeft size={22} /></button><div className="sleeve-orbit" aria-label="Project artwork selection">{cards.map((project, index) => <button type="button" key={project.id} className={`sleeve sleeve-position-${index} ${project.id === selected.id ? "is-selected" : ""}`} onClick={() => onProjectSelect(project.id)} onDoubleClick={() => onOpenProject(project.id, trackMatches.get(project.id)?.id ?? "")} aria-label={`Select ${project.title}`}><span className="sleeve-image-wrap"><img src={project.artwork} alt="" /></span><span className="sleeve-meta"><strong>{project.title}</strong><small>{project.count} tracks</small></span></button>)}</div><button type="button" className="carousel-control carousel-control-right" onClick={() => onStep(1)} aria-label="Next project"><CaretRight size={22} /></button></div><div className="carousel-caption"><h2>{selected.title}</h2><p>{selected.count} tracks · {selected.duration}</p><button className="text-action" type="button" onClick={() => onOpenProject(selected.id, trackMatches.get(selected.id)?.id ?? "")}>Open project <ArrowUpRight size={15} /></button></div><div className="library-rail"><div className="rail-heading"><span>Projects</span></div><div className="rail-projects">{visibleProjects.map((project) => { const match = trackMatches.get(project.id); return <button type="button" className={project.id === selected.id ? "is-active" : ""} key={project.id} onClick={() => onOpenProject(project.id, match?.id ?? "")}><img src={project.artwork} alt="" /><span><strong>{project.title}</strong>{match && <small className="search-hit">{match.title}</small>}</span><ArrowUpRight size={14} /></button>; })}</div><button className="rail-import" type="button" onClick={onImport}><Plus size={17} /><span>Import audio</span></button></div></section>;
+}
+
+function SleeveWall({ projects, selectedId, query, sortMode, trackMatches, onSortChange, onProjectSelect, onOpenProject, onCreateProject, onImport }) {
+  return <section className="library-screen sleeve-wall-screen view-stack">
+    <div className="library-heading-row sleeve-wall-heading"><div><span className="eyebrow">A gathered collection</span><h1>Library</h1></div><div className="sleeve-wall-actions"><label className="sort-control"><span>Sort</span><select value={sortMode} onChange={(event) => onSortChange(event.target.value)} aria-label="Sort projects"><option value="updated">Recently updated</option><option value="newest">Newest</option><option value="alphabetical">A–Z</option></select><CaretDown size={13} /></label><button className="button button-ghost" type="button" onClick={onCreateProject}><Plus size={14} />New project</button></div></div>
+    <div className="sleeve-wall" aria-label="Project sleeve wall">{projects.map((project) => { const match = trackMatches.get(project.id); return <article className={`wall-sleeve ${project.id === selectedId ? "is-selected" : ""}`} key={project.id}><button className="wall-sleeve-open" type="button" onClick={() => { onProjectSelect(project.id); onOpenProject(project.id, match?.id ?? ""); }} aria-label={`Open ${project.title}`}><img src={project.artwork} alt="" /><span className="wall-sleeve-glint" aria-hidden="true" /></button><div className="wall-sleeve-meta"><strong title={project.title}>{project.title}</strong><span>{project.count} tracks <em>·</em> {project.duration}</span>{match && <small className="search-hit">Match: {match.title}</small>}</div></article>; })}<button className="wall-create-card" type="button" onClick={onCreateProject}><Plus size={22} /><strong>New project</strong><span>Keep the wall growing</span></button></div>
+    <div className="sleeve-wall-footer"><span>{projects.length} projects</span><button className="rail-import" type="button" onClick={onImport}><Plus size={17} /><span>Import audio</span></button><span>{query ? `Results for “${query}”` : "Local library"}</span></div>
+  </section>;
 }
 
 function ProjectView({ project, playingTrackId, focusedTrackId, notesOpen, noteTargetId, noteText, noteStatus, nativeAvailable, onBack, onTrackSelect, onPlay, onToggleNotes, onNoteChange, onNoteTargetChange, onImport, onEditProject, onEditArtwork, onRemoveArtwork, onRemoveProject, onRenameTrack, onReorderTracks, onRemoveTrack }) {
   const [editingTrackId, setEditingTrackId] = useState("");
   const [editingTitle, setEditingTitle] = useState("");
   const [draggedTrackId, setDraggedTrackId] = useState("");
+  const [trackMenuId, setTrackMenuId] = useState("");
 
   useEffect(() => {
     if (!focusedTrackId) return undefined;
@@ -1004,40 +1103,58 @@ function ProjectView({ project, playingTrackId, focusedTrackId, notesOpen, noteT
         <div className="project-header"><div><h1>{project.title}</h1><p>{project.count} tracks <span>/</span> {project.duration} <span>/</span> {project.year}</p></div><div className="heading-actions"><button className="button button-ghost" type="button" onClick={onToggleNotes} aria-expanded={notesOpen}><NotePencil size={14} />{notesOpen ? "Hide notes" : "Show notes"}</button><button className="button button-ghost" type="button" onClick={onEditProject}>Edit details</button><button className="button button-ghost" type="button" onClick={onEditArtwork}><ImageSquare size={14} />Artwork</button>{project.artworkRef && <button className="button button-danger" type="button" onClick={onRemoveArtwork}><Trash size={14} />Remove</button>}<button className="button button-primary" type="button" onClick={onPlay} disabled={!project.count}><Play size={14} weight="fill" />Play</button></div></div>
         {project.description && <p className="project-description project-description-inline">{project.description}</p>}
         <div className="project-quick-actions"><button className="project-add-tracks" type="button" onClick={onImport}><Plus size={18} />Add tracks</button></div>
-        <div className={`project-workspace ${notesOpen ? "" : "notes-closed"}`}><div className="tracklist-panel"><div className="section-heading"><h2>Tracks</h2><span className="section-count">{project.count} {project.count === 1 ? "track" : "tracks"}</span></div><div className="track-list">{project.tracks.map((track, index) => <div className={`track-row ${playingTrackId === track.id ? "is-current" : ""} ${focusedTrackId === track.id ? "is-search-match" : ""} ${draggedTrackId === track.id ? "is-dragging" : ""}`} id={`track-${track.id}`} key={track.id} draggable={!editingTrackId} onDragStart={() => setDraggedTrackId(track.id)} onDragEnd={() => setDraggedTrackId("")} onDragOver={(event) => event.preventDefault()} onDrop={() => dropTrack(track.id)}><div className="track-main" role="button" tabIndex={0} onClick={() => onTrackSelect(track)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onTrackSelect(track); } }}><span className="track-number">{String(index + 1).padStart(2, "0")}</span><span className="drag-handle" aria-hidden="true">::</span>{editingTrackId === track.id ? <input className="track-title-editor" autoFocus value={editingTitle} onChange={(event) => setEditingTitle(event.target.value)} onClick={(event) => event.stopPropagation()} onBlur={() => finishEditing(track)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); if (event.key === "Escape") { setEditingTrackId(""); setEditingTitle(track.title); } }} /> : <span className="track-name"><strong>{track.title}</strong></span>}</div><span className="track-duration">{track.duration}</span><div className="track-actions"><button type="button" className="track-action" onClick={() => moveTrack(index, -1)} disabled={index === 0} aria-label={`Move ${track.title} up`}><CaretUp size={14} /></button><button type="button" className="track-action" onClick={() => moveTrack(index, 1)} disabled={index === project.tracks.length - 1} aria-label={`Move ${track.title} down`}><CaretDown size={14} /></button><button type="button" className="track-action" onClick={() => startEditing(track)} aria-label={`Rename ${track.title}`}><PencilSimple size={14} /></button><button type="button" className={`track-action ${noteTargetId === track.id ? "is-active" : ""}`} onClick={() => onNoteTargetChange(noteTargetId === track.id ? null : track.id)} aria-label={`Open notes for ${track.title}`} aria-pressed={noteTargetId === track.id}><NotePencil size={14} /></button><button type="button" className="track-action track-action-danger" onClick={() => onRemoveTrack(track)} aria-label={`Remove ${track.title}`}><Trash size={14} /></button></div></div>)}</div></div>{notesOpen && <aside className="notes-panel glass"><div className="notes-heading"><div><h2>Notes</h2><span className="notes-context">{noteLabel}</span></div><span className={`notes-state is-${noteStatus}`} aria-live="polite">{noteStatus === "saving" ? "Saving" : noteStatus === "error" ? "Couldn’t save" : <><Check size={12} />Saved</>}</span></div><textarea aria-label={`${noteLabel} notes`} value={noteText} onChange={(event) => onNoteChange(event.target.value)} disabled={!nativeAvailable} /></aside>}</div>
+        <div className={`project-workspace ${notesOpen ? "" : "notes-closed"}`}><div className="tracklist-panel"><div className="section-heading"><h2>Tracks</h2><span className="section-count">{project.count} {project.count === 1 ? "track" : "tracks"}</span></div><div className="track-list">{project.tracks.map((track, index) => <div className={`track-row ${playingTrackId === track.id ? "is-current" : ""} ${focusedTrackId === track.id ? "is-search-match" : ""} ${draggedTrackId === track.id ? "is-dragging" : ""}`} id={`track-${track.id}`} key={track.id} draggable={!editingTrackId} onDragStart={() => setDraggedTrackId(track.id)} onDragEnd={() => setDraggedTrackId("")} onDragOver={(event) => event.preventDefault()} onDrop={() => dropTrack(track.id)}><div className="track-main" role="button" tabIndex={0} onClick={() => onTrackSelect(track)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onTrackSelect(track); } }}><span className="track-number">{String(index + 1).padStart(2, "0")}</span><span className="drag-handle" aria-hidden="true">::</span>{editingTrackId === track.id ? <input className="track-title-editor" autoFocus value={editingTitle} onChange={(event) => setEditingTitle(event.target.value)} onClick={(event) => event.stopPropagation()} onBlur={() => finishEditing(track)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); if (event.key === "Escape") { setEditingTrackId(""); setEditingTitle(track.title); } }} /> : <span className="track-name"><strong>{track.title}</strong></span>}</div><span className="track-duration">{track.duration}</span><div className="track-actions"><span className="track-menu-wrap"><button type="button" className={`track-action track-menu-trigger ${trackMenuId === track.id ? "is-active" : ""}`} onClick={(event) => { event.stopPropagation(); setTrackMenuId(trackMenuId === track.id ? "" : track.id); }} aria-label={`Open actions for ${track.title}`} aria-expanded={trackMenuId === track.id}><DotsThree size={17} /></button>{trackMenuId === track.id && <TrackMenu track={track} index={index} trackCount={project.tracks.length} onMove={(direction) => { setTrackMenuId(""); moveTrack(index, direction); }} onRename={() => { setTrackMenuId(""); startEditing(track); }} onNotes={() => { setTrackMenuId(""); onNoteTargetChange(noteTargetId === track.id ? null : track.id); }} onRemove={() => { setTrackMenuId(""); onRemoveTrack(track); }} onClose={() => setTrackMenuId("")} />}</span></div></div>)}</div></div>{notesOpen && <aside className="notes-panel glass"><div className="notes-heading"><div><h2>Notes</h2><span className="notes-context">{noteLabel}</span></div><span className={`notes-state is-${noteStatus}`} aria-live="polite">{noteStatus === "saving" ? "Saving" : noteStatus === "error" ? "Couldn’t save" : <><Check size={12} />Saved</>}</span></div><textarea aria-label={`${noteLabel} notes`} value={noteText} onChange={(event) => onNoteChange(event.target.value)} disabled={!nativeAvailable} /></aside>}</div>
       </div>
     </div>
   </section>;
 }
 
+function TrackMenu({ track, index, trackCount, onMove, onRename, onNotes, onRemove, onClose }) {
+  const menuRef = useRef(null);
+  useEffect(() => {
+    function handlePointerDown(event) {
+      if (!menuRef.current?.parentElement?.contains(event.target)) onClose();
+    }
+    function handleKeyDown(event) {
+      if (event.key === "Escape") onClose();
+    }
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    menuRef.current?.querySelector("button")?.focus();
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose]);
+
+  return <div ref={menuRef} className="track-menu glass" data-popover role="menu" aria-label={`Actions for ${track.title}`}>
+    <span className="eyebrow">Track actions</span>
+    <button type="button" role="menuitem" onClick={() => onMove(-1)} disabled={index === 0}><CaretLeft size={14} />Move earlier</button>
+    <button type="button" role="menuitem" onClick={() => onMove(1)} disabled={index === trackCount - 1}><CaretRight size={14} />Move later</button>
+    <button type="button" role="menuitem" onClick={onRename}><NotePencil size={14} />Rename track</button>
+    <button type="button" role="menuitem" onClick={onNotes}><NotePencil size={14} />{track.note?.text ? "Edit notes" : "Add notes"}</button>
+    <button type="button" className="track-menu-danger" role="menuitem" onClick={onRemove}><Trash size={14} />Remove track</button>
+  </div>;
+}
+
 function WaveformProgress({ track, progress, durationMs, onChange }) {
   const seed = waveformSeed(track);
   const fallbackBars = useMemo(() => createWaveform(seed, 72), [seed]);
-  const [bars, setBars] = useState(fallbackBars);
+  const [bars, setBars] = useState(() => readCachedWaveform(track) ?? fallbackBars);
 
   useEffect(() => {
     let cancelled = false;
-    let context;
-    setBars(fallbackBars);
+    const cached = readCachedWaveform(track);
+    setBars(cached ?? fallbackBars);
+    if (cached) return undefined;
     if (!isTauri() || !track.managedFilePath) return undefined;
-
-    const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextConstructor) return undefined;
-    fetch(convertFileSrc(track.managedFilePath)).then((response) => {
-      if (!response.ok) throw new Error("Waveform source unavailable");
-      return response.arrayBuffer();
-    }).then((audioData) => {
-      context = new AudioContextConstructor();
-      return context.decodeAudioData(audioData);
-    }).then((audioBuffer) => {
-      if (!cancelled) setBars(waveformFromAudioBuffer(audioBuffer, 72) || fallbackBars);
+    cacheWaveform(track, convertFileSrc(track.managedFilePath), 72).then((nextBars) => {
+      if (!cancelled && nextBars.length) setBars(nextBars);
     }).catch(() => {
       if (!cancelled) setBars(fallbackBars);
-    }).finally(() => {
-      context?.close();
     });
     return () => { cancelled = true; };
-  }, [fallbackBars, track.id, track.managedFilePath]);
+  }, [fallbackBars, track]);
 
   const safeProgress = Math.max(0, Math.min(100, Number(progress) || 0));
   const renderBars = (layer) => bars.map((height, index) => <span key={`${layer}-${index}`} style={{ height: `${height}%` }} />);
@@ -1055,7 +1172,7 @@ function Player({ project, track, status, playbackError, isPlaying, progress, el
   return <section className="player-shell glass" aria-label="Audio player">
     <div className="player-controls">
       <button type="button" onClick={onPrevious} aria-label="Previous track" title="Previous track"><SkipBack size={18} weight="fill" /></button>
-      <button type="button" className="play-button" onClick={onTogglePlay} aria-label={isPlaying ? "Pause" : "Play"} title={isPlaying ? "Pause" : "Play"}>{isPlaying ? <Pause size={18} weight="fill" /> : <Play size={18} weight="fill" />}</button>
+      <button type="button" className="play-button" onClick={onTogglePlay} aria-label={isPlaying ? "Pause" : "Play"} aria-keyshortcuts="Space" title={`${isPlaying ? "Pause" : "Play"} (Space)`}>{isPlaying ? <Pause size={18} weight="fill" /> : <Play size={18} weight="fill" />}</button>
       <button type="button" onClick={onNext} aria-label="Next track" title="Next track"><SkipForward size={18} weight="fill" /></button>
     </div>
     <div className="player-track">
