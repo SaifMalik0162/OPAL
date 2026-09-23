@@ -65,3 +65,16 @@ test("a missing active track is surfaced to the caller instead of silently retar
   assert.equal(next.index, -1);
   assert.equal(next.trackId, "missing");
 });
+
+test("version rows collapse to the current version while preserving an active A/B version", () => {
+  const original = { id: "original", groupId: "group", position: 0, versionPosition: 0, isCurrent: false };
+  const bounce = { id: "bounce", groupId: "group", position: 0, versionPosition: 1, isCurrent: true };
+  const next = reconcilePlayingQueue(
+    { project: { id: "project" }, projectId: "project", trackId: "original", queue: [original], index: 0 },
+    { id: "project", tracks: [original, bounce] },
+  );
+
+  assert.equal(next.queue.length, 1);
+  assert.equal(next.queue[0].id, "original");
+  assert.equal(next.index, 0);
+});

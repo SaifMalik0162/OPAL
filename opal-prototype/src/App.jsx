@@ -82,7 +82,15 @@ function hydrateProject(project) {
     artwork: isTauri() && project.artworkPath ? convertFileSrc(project.artworkPath) : FALLBACK_ARTWORK,
     type: project.typeLabel,
     year: String(project.year),
-    tracks: project.tracks ?? [],
+    tracks: (project.tracks ?? []).map((track) => ({
+      ...track,
+      groupId: track.groupId ?? track.id,
+      sourceTitle: track.sourceTitle ?? track.title,
+      versionName: track.versionName ?? "Original",
+      versionPosition: track.versionPosition ?? 0,
+      isCurrent: track.isCurrent ?? true,
+      versionCount: track.versionCount ?? 1,
+    })),
   };
 }
 
@@ -106,6 +114,42 @@ function formatTime(durationMs) {
   if (!durationMs || durationMs < 0) return "0:00";
   const seconds = Math.floor(durationMs / 1000);
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function groupTracks(project) {
+  const groups = new Map();
+  (project?.tracks ?? []).forEach((track) => {
+    const groupId = track.groupId ?? track.id;
+    const group = groups.get(groupId) ?? {
+      id: groupId,
+      title: track.title,
+      position: track.position ?? 0,
+      versions: [],
+    };
+    group.versions.push(track);
+    groups.set(groupId, group);
+  });
+  return Array.from(groups.values())
+    .sort((left, right) => left.position - right.position)
+    .map((group) => {
+      const versions = [...group.versions].sort((left, right) => (left.versionPosition ?? 0) - (right.versionPosition ?? 0));
+      return { ...group, versions, current: versions.find((version) => version.isCurrent) ?? versions[0] ?? null };
+    });
+}
+
+function currentVersions(project) {
+  return groupTracks(project).map((group) => group.current).filter(Boolean);
+}
+
+function playbackTracks(project, preferredTrackId = "") {
+  const tracks = currentVersions(project);
+  const preferredTrack = project?.tracks.find((track) => track.id === preferredTrackId);
+  if (!preferredTrack) return tracks;
+  const groupId = preferredTrack.groupId ?? preferredTrack.id;
+  const currentIndex = tracks.findIndex((track) => (track.groupId ?? track.id) === groupId);
+  if (currentIndex >= 0) tracks[currentIndex] = preferredTrack;
+  else tracks.push(preferredTrack);
+  return tracks;
 }
 
 function App() {
@@ -150,6 +194,7 @@ function App() {
   const [editOpen, setEditOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [importTargetId, setImportTargetId] = useState("");
+  const [importTargetGroupId, setImportTargetGroupId] = useState("");
   const [importProgress, setImportProgress] = useState(null);
   const [duplicatePaths, setDuplicatePaths] = useState([]);
   const [importActive, setImportActive] = useState(false);
@@ -174,8 +219,9 @@ function App() {
   const playingProject = projects.find((project) => project.id === playingProjectId) ?? null;
   const playingTrack = playingProject?.tracks.find((track) => track.id === playingTrackId) ?? null;
   const displayProject = playingProject ?? selectedProject;
-  const displayTrack = playingTrack ?? selectedProject?.tracks[0] ?? null;
-  const displayTrackIndex = displayProject?.tracks.findIndex((track) => track.id === displayTrack?.id) ?? -1;
+  const displayTrack = playingTrack ?? currentVersions(selectedProject)[0] ?? null;
+  const displayTrackQueue = displayProject ? currentVersions(displayProject) : [];
+  const displayTrackIndex = displayTrackQueue.findIndex((track) => track.id === displayTrack?.id);
   const displayQueueIndex = displayProject && playbackRef.current.projectId === displayProject.id ? playbackRef.current.index : displayTrackIndex;
   const sortedProjects = useMemo(() => {
     return [...projects].sort((left, right) => {
@@ -187,13 +233,14 @@ function App() {
   const filteredProjects = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     if (!normalizedQuery) return sortedProjects;
-    return sortedProjects.filter((project) => project.title.toLowerCase().includes(normalizedQuery) || project.tracks.some((track) => track.title.toLowerCase().includes(normalizedQuery)));
+    return sortedProjects.filter((project) => project.title.toLowerCase().includes(normalizedQuery) || project.tracks.some((track) => [track.title, track.versionName, track.sourceTitle].some((value) => value?.toLowerCase().includes(normalizedQuery))));
   }, [query, sortedProjects]);
   const trackMatches = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    return new Map(sortedProjects.map((project) => [project.id, normalizedQuery ? project.tracks.find((track) => track.title.toLowerCase().includes(normalizedQuery)) : null]));
+    return new Map(sortedProjects.map((project) => [project.id, normalizedQuery ? project.tracks.find((track) => [track.title, track.versionName, track.sourceTitle].some((value) => value?.toLowerCase().includes(normalizedQuery))) : null]));
   }, [query, sortedProjects]);
   const importProject = projects.find((project) => project.id === importTargetId) ?? selectedProject;
+  const importTargetGroup = groupTracks(importProject).find((group) => group.id === importTargetGroupId) ?? null;
   const noteContextKey = selectedProject ? `${selectedProject.id}:${noteTargetId ?? "project"}` : "";
   const progressValue = durationMs > 0 ? Math.min(100, (elapsedMs / durationMs) * 100) : 0;
 
@@ -411,6 +458,7 @@ function App() {
     getCurrentWindow().onDragDropEvent((event) => {
       if (event.payload.type === "drop" && activeView === "project" && selectedId && event.payload.paths.length) {
         setImportTargetId(selectedId);
+        setImportTargetGroupId("");
         runImport(selectedId, event.payload.paths, false);
       }
     }).then((cleanup) => {
@@ -518,23 +566,32 @@ function App() {
     getCurrentWindow().startDragging().catch(() => {});
   }
 
-  function startPlayback(project, track, index = project.tracks.findIndex((item) => item.id === track.id), queueOverride = null) {
+  function startPlayback(project, track, index = -1, queueOverride = null, startAtMs = 0, autoplay = true) {
     const audio = audioRef.current;
     const requestId = playbackRef.current.requestId + 1;
-    const queue = queueOverride ?? (shuffleRef.current ? shuffleQueue(project.tracks, track.id, project.id) : project.tracks);
-    const queueIndex = queueOverride ? index : queue.findIndex((item) => item.id === track.id);
+    const baseQueue = playbackTracks(project, track.id);
+    const queue = queueOverride ?? (shuffleRef.current ? shuffleQueue(baseQueue, track.id, project.id) : baseQueue);
+    const queueIndex = index >= 0 ? index : queue.findIndex((item) => item.id === track.id);
     playbackRef.current = { requestId, project, projectId: project.id, trackId: track.id, queue, index: queueIndex };
     setPlayingProjectId(project.id);
     setPlayingTrackId(track.id);
-    setElapsedMs(0);
+    setElapsedMs(startAtMs);
     setDurationMs(track.durationMs || 0);
     setPlaybackError("");
-    setPlaybackState("loading");
+    setPlaybackState(autoplay ? "loading" : "paused");
     if (!audio) return;
     audio.pause();
     audio.onloadedmetadata = () => {
       if (!isCurrentPlaybackRequest(requestId, playbackRef.current.requestId)) return;
-      if (Number.isFinite(audio.duration)) setDurationMs(Math.round(audio.duration * 1000));
+      if (Number.isFinite(audio.duration)) {
+        const nextDuration = Math.round(audio.duration * 1000);
+        setDurationMs(nextDuration);
+        if (startAtMs > 0) {
+          const nextElapsed = Math.min(startAtMs, nextDuration);
+          audio.currentTime = nextElapsed / 1000;
+          setElapsedMs(nextElapsed);
+        }
+      }
     };
     audio.ontimeupdate = () => {
       if (!isCurrentPlaybackRequest(requestId, playbackRef.current.requestId)) return;
@@ -566,6 +623,7 @@ function App() {
     }
     audio.src = convertFileSrc(track.managedFilePath);
     audio.load();
+    if (!autoplay) return;
     audio.play().then(() => {
       if (isCurrentPlaybackRequest(requestId, playbackRef.current.requestId)) setPlaybackState("playing");
     }).catch(() => {
@@ -605,7 +663,8 @@ function App() {
       shuffleRef.current = nextEnabled;
       const current = playbackRef.current;
       if (current.project) {
-        const queue = nextEnabled ? shuffleQueue(current.project.tracks, current.trackId, current.project.id) : current.project.tracks;
+        const baseQueue = playbackTracks(current.project, current.trackId);
+        const queue = nextEnabled ? shuffleQueue(baseQueue, current.trackId, current.project.id) : baseQueue;
         const index = queue.findIndex((item) => item.id === current.trackId);
         playbackRef.current = { ...current, queue, index };
       }
@@ -619,6 +678,21 @@ function App() {
       repeatRef.current = nextMode;
       return nextMode;
     });
+  }
+
+  function switchVersion(project, version) {
+    const current = playbackRef.current;
+    const activeTrack = current.project?.tracks.find((track) => track.id === current.trackId);
+    const activeGroupId = activeTrack?.groupId ?? activeTrack?.id;
+    const versionGroupId = version.groupId ?? version.id;
+    const sameGroup = current.projectId === project.id && activeGroupId === versionGroupId;
+    const queue = sameGroup && current.queue.length
+      ? current.queue.map((track) => (track.groupId ?? track.id) === versionGroupId ? version : track)
+      : (shuffleRef.current ? shuffleQueue(playbackTracks(project, version.id), version.id, project.id) : playbackTracks(project, version.id));
+    const index = queue.findIndex((track) => track.id === version.id);
+    const preservePosition = sameGroup && Number.isFinite(elapsedMs);
+    const shouldAutoplay = sameGroup ? playbackState === "playing" : true;
+    startPlayback(project, version, index, queue, preservePosition ? elapsedMs : 0, shouldAutoplay);
   }
 
   function togglePlayback() {
@@ -735,13 +809,13 @@ function App() {
     }
   }
 
-  async function reorderTracks(trackIds) {
+  async function reorderTrackGroups(groupIds) {
     if (!selectedProject || !isTauri()) {
       setError("Open the native OPAL app to edit the local library.");
       return;
     }
     try {
-      const updated = hydrateProject(await invoke("reorderTracks", { projectId: selectedProject.id, trackIds }));
+      const updated = hydrateProject(await invoke("reorderTrackGroups", { projectId: selectedProject.id, groupIds }));
       setProjects((current) => current.map((project) => project.id === updated.id ? updated : project));
       updatePlayingQueue(updated);
       setError("");
@@ -750,34 +824,80 @@ function App() {
     }
   }
 
-  async function removeTrack(project, track) {
+  async function reorderTrackVersions(_group, versionIds) {
+    if (!selectedProject || !isTauri()) {
+      setError("Open the native OPAL app to edit the local library.");
+      return;
+    }
+    try {
+      const updated = hydrateProject(await invoke("reorderTrackVersions", { projectId: selectedProject.id, trackIds: versionIds }));
+      setProjects((current) => current.map((project) => project.id === updated.id ? updated : project));
+      updatePlayingQueue(updated);
+      setError("");
+    } catch (reorderError) {
+      setError(String(reorderError));
+    }
+  }
+
+  async function renameVersion(trackId, versionName) {
+    if (!selectedProject || !isTauri()) {
+      setError("Open the native OPAL app to edit the local library.");
+      return;
+    }
+    try {
+      const updated = hydrateProject(await invoke("renameTrackVersion", { projectId: selectedProject.id, trackId, versionName }));
+      setProjects((current) => current.map((project) => project.id === updated.id ? updated : project));
+      updatePlayingQueue(updated);
+      setError("");
+    } catch (renameError) {
+      setError(String(renameError));
+    }
+  }
+
+  async function promoteVersion(track) {
+    if (!selectedProject || !isTauri()) {
+      setError("Open the native OPAL app to edit the local library.");
+      return;
+    }
+    try {
+      const updated = hydrateProject(await invoke("promoteTrackVersion", { projectId: selectedProject.id, trackId: track.id }));
+      setProjects((current) => current.map((project) => project.id === updated.id ? updated : project));
+      updatePlayingQueue(updated);
+      setError("");
+    } catch (promoteError) {
+      setError(String(promoteError));
+    }
+  }
+
+  async function removeVersion(project, version, group) {
     if (!isTauri()) {
       setError("Open the native OPAL app to edit the local library.");
       return;
     }
-    const wasPlaying = playingProjectId === project.id && playingTrackId === track.id;
+    if (group.versions.length <= 1) {
+      setError("A track must keep one version.");
+      return;
+    }
+    const wasPlaying = playingProjectId === project.id && playingTrackId === version.id;
     setConfirmState({
-      title: "Remove track",
-      message: `Remove “${track.title}” from “${project.title}”? The OPAL-managed copy will be deleted. Your original file stays untouched.`,
-      confirmLabel: "Remove track",
+      title: "Remove version",
+      message: `Remove “${version.versionName}” from “${group.title}”? The OPAL-managed copy will be deleted. Your original file stays untouched.`,
+      confirmLabel: "Remove version",
+      destructive: true,
       onConfirm: async () => {
-        await removeTrackConfirmed(project, track, wasPlaying);
+        try {
+          if (wasPlaying) stopPlayback();
+          const updated = hydrateProject(await invoke("deleteTrackVersion", { projectId: project.id, trackId: version.id }));
+          setProjects((current) => current.map((item) => item.id === updated.id ? updated : item));
+          if (!wasPlaying) updatePlayingQueue(updated);
+          noteStoreRef.current.remove(`${project.id}:${version.id}`);
+          if (noteTargetId === version.id) setNoteTargetId(null);
+          setError("");
+        } catch (removeError) {
+          setError(String(removeError));
+        }
       },
     });
-  }
-
-  async function removeTrackConfirmed(project, track, wasPlaying) {
-    try {
-      if (wasPlaying) stopPlayback();
-      const updated = hydrateProject(await invoke("deleteTrack", { projectId: project.id, trackId: track.id }));
-      setProjects((current) => current.map((item) => item.id === updated.id ? updated : item));
-      if (!wasPlaying) updatePlayingQueue(updated);
-      noteStoreRef.current.remove(`${project.id}:${track.id}`);
-      if (noteTargetId === track.id) setNoteTargetId(null);
-      setError("");
-    } catch (removeError) {
-      setError(String(removeError));
-    }
   }
 
   async function removeProject(project) {
@@ -947,33 +1067,36 @@ function App() {
     }
   }
 
-  async function pickAudioFiles(projectId = selectedProject?.id) {
+  async function pickAudioFiles(projectId = selectedProject?.id, groupId = "") {
     if (!projectId || !isTauri()) return;
     if (importActiveProjectsRef.current.has(projectId)) {
       setImportTargetId(projectId);
+      setImportTargetGroupId(groupId);
       setImportOpen(true);
       return;
     }
     const choice = await open({ multiple: true, directory: false, filters: AUDIO_FILTERS });
     const paths = Array.isArray(choice) ? choice : choice ? [choice] : [];
-    if (paths.length) runImport(projectId, paths, false);
+    if (paths.length) runImport(projectId, paths, false, groupId);
   }
 
-  async function runImport(projectId, paths, allowDuplicates) {
+  async function runImport(projectId, paths, allowDuplicates, groupId = "") {
     if (!paths.length || importActiveProjectsRef.current.has(projectId)) {
       setImportTargetId(projectId);
+      setImportTargetGroupId(groupId);
       setImportOpen(true);
       return;
     }
     importActiveProjectsRef.current.add(projectId);
     setImportActive(true);
     setImportTargetId(projectId);
+    setImportTargetGroupId(groupId);
     setImportOpen(true);
     setDuplicatePaths([]);
-    lastImportRequestRef.current = { projectId, paths: [...paths], allowDuplicates };
+    lastImportRequestRef.current = { projectId, paths: [...paths], allowDuplicates, groupId };
     setImportProgress({ projectId, current: 0, total: paths.length, fileName: "", status: "processing", message: "", results: [] });
     try {
-      const summary = await invoke("importAudioFiles", { projectId, paths, allowDuplicates });
+      const summary = await invoke("importAudioFiles", { projectId, paths, allowDuplicates, trackGroupId: groupId || null });
       const refreshedProjects = await reloadProjects(projectId);
       const importedIds = new Set(summary.results.map((result) => result.track?.id).filter(Boolean));
       const importedTracks = refreshedProjects.find((project) => project.id === projectId)?.tracks.filter((track) => importedIds.has(track.id)) ?? [];
@@ -1008,12 +1131,12 @@ function App() {
     </header>
     {error && <div className="error-banner" role="alert"><span>{error}</span><button type="button" onClick={() => setError("")} aria-label="Dismiss message"><X size={14} /></button></div>}
     {notice && <div className="notice-banner" role="status"><span>{notice}</span><button type="button" onClick={() => setNotice("")} aria-label="Dismiss message"><X size={14} /></button></div>}
-    <main className="stage">{recoveryMode ? <RecoveryView onRevealFolder={revealStorageFolder} onRestore={restoreLibraryBackup} onRetry={retryStorage} /> : activeView === "project" && selectedProject ? <ProjectView project={selectedProject} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} focusedTrackId={focusedTrackId} notesOpen={notesOpen} noteTargetId={noteTargetId} noteText={noteText} noteStatus={noteStatus} nativeAvailable={isTauri()} onBack={returnToLibrary} onTrackSelect={(track) => startPlayback(selectedProject, track)} onPlay={() => selectedProject.tracks[0] && startPlayback(selectedProject, selectedProject.tracks[0], 0)} onToggleNotes={() => setNotesOpen((openState) => !openState)} onNoteChange={handleNoteChange} onNoteTargetChange={changeNoteTarget} onImport={() => pickAudioFiles(selectedProject.id)} onEditProject={() => setEditOpen(true)} onEditArtwork={pickArtwork} onRemoveArtwork={removeArtwork} onRemoveProject={() => removeProject(selectedProject)} onRenameTrack={renameTrack} onReorderTracks={reorderTracks} onRemoveTrack={(track) => removeTrack(selectedProject, track)} /> : activeView === "projects" ? <ProjectsView loading={loading} projects={filteredProjects} query={query} sortMode={sortMode} onSortChange={setSortMode} onOpenProject={openProject} onPlayProject={(project) => project.tracks[0] && startPlayback(project, project.tracks[0], 0)} onCreateProject={() => setCreateOpen(true)} onClearSearch={() => setQuery("")} /> : <LibraryView loading={loading} projects={filteredProjects} selectedId={visibleSelection} query={query} sortMode={sortMode} trackMatches={trackMatches} onSortChange={setSortMode} onProjectSelect={setSelectedId} onOpenProject={openProject} onCreateProject={() => setCreateOpen(true)} onImport={() => (selectedProject ? pickAudioFiles(selectedProject.id) : setCreateOpen(true))} onClearSearch={() => setQuery("")} onStep={(step) => { if (!filteredProjects.length) return; const current = filteredProjects.findIndex((project) => project.id === visibleSelection); const next = (current + step + filteredProjects.length) % filteredProjects.length; setSelectedId(filteredProjects[next].id); }} />}</main>
+    <main className="stage">{recoveryMode ? <RecoveryView onRevealFolder={revealStorageFolder} onRestore={restoreLibraryBackup} onRetry={retryStorage} /> : activeView === "project" && selectedProject ? <ProjectView project={selectedProject} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} focusedTrackId={focusedTrackId} notesOpen={notesOpen} noteTargetId={noteTargetId} noteText={noteText} noteStatus={noteStatus} nativeAvailable={isTauri()} onBack={returnToLibrary} onTrackSelect={(track) => startPlayback(selectedProject, track)} onVersionSelect={switchVersion} onPlay={() => currentVersions(selectedProject)[0] && startPlayback(selectedProject, currentVersions(selectedProject)[0], 0)} onToggleNotes={() => setNotesOpen((openState) => !openState)} onNoteChange={handleNoteChange} onNoteTargetChange={changeNoteTarget} onImport={() => pickAudioFiles(selectedProject.id)} onAddVersion={(group) => pickAudioFiles(selectedProject.id, group.id)} onEditProject={() => setEditOpen(true)} onEditArtwork={pickArtwork} onRemoveArtwork={removeArtwork} onRemoveProject={() => removeProject(selectedProject)} onRenameTrack={renameTrack} onRenameVersion={renameVersion} onPromoteVersion={promoteVersion} onReorderGroups={reorderTrackGroups} onReorderVersions={reorderTrackVersions} onRemoveVersion={(version, group) => removeVersion(selectedProject, version, group)} /> : activeView === "projects" ? <ProjectsView loading={loading} projects={filteredProjects} query={query} sortMode={sortMode} onSortChange={setSortMode} onOpenProject={openProject} onPlayProject={(project) => currentVersions(project)[0] && startPlayback(project, currentVersions(project)[0], 0)} onCreateProject={() => setCreateOpen(true)} onClearSearch={() => setQuery("")} /> : <LibraryView loading={loading} projects={filteredProjects} selectedId={visibleSelection} query={query} sortMode={sortMode} trackMatches={trackMatches} onSortChange={setSortMode} onProjectSelect={setSelectedId} onOpenProject={openProject} onCreateProject={() => setCreateOpen(true)} onImport={() => (selectedProject ? pickAudioFiles(selectedProject.id) : setCreateOpen(true))} onClearSearch={() => setQuery("")} onStep={(step) => { if (!filteredProjects.length) return; const current = filteredProjects.findIndex((project) => project.id === visibleSelection); const next = (current + step + filteredProjects.length) % filteredProjects.length; setSelectedId(filteredProjects[next].id); }} />}</main>
     {displayProject && displayTrack && <Player project={displayProject} track={displayTrack} status={playbackState} playbackError={playbackError} isPlaying={playbackState === "playing"} progress={progressValue} elapsedMs={elapsedMs} durationMs={durationMs || displayTrack.durationMs} volume={volume} muted={muted} volumeOpen={volumeOpen} queueOpen={queueOpen} menuOpen={playerMenuOpen} shuffleEnabled={shuffleEnabled} repeatMode={repeatMode} onTogglePlay={togglePlayback} onPrevious={playPrevious} onNext={playNext} onProgressChange={seekPlayback} onVolumeChange={(event) => { setVolume(Number(event.target.value)); setMuted(false); }} onToggleMute={() => setMuted((value) => !value)} onToggleVolume={() => setVolumeOpen((openState) => !openState)} onToggleQueue={() => setQueueOpen((openState) => !openState)} onToggleMenu={() => setPlayerMenuOpen((openState) => !openState)} onToggleShuffle={toggleShuffle} onToggleRepeat={cycleRepeatMode} onOpenProject={() => openProject(displayProject.id)} onShowTrack={() => openProject(displayProject.id, displayTrack.id)} onOpenNotes={() => openProject(displayProject.id, displayTrack.id, displayTrack.id)} onRevealFile={async () => { try { await invoke("revealManagedFile", { managedFileRef: displayTrack.managedFileRef }); } catch (revealError) { setError(String(revealError)); } }} onShowInfo={() => setTrackInfo({ project: displayProject, track: displayTrack })} />}
     {queueOpen && displayProject && <QueuePopover project={displayProject} currentIndex={displayQueueIndex} onSelect={(track, index) => { startPlayback(displayProject, track, index); setQueueOpen(false); }} onClose={() => setQueueOpen(false)} />}
     {createOpen && <CreateProjectPrompt onClose={() => setCreateOpen(false)} onCreate={createProject} />}
     {editOpen && selectedProject && <ProjectEditorPrompt project={selectedProject} onClose={() => setEditOpen(false)} onSave={updateProject} />}
-    {importOpen && importProject && <ImportPrompt project={importProject} progress={importProgress} duplicatePaths={duplicatePaths} onClose={closeImport} onChooseFiles={() => pickAudioFiles(importProject.id)} onRetryImport={() => { const request = lastImportRequestRef.current; if (request) runImport(request.projectId, request.paths, request.allowDuplicates); }} onImportDuplicates={() => runImport(importProject.id, duplicatePaths, true)} onSkipDuplicates={() => { setDuplicatePaths([]); setImportProgress((current) => ({ ...(current ?? {}), status: "complete", message: "Duplicates skipped." })); }} />}
+    {importOpen && importProject && <ImportPrompt project={importProject} groupTitle={importTargetGroup?.title} progress={importProgress} duplicatePaths={duplicatePaths} onClose={closeImport} onChooseFiles={() => pickAudioFiles(importProject.id, importTargetGroupId)} onRetryImport={() => { const request = lastImportRequestRef.current; if (request) runImport(request.projectId, request.paths, request.allowDuplicates, request.groupId); }} onImportDuplicates={() => runImport(importProject.id, duplicatePaths, true, importTargetGroupId)} onSkipDuplicates={() => { setDuplicatePaths([]); setImportProgress((current) => ({ ...(current ?? {}), status: "complete", message: "Duplicates skipped." })); }} />}
     {trackInfo && <TrackInfoDialog project={trackInfo.project} track={trackInfo.track} onClose={() => setTrackInfo(null)} />}
     {diagnosticsOpen && <DiagnosticsDialog diagnostics={diagnostics} onClose={() => setDiagnosticsOpen(false)} />}
     {confirmState && <ConfirmDialog {...confirmState} busy={confirmBusy} onClose={() => { if (!confirmBusy) setConfirmState(null); }} onConfirm={async () => { if (confirmBusy) return; const action = confirmState.onConfirm; setConfirmBusy(true); try { await action(); setConfirmState(null); } finally { setConfirmBusy(false); } }} />}
@@ -1054,11 +1177,18 @@ function SleeveWall({ projects, selectedId, query, sortMode, trackMatches, onSor
   </section>;
 }
 
-function ProjectView({ project, playingTrackId, focusedTrackId, notesOpen, noteTargetId, noteText, noteStatus, nativeAvailable, onBack, onTrackSelect, onPlay, onToggleNotes, onNoteChange, onNoteTargetChange, onImport, onEditProject, onEditArtwork, onRemoveArtwork, onRemoveProject, onRenameTrack, onReorderTracks, onRemoveTrack }) {
-  const [editingTrackId, setEditingTrackId] = useState("");
+function ProjectView({ project, playingTrackId, focusedTrackId, notesOpen, noteTargetId, noteText, noteStatus, nativeAvailable, onBack, onTrackSelect, onVersionSelect, onPlay, onToggleNotes, onNoteChange, onNoteTargetChange, onImport, onAddVersion, onEditProject, onEditArtwork, onRemoveArtwork, onRemoveProject, onRenameTrack, onRenameVersion, onPromoteVersion, onReorderGroups, onReorderVersions, onRemoveVersion }) {
+  const groups = useMemo(() => groupTracks(project), [project]);
+  const [editingGroupId, setEditingGroupId] = useState("");
   const [editingTitle, setEditingTitle] = useState("");
-  const [draggedTrackId, setDraggedTrackId] = useState("");
+  const [draggedGroupId, setDraggedGroupId] = useState("");
+  const [activeGroupId, setActiveGroupId] = useState(groups[0]?.id ?? "");
   const [trackMenuId, setTrackMenuId] = useState("");
+  const [versionMenuId, setVersionMenuId] = useState("");
+
+  useEffect(() => {
+    if (!groups.some((group) => group.id === activeGroupId)) setActiveGroupId(groups[0]?.id ?? "");
+  }, [groups, activeGroupId]);
 
   useEffect(() => {
     if (!focusedTrackId) return undefined;
@@ -1066,35 +1196,43 @@ function ProjectView({ project, playingTrackId, focusedTrackId, notesOpen, noteT
     return () => clearTimeout(timer);
   }, [focusedTrackId]);
 
-  function startEditing(track) {
-    setEditingTrackId(track.id);
-    setEditingTitle(track.title);
+  function startEditing(group) {
+    setEditingGroupId(group.id);
+    setEditingTitle(group.title);
   }
 
-  async function finishEditing(track) {
+  async function finishEditing(group) {
     const title = editingTitle.trim();
-    setEditingTrackId("");
-    if (title && title !== track.title) await onRenameTrack(track.id, title);
+    setEditingGroupId("");
+    if (title && title !== group.title) await onRenameTrack(group.current.id, title);
   }
 
-  function moveTrack(index, direction) {
+  function moveGroup(index, direction) {
     const nextIndex = index + direction;
-    if (nextIndex < 0 || nextIndex >= project.tracks.length) return;
-    const ids = project.tracks.map((track) => track.id);
+    if (nextIndex < 0 || nextIndex >= groups.length) return;
+    const ids = groups.map((group) => group.id);
     [ids[index], ids[nextIndex]] = [ids[nextIndex], ids[index]];
-    onReorderTracks(ids);
+    onReorderGroups(ids);
   }
 
-  function dropTrack(targetId) {
-    if (!draggedTrackId || draggedTrackId === targetId) return;
-    const ids = project.tracks.map((track) => track.id).filter((id) => id !== draggedTrackId);
+  function dropGroup(targetId) {
+    if (!draggedGroupId || draggedGroupId === targetId) return;
+    const ids = groups.map((group) => group.id).filter((id) => id !== draggedGroupId);
     const targetIndex = ids.indexOf(targetId);
-    ids.splice(targetIndex, 0, draggedTrackId);
-    setDraggedTrackId("");
-    onReorderTracks(ids);
+    ids.splice(targetIndex, 0, draggedGroupId);
+    setDraggedGroupId("");
+    onReorderGroups(ids);
   }
 
-  const noteLabel = noteTargetId ? project.tracks.find((track) => track.id === noteTargetId)?.title ?? "Track" : "Project";
+  function moveVersion(group, index, direction) {
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= group.versions.length) return;
+    const ids = group.versions.map((version) => version.id);
+    [ids[index], ids[nextIndex]] = [ids[nextIndex], ids[index]];
+    onReorderVersions(group, ids);
+  }
+
+  const noteLabel = noteTargetId ? project.tracks.find((track) => track.id === noteTargetId)?.versionName ?? "Version" : "Project";
   return <section className="project-screen view-stack">
     <div className="project-topline"><button className="back-action" type="button" onClick={onBack}><ArrowLeft size={16} />Library</button><button className="delete-project-action" type="button" onClick={onRemoveProject}><Trash size={14} />Delete project</button></div>
     <div className="project-detail-layout">
@@ -1103,13 +1241,13 @@ function ProjectView({ project, playingTrackId, focusedTrackId, notesOpen, noteT
         <div className="project-header"><div><h1>{project.title}</h1><p>{project.count} tracks <span>/</span> {project.duration} <span>/</span> {project.year}</p></div><div className="heading-actions"><button className="button button-ghost" type="button" onClick={onToggleNotes} aria-expanded={notesOpen}><NotePencil size={14} />{notesOpen ? "Hide notes" : "Show notes"}</button><button className="button button-ghost" type="button" onClick={onEditProject}>Edit details</button><button className="button button-ghost" type="button" onClick={onEditArtwork}><ImageSquare size={14} />Artwork</button>{project.artworkRef && <button className="button button-danger" type="button" onClick={onRemoveArtwork}><Trash size={14} />Remove</button>}<button className="button button-primary" type="button" onClick={onPlay} disabled={!project.count}><Play size={14} weight="fill" />Play</button></div></div>
         {project.description && <p className="project-description project-description-inline">{project.description}</p>}
         <div className="project-quick-actions"><button className="project-add-tracks" type="button" onClick={onImport}><Plus size={18} />Add tracks</button></div>
-        <div className={`project-workspace ${notesOpen ? "" : "notes-closed"}`}><div className="tracklist-panel"><div className="section-heading"><h2>Tracks</h2><span className="section-count">{project.count} {project.count === 1 ? "track" : "tracks"}</span></div><div className="track-list">{project.tracks.map((track, index) => <div className={`track-row ${playingTrackId === track.id ? "is-current" : ""} ${focusedTrackId === track.id ? "is-search-match" : ""} ${draggedTrackId === track.id ? "is-dragging" : ""}`} id={`track-${track.id}`} key={track.id} draggable={!editingTrackId} onDragStart={() => setDraggedTrackId(track.id)} onDragEnd={() => setDraggedTrackId("")} onDragOver={(event) => event.preventDefault()} onDrop={() => dropTrack(track.id)}><div className="track-main" role="button" tabIndex={0} onClick={() => onTrackSelect(track)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onTrackSelect(track); } }}><span className="track-number">{String(index + 1).padStart(2, "0")}</span><span className="drag-handle" aria-hidden="true">::</span>{editingTrackId === track.id ? <input className="track-title-editor" autoFocus value={editingTitle} onChange={(event) => setEditingTitle(event.target.value)} onClick={(event) => event.stopPropagation()} onBlur={() => finishEditing(track)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); if (event.key === "Escape") { setEditingTrackId(""); setEditingTitle(track.title); } }} /> : <span className="track-name"><strong>{track.title}</strong></span>}</div><span className="track-duration">{track.duration}</span><div className="track-actions"><span className="track-menu-wrap"><button type="button" className={`track-action track-menu-trigger ${trackMenuId === track.id ? "is-active" : ""}`} onClick={(event) => { event.stopPropagation(); setTrackMenuId(trackMenuId === track.id ? "" : track.id); }} aria-label={`Open actions for ${track.title}`} aria-expanded={trackMenuId === track.id}><DotsThree size={17} /></button>{trackMenuId === track.id && <TrackMenu track={track} index={index} trackCount={project.tracks.length} onMove={(direction) => { setTrackMenuId(""); moveTrack(index, direction); }} onRename={() => { setTrackMenuId(""); startEditing(track); }} onNotes={() => { setTrackMenuId(""); onNoteTargetChange(noteTargetId === track.id ? null : track.id); }} onRemove={() => { setTrackMenuId(""); onRemoveTrack(track); }} onClose={() => setTrackMenuId("")} />}</span></div></div>)}</div></div>{notesOpen && <aside className="notes-panel glass"><div className="notes-heading"><div><h2>Notes</h2><span className="notes-context">{noteLabel}</span></div><span className={`notes-state is-${noteStatus}`} aria-live="polite">{noteStatus === "saving" ? "Saving" : noteStatus === "error" ? "Couldn’t save" : <><Check size={12} />Saved</>}</span></div><textarea aria-label={`${noteLabel} notes`} value={noteText} onChange={(event) => onNoteChange(event.target.value)} disabled={!nativeAvailable} /></aside>}</div>
+        <div className={`project-workspace ${notesOpen ? "" : "notes-closed"}`}><div className="tracklist-panel"><div className="section-heading"><h2>Tracks</h2><span className="section-count">{project.count} {project.count === 1 ? "track" : "tracks"}</span></div><div className="track-list">{groups.map((group, index) => { const current = group.current; const isFocused = group.versions.some((version) => version.id === focusedTrackId); const isPlaying = group.versions.some((version) => version.id === playingTrackId); const menuOpen = trackMenuId === group.id; const ribbonOpen = activeGroupId === group.id && group.versions.length > 1; return <React.Fragment key={group.id}><div className={`track-row ${isPlaying ? "is-current" : ""} ${isFocused ? "is-search-match" : ""} ${draggedGroupId === group.id ? "is-dragging" : ""}`} id={`track-${isFocused ? focusedTrackId : group.id}`} draggable={!editingGroupId} onDragStart={() => setDraggedGroupId(group.id)} onDragEnd={() => setDraggedGroupId("")} onDragOver={(event) => event.preventDefault()} onDrop={() => dropGroup(group.id)}><div className="track-main" role="button" tabIndex={0} onClick={() => { setActiveGroupId(group.id); onTrackSelect(current); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setActiveGroupId(group.id); onTrackSelect(current); } }}><span className="track-number">{String(index + 1).padStart(2, "0")}</span><span className="drag-handle" aria-hidden="true">::</span>{editingGroupId === group.id ? <input className="track-title-editor" autoFocus value={editingTitle} onChange={(event) => setEditingTitle(event.target.value)} onClick={(event) => event.stopPropagation()} onBlur={() => finishEditing(group)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); if (event.key === "Escape") { setEditingGroupId(""); setEditingTitle(group.title); } }} /> : <span className="track-name"><strong>{group.title}</strong><small>{current?.versionName ?? "Original"}{group.versions.length > 1 ? ` · ${group.versions.length} versions` : ""}</small></span>}</div><span className="track-duration">{current?.duration ?? "0:00"}</span><div className="track-actions"><span className="track-menu-wrap"><button type="button" className={`track-action track-menu-trigger ${menuOpen ? "is-active" : ""}`} onClick={(event) => { event.stopPropagation(); setActiveGroupId(group.id); setTrackMenuId(menuOpen ? "" : group.id); }} aria-label={`Open actions for ${group.title}`} aria-expanded={menuOpen}><DotsThree size={17} /></button>{menuOpen && <TrackMenu group={group} index={index} groupCount={groups.length} onMove={(direction) => { setTrackMenuId(""); moveGroup(index, direction); }} onRename={() => { setTrackMenuId(""); startEditing(group); }} onAddVersion={() => { setTrackMenuId(""); onAddVersion(group); }} onNotes={() => { setTrackMenuId(""); onNoteTargetChange(noteTargetId === current?.id ? null : current?.id); }} onRemove={() => { setTrackMenuId(""); onRemoveVersion(current, group); }} onClose={() => setTrackMenuId("")} />}</span></div></div>{ribbonOpen && <div className="version-ribbon" aria-label={`Versions of ${group.title}`}>{group.versions.map((version, versionIndex) => <div className={`version-chip-wrap ${versionMenuId === version.id ? "is-menu-open" : ""}`} key={version.id}><button type="button" className={`version-chip ${version.isCurrent ? "is-current" : ""} ${playingTrackId === version.id ? "is-playing" : ""}`} onClick={() => onVersionSelect(project, version)} aria-pressed={version.isCurrent}><span className="version-chip-marker">{version.isCurrent ? <Check size={11} weight="bold" /> : <span>{String(versionIndex + 1).padStart(2, "0")}</span>}</span><span><strong>{version.versionName}</strong><small>{version.duration}</small></span></button><button type="button" className="version-chip-menu" onClick={() => setVersionMenuId(versionMenuId === version.id ? "" : version.id)} aria-label={`Open actions for ${version.versionName}`} aria-expanded={versionMenuId === version.id}><DotsThree size={15} /></button>{versionMenuId === version.id && <VersionMenu version={version} index={versionIndex} versionCount={group.versions.length} onMove={(direction) => { setVersionMenuId(""); moveVersion(group, versionIndex, direction); }} onRename={() => { setVersionMenuId(""); const nextName = window.prompt("Version name", version.versionName); if (nextName?.trim()) onRenameVersion(version.id, nextName); }} onPromote={() => { setVersionMenuId(""); onPromoteVersion(version); }} onNotes={() => { setVersionMenuId(""); onNoteTargetChange(noteTargetId === version.id ? null : version.id); }} onRemove={() => { setVersionMenuId(""); onRemoveVersion(version, group); }} onClose={() => setVersionMenuId("")} />}</div>)}</div>}</React.Fragment>; })}</div></div>{notesOpen && <aside className="notes-panel glass"><div className="notes-heading"><div><h2>Notes</h2><span className="notes-context">{noteLabel}</span></div><span className={`notes-state is-${noteStatus}`} aria-live="polite">{noteStatus === "saving" ? "Saving" : noteStatus === "error" ? "Couldn’t save" : <><Check size={12} />Saved</>}</span></div><textarea aria-label={`${noteLabel} notes`} value={noteText} onChange={(event) => onNoteChange(event.target.value)} disabled={!nativeAvailable} /></aside>}</div>
       </div>
     </div>
   </section>;
 }
 
-function TrackMenu({ track, index, trackCount, onMove, onRename, onNotes, onRemove, onClose }) {
+function TrackMenu({ group, index, groupCount, onMove, onRename, onAddVersion, onNotes, onRemove, onClose }) {
   const menuRef = useRef(null);
   useEffect(() => {
     function handlePointerDown(event) {
@@ -1127,13 +1265,42 @@ function TrackMenu({ track, index, trackCount, onMove, onRename, onNotes, onRemo
     };
   }, [onClose]);
 
-  return <div ref={menuRef} className="track-menu glass" data-popover role="menu" aria-label={`Actions for ${track.title}`}>
+  return <div ref={menuRef} className="track-menu glass" data-popover role="menu" aria-label={`Actions for ${group.title}`}>
     <span className="eyebrow">Track actions</span>
     <button type="button" role="menuitem" onClick={() => onMove(-1)} disabled={index === 0}><CaretLeft size={14} />Move earlier</button>
-    <button type="button" role="menuitem" onClick={() => onMove(1)} disabled={index === trackCount - 1}><CaretRight size={14} />Move later</button>
+    <button type="button" role="menuitem" onClick={() => onMove(1)} disabled={index === groupCount - 1}><CaretRight size={14} />Move later</button>
+    <button type="button" role="menuitem" onClick={onAddVersion}><Plus size={14} />Add bounce</button>
     <button type="button" role="menuitem" onClick={onRename}><NotePencil size={14} />Rename track</button>
-    <button type="button" role="menuitem" onClick={onNotes}><NotePencil size={14} />{track.note?.text ? "Edit notes" : "Add notes"}</button>
-    <button type="button" className="track-menu-danger" role="menuitem" onClick={onRemove}><Trash size={14} />Remove track</button>
+    <button type="button" role="menuitem" onClick={onNotes}><NotePencil size={14} />Open notes</button>
+    <button type="button" className="track-menu-danger" role="menuitem" onClick={onRemove} disabled={group.versions.length <= 1}><Trash size={14} />Remove current version</button>
+  </div>;
+}
+
+function VersionMenu({ version, index, versionCount, onMove, onRename, onPromote, onNotes, onRemove, onClose }) {
+  const menuRef = useRef(null);
+  useEffect(() => {
+    function handlePointerDown(event) {
+      if (!menuRef.current?.parentElement?.contains(event.target)) onClose();
+    }
+    function handleKeyDown(event) {
+      if (event.key === "Escape") onClose();
+    }
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    menuRef.current?.querySelector("button")?.focus();
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose]);
+  return <div ref={menuRef} className="version-menu glass" data-popover role="menu" aria-label={`Actions for ${version.versionName}`}>
+    <span className="eyebrow">Version actions</span>
+    <button type="button" role="menuitem" onClick={() => onMove(-1)} disabled={index === 0}><CaretLeft size={14} />Move earlier</button>
+    <button type="button" role="menuitem" onClick={() => onMove(1)} disabled={index === versionCount - 1}><CaretRight size={14} />Move later</button>
+    <button type="button" role="menuitem" onClick={onRename}><NotePencil size={14} />Rename version</button>
+    <button type="button" role="menuitem" onClick={onPromote} disabled={version.isCurrent}><Check size={14} />{version.isCurrent ? "Current version" : "Make current"}</button>
+    <button type="button" role="menuitem" onClick={onNotes}><NotePencil size={14} />{version.note?.text ? "Edit notes" : "Open notes"}</button>
+    <button type="button" className="track-menu-danger" role="menuitem" onClick={onRemove} disabled={versionCount <= 1}><Trash size={14} />Remove version</button>
   </div>;
 }
 
@@ -1167,7 +1334,7 @@ function WaveformProgress({ track, progress, durationMs, onChange }) {
 }
 
 function Player({ project, track, status, playbackError, isPlaying, progress, elapsedMs, durationMs, volume, muted, volumeOpen, queueOpen, menuOpen, shuffleEnabled, repeatMode, onTogglePlay, onPrevious, onNext, onProgressChange, onVolumeChange, onToggleMute, onToggleVolume, onToggleQueue, onToggleMenu, onToggleShuffle, onToggleRepeat, onOpenProject, onShowTrack, onOpenNotes, onRevealFile, onShowInfo }) {
-  const statusText = status === "loading" ? "Loading" : status === "error" ? "Unavailable" : project.title;
+  const statusText = status === "loading" ? "Loading" : status === "error" ? "Unavailable" : `${track.versionName ?? "Original"} · ${project.title}`;
   const repeatLabel = repeatMode === "track" ? "Repeat track" : repeatMode === "project" ? "Repeat project" : "Repeat off";
   return <section className="player-shell glass" aria-label="Audio player">
     <div className="player-controls">
@@ -1365,7 +1532,7 @@ function PlayerMenu({ track, onOpenProject, onShowTrack, onOpenNotes, onRevealFi
 }
 
 function TrackInfoDialog({ project, track, onClose }) {
-  return <DialogFrame titleId="track-info-title" onClose={onClose} className="info-dialog"><button className="modal-close" type="button" onClick={onClose} aria-label="Close track information"><X size={18} /></button><span className="eyebrow">Track</span><h2 id="track-info-title">{track.title}</h2><p className="dialog-subtitle">{project.title}</p><dl className="info-list"><div><dt>Format</dt><dd>{track.format || "Unknown"}</dd></div><div><dt>Duration</dt><dd>{track.duration}</dd></div><div><dt>Managed audio</dt><dd>{track.managedFilePath ? "Available" : "Missing"}</dd></div><div><dt>Notes</dt><dd>{track.note?.text ? "Has notes" : "Empty"}</dd></div></dl><button className="button button-primary modal-cta" type="button" onClick={onClose}>Done</button></DialogFrame>;
+  return <DialogFrame titleId="track-info-title" onClose={onClose} className="info-dialog"><button className="modal-close" type="button" onClick={onClose} aria-label="Close track information"><X size={18} /></button><span className="eyebrow">Track version</span><h2 id="track-info-title">{track.title}</h2><p className="dialog-subtitle">{track.versionName ?? "Original"} · {project.title}</p><dl className="info-list"><div><dt>Source title</dt><dd>{track.sourceTitle || track.title}</dd></div><div><dt>Format</dt><dd>{track.format || "Unknown"}</dd></div><div><dt>Duration</dt><dd>{track.duration}</dd></div><div><dt>Current</dt><dd>{track.isCurrent ? "Yes" : "No"}</dd></div><div><dt>Managed audio</dt><dd>{track.managedFilePath ? "Available" : "Missing"}</dd></div><div><dt>Notes</dt><dd>{track.note?.text ? "Has notes" : "Empty"}</dd></div></dl><button className="button button-primary modal-cta" type="button" onClick={onClose}>Done</button></DialogFrame>;
 }
 
 function DiagnosticsDialog({ diagnostics, onClose }) {
@@ -1413,7 +1580,7 @@ function QueuePopover({ project, currentIndex, onSelect, onClose }) {
       if (previous instanceof HTMLElement) previous.focus();
     };
   }, []);
-  const nextTracks = project.tracks.slice(Math.max(0, currentIndex + 1), currentIndex + 4);
+  const nextTracks = currentVersions(project).slice(Math.max(0, currentIndex + 1), currentIndex + 4);
   return <div ref={popoverRef} className="queue-popover glass" data-popover role="dialog" aria-label="Playback queue"><div className="queue-heading"><span>Queue</span><button type="button" onClick={onClose}>Close</button></div>{nextTracks.length ? nextTracks.map((track, index) => <button className="queue-row" type="button" key={track.id} onClick={() => onSelect(track, currentIndex + index + 1)}><span>{String(index + 1).padStart(2, "0")}</span><strong>{track.title}</strong><small>{track.duration}</small></button>) : <div className="queue-empty">No more tracks</div>}</div>;
 }
 
@@ -1429,12 +1596,12 @@ function ProjectEditorPrompt({ project, onClose, onSave }) {
   return <DialogFrame titleId="edit-title" onClose={onClose}><button className="modal-close" type="button" onClick={onClose} aria-label="Close project editor"><X size={18} /></button><h2 id="edit-title">Edit project</h2><form onSubmit={(event) => { event.preventDefault(); onSave(title, description); }}><div className="modal-field"><label htmlFor="edit-project-title">Title</label><input id="edit-project-title" autoFocus value={title} onChange={(event) => setTitle(event.target.value)} required /></div><div className="modal-field"><label htmlFor="edit-project-description">Description</label><textarea id="edit-project-description" value={description} onChange={(event) => setDescription(event.target.value)} /></div><button className="button button-primary modal-cta" type="submit">Save <CloudCheck size={14} /></button></form></DialogFrame>;
 }
 
-function ImportPrompt({ project, progress, duplicatePaths, onClose, onChooseFiles, onRetryImport, onImportDuplicates, onSkipDuplicates }) {
+function ImportPrompt({ project, groupTitle, progress, duplicatePaths, onClose, onChooseFiles, onRetryImport, onImportDuplicates, onSkipDuplicates }) {
   const results = progress?.results ?? [];
   const total = progress?.total ?? 0;
   const current = Math.min(progress?.current ?? 0, total);
   const progressPercent = total ? (current / total) * 100 : 0;
-  return <DialogFrame titleId="import-title" onClose={onClose} dismissOnBackdrop={false}><button className="modal-close" type="button" onClick={onClose} aria-label="Close import prompt"><X size={18} /></button><h2 id="import-title">Import audio</h2><p>Files are copied into OPAL storage. Originals stay untouched.</p><button className="drop-zone" type="button" onClick={onChooseFiles}><FileAudio size={26} weight="thin" /><strong>Choose audio</strong><span>WAV · MP3 · FLAC · AIFF · M4A</span></button>{progress && <div className="import-summary"><div className="import-summary-top"><span>{progress.status === "processing" ? "Importing" : progress.status === "error" ? "Import error" : progress.status === "duplicates" ? "Duplicates" : "Complete"}</span><strong>{current}/{total}</strong></div><div className="import-progress-bar"><span style={{ width: `${progressPercent}%` }} /></div>{progress.message && <small>{progress.message}</small>}</div>}{results.length > 0 && <div className="import-results">{results.map((result) => <div className={`import-result is-${result.status}`} key={`${result.path}-${result.status}`}><span><strong>{result.fileName}</strong><small>{result.message}</small></span><em>{result.status}</em></div>)}</div>}{progress?.status === "error" && <div className="import-actions"><button className="button button-primary" type="button" onClick={onRetryImport}>Retry import</button></div>}{duplicatePaths.length > 0 && <div className="import-actions"><button className="button button-primary" type="button" onClick={onImportDuplicates}>Import duplicates</button><button className="button button-ghost" type="button" onClick={onSkipDuplicates}>Skip duplicates</button></div>}</DialogFrame>;
+  return <DialogFrame titleId="import-title" onClose={onClose} dismissOnBackdrop={false}><button className="modal-close" type="button" onClick={onClose} aria-label="Close import prompt"><X size={18} /></button><span className="eyebrow">{groupTitle ? "Add a version" : "New tracks"}</span><h2 id="import-title">{groupTitle ? `Add bounce to ${groupTitle}` : "Import audio"}</h2><p>{groupTitle ? "This bounce will stay with the track and keep its own notes." : "Files are copied into OPAL storage. Originals stay untouched."}</p><button className="drop-zone" type="button" onClick={onChooseFiles}><FileAudio size={26} weight="thin" /><strong>Choose audio</strong><span>WAV · MP3 · FLAC · AIFF · M4A</span></button>{progress && <div className="import-summary"><div className="import-summary-top"><span>{progress.status === "processing" ? "Importing" : progress.status === "error" ? "Import error" : progress.status === "duplicates" ? "Duplicates" : "Complete"}</span><strong>{current}/{total}</strong></div><div className="import-progress-bar"><span style={{ width: `${progressPercent}%` }} /></div>{progress.message && <small>{progress.message}</small>}</div>}{results.length > 0 && <div className="import-results">{results.map((result) => <div className={`import-result is-${result.status}`} key={`${result.path}-${result.status}`}><span><strong>{result.fileName}</strong><small>{result.message}</small></span><em>{result.status}</em></div>)}</div>}{progress?.status === "error" && <div className="import-actions"><button className="button button-primary" type="button" onClick={onRetryImport}>Retry import</button></div>}{duplicatePaths.length > 0 && <div className="import-actions"><button className="button button-primary" type="button" onClick={onImportDuplicates}>Import duplicates</button><button className="button button-ghost" type="button" onClick={onSkipDuplicates}>Skip duplicates</button></div>}</DialogFrame>;
 }
 
 export { App };

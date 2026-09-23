@@ -20,7 +20,7 @@ use tauri::{Emitter, Manager};
 use uuid::Uuid;
 
 const APP_VERSION: &str = "0.1.0-alpha.1";
-const DATABASE_VERSION: i64 = 3;
+const DATABASE_VERSION: i64 = 4;
 
 #[cfg(target_os = "macos")]
 use tauri::TitleBarStyle;
@@ -72,8 +72,14 @@ impl<'a> Drop for ImportGuard<'a> {
 struct TrackDto {
     id: String,
     project_id: String,
+    group_id: String,
     title: String,
+    source_title: String,
     position: i64,
+    version_name: String,
+    version_position: i64,
+    is_current: bool,
+    version_count: usize,
     duration_ms: i64,
     duration: String,
     format: String,
@@ -282,11 +288,24 @@ fn initialise_database(path: &Path) -> Result<(), String> {
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL
           );
-          CREATE TABLE tracks (
+          CREATE TABLE track_groups (
             id TEXT PRIMARY KEY NOT NULL,
             project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
             title TEXT NOT NULL,
             position INTEGER NOT NULL,
+            created_at INTEGER NOT NULL,
+            UNIQUE(project_id, position)
+          );
+          CREATE INDEX track_groups_project_position ON track_groups(project_id, position);
+          CREATE TABLE tracks (
+            id TEXT PRIMARY KEY NOT NULL,
+            project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            group_id TEXT REFERENCES track_groups(id) ON DELETE CASCADE,
+            title TEXT NOT NULL,
+            position INTEGER NOT NULL,
+            version_name TEXT NOT NULL DEFAULT 'Original',
+            version_position INTEGER NOT NULL DEFAULT 0,
+            is_current INTEGER NOT NULL DEFAULT 1,
             duration_ms INTEGER NOT NULL DEFAULT 0,
             format TEXT NOT NULL,
             managed_file_ref TEXT NOT NULL,
@@ -295,6 +314,7 @@ fn initialise_database(path: &Path) -> Result<(), String> {
             UNIQUE(project_id, position)
           );
           CREATE INDEX tracks_project_position ON tracks(project_id, position);
+          CREATE INDEX tracks_group_version ON tracks(group_id, version_position);
           CREATE INDEX tracks_project_hash ON tracks(project_id, source_hash);
           CREATE TABLE notes (
             id TEXT PRIMARY KEY NOT NULL,
@@ -314,7 +334,7 @@ fn initialise_database(path: &Path) -> Result<(), String> {
             queued_at INTEGER NOT NULL
           );
           CREATE INDEX cleanup_queue_path ON cleanup_queue(managed_path);
-          PRAGMA user_version = 3;
+          PRAGMA user_version = 4;
         ",
             )
             .map_err(|error| format!("Could not migrate OPAL database: {error}"))?;
@@ -347,7 +367,24 @@ fn initialise_database(path: &Path) -> Result<(), String> {
             queued_at INTEGER NOT NULL
           );
           CREATE INDEX cleanup_queue_path ON cleanup_queue(managed_path);
-          PRAGMA user_version = 3;
+          CREATE TABLE track_groups (
+            id TEXT PRIMARY KEY NOT NULL,
+            project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            title TEXT NOT NULL,
+            position INTEGER NOT NULL,
+            created_at INTEGER NOT NULL,
+            UNIQUE(project_id, position)
+          );
+          CREATE INDEX track_groups_project_position ON track_groups(project_id, position);
+          ALTER TABLE tracks ADD COLUMN group_id TEXT REFERENCES track_groups(id) ON DELETE CASCADE;
+          ALTER TABLE tracks ADD COLUMN version_name TEXT NOT NULL DEFAULT 'Original';
+          ALTER TABLE tracks ADD COLUMN version_position INTEGER NOT NULL DEFAULT 0;
+          ALTER TABLE tracks ADD COLUMN is_current INTEGER NOT NULL DEFAULT 1;
+          CREATE INDEX tracks_group_version ON tracks(group_id, version_position);
+          INSERT INTO track_groups (id, project_id, title, position, created_at)
+            SELECT id, project_id, title, position, created_at FROM tracks;
+          UPDATE tracks SET group_id = id, version_name = 'Original', version_position = 0, is_current = 1;
+          PRAGMA user_version = 4;
         ",
             )
             .map_err(|error| format!("Could not migrate OPAL database: {error}"))?;
@@ -368,7 +405,56 @@ fn initialise_database(path: &Path) -> Result<(), String> {
             queued_at INTEGER NOT NULL
           );
           CREATE INDEX cleanup_queue_path ON cleanup_queue(managed_path);
-          PRAGMA user_version = 3;
+          CREATE TABLE track_groups (
+            id TEXT PRIMARY KEY NOT NULL,
+            project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            title TEXT NOT NULL,
+            position INTEGER NOT NULL,
+            created_at INTEGER NOT NULL,
+            UNIQUE(project_id, position)
+          );
+          CREATE INDEX track_groups_project_position ON track_groups(project_id, position);
+          ALTER TABLE tracks ADD COLUMN group_id TEXT REFERENCES track_groups(id) ON DELETE CASCADE;
+          ALTER TABLE tracks ADD COLUMN version_name TEXT NOT NULL DEFAULT 'Original';
+          ALTER TABLE tracks ADD COLUMN version_position INTEGER NOT NULL DEFAULT 0;
+          ALTER TABLE tracks ADD COLUMN is_current INTEGER NOT NULL DEFAULT 1;
+          CREATE INDEX tracks_group_version ON tracks(group_id, version_position);
+          INSERT INTO track_groups (id, project_id, title, position, created_at)
+            SELECT id, project_id, title, position, created_at FROM tracks;
+          UPDATE tracks SET group_id = id, version_name = 'Original', version_position = 0, is_current = 1;
+          PRAGMA user_version = 4;
+        ",
+            )
+            .map_err(|error| format!("Could not migrate OPAL database: {error}"))?;
+        transaction
+            .commit()
+            .map_err(|error| format!("Could not commit OPAL database migration: {error}"))?;
+    } else if version == 3 {
+        backup_database_before_migration(path)?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| format!("Could not begin database migration: {error}"))?;
+        transaction
+            .execute_batch(
+                "
+          CREATE TABLE track_groups (
+            id TEXT PRIMARY KEY NOT NULL,
+            project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            title TEXT NOT NULL,
+            position INTEGER NOT NULL,
+            created_at INTEGER NOT NULL,
+            UNIQUE(project_id, position)
+          );
+          CREATE INDEX track_groups_project_position ON track_groups(project_id, position);
+          ALTER TABLE tracks ADD COLUMN group_id TEXT REFERENCES track_groups(id) ON DELETE CASCADE;
+          ALTER TABLE tracks ADD COLUMN version_name TEXT NOT NULL DEFAULT 'Original';
+          ALTER TABLE tracks ADD COLUMN version_position INTEGER NOT NULL DEFAULT 0;
+          ALTER TABLE tracks ADD COLUMN is_current INTEGER NOT NULL DEFAULT 1;
+          CREATE INDEX tracks_group_version ON tracks(group_id, version_position);
+          INSERT INTO track_groups (id, project_id, title, position, created_at)
+            SELECT id, project_id, title, position, created_at FROM tracks;
+          UPDATE tracks SET group_id = id, version_name = 'Original', version_position = 0, is_current = 1;
+          PRAGMA user_version = 4;
         ",
             )
             .map_err(|error| format!("Could not migrate OPAL database: {error}"))?;
@@ -568,17 +654,23 @@ fn extract_audio_metadata(path: &Path) -> AudioMetadata {
 }
 
 fn track_from_row(row: &rusqlite::Row<'_>, roots: &StorageRoots) -> rusqlite::Result<TrackDto> {
-    let duration_ms: i64 = row.get(4)?;
-    let managed_file_ref: String = row.get(6)?;
+    let duration_ms: i64 = row.get(10)?;
+    let managed_file_ref: String = row.get(12)?;
     let managed_file_path = roots.root.join(&managed_file_ref);
     Ok(TrackDto {
         id: row.get(0)?,
         project_id: row.get(1)?,
-        title: row.get(2)?,
-        position: row.get(3)?,
+        title: row.get(3)?,
+        group_id: row.get(2)?,
+        source_title: row.get(4)?,
+        position: row.get(5)?,
+        version_name: row.get(6)?,
+        version_position: row.get(7)?,
+        is_current: row.get::<_, i64>(8)? != 0,
+        version_count: row.get::<_, i64>(9)? as usize,
         duration_ms,
         duration: format_track_duration(duration_ms),
-        format: row.get(5)?,
+        format: row.get(11)?,
         managed_file_ref,
         managed_file_path: managed_file_path
             .is_file()
@@ -645,8 +737,30 @@ fn load_project(
 
     let mut statement = connection
         .prepare(
-            "SELECT id, project_id, title, position, duration_ms, format, managed_file_ref
-       FROM tracks WHERE project_id = ?1 ORDER BY position ASC",
+            "SELECT
+                t.id,
+                t.project_id,
+                COALESCE(t.group_id, t.id) AS group_id,
+                COALESCE(g.title, t.title) AS group_title,
+                t.title AS source_title,
+                COALESCE(g.position, t.position) AS group_position,
+                COALESCE(t.version_name, 'Original') AS version_name,
+                COALESCE(t.version_position, 0) AS version_position,
+                COALESCE(t.is_current, 1) AS is_current,
+                (
+                    SELECT COUNT(*)
+                    FROM tracks sibling
+                    WHERE COALESCE(sibling.group_id, sibling.id) = COALESCE(t.group_id, t.id)
+                ) AS version_count,
+                t.duration_ms,
+                t.format,
+                t.managed_file_ref
+             FROM tracks t
+             LEFT JOIN track_groups g ON g.id = t.group_id
+             WHERE t.project_id = ?1
+             ORDER BY COALESCE(g.position, t.position) ASC,
+                      COALESCE(t.version_position, 0) ASC,
+                      t.position ASC",
         )
         .map_err(|error| format!("Could not load project tracks: {error}"))?;
     let tracks = statement
@@ -659,7 +773,16 @@ fn load_project(
         track.note = load_track_note(connection, &track.id)?;
     }
     let project_note = load_project_note(connection, project_id)?;
-    let duration_ms = tracks.iter().map(|track| track.duration_ms).sum();
+    let group_count = tracks
+        .iter()
+        .map(|track| track.group_id.as_str())
+        .collect::<HashSet<_>>()
+        .len();
+    let duration_ms = tracks
+        .iter()
+        .filter(|track| track.is_current)
+        .map(|track| track.duration_ms)
+        .sum();
     let artwork_path = project
         .3
         .as_ref()
@@ -675,8 +798,8 @@ fn load_project(
         updated_at: project.5,
         year: year_label(project.4),
         updated: updated_label(project.5),
-        type_label: project_type(tracks.len()),
-        count: tracks.len(),
+        type_label: project_type(group_count),
+        count: group_count,
         duration_ms,
         duration: format_project_duration(duration_ms),
         tracks,
@@ -953,14 +1076,28 @@ fn update_track_title(
         return Err("A track needs a title.".to_string());
     }
     let connection = open_database(&roots.db_path)?;
+    let group_id: Option<String> = connection
+        .query_row(
+            "SELECT COALESCE(group_id, id) FROM tracks WHERE id = ?1 AND project_id = ?2",
+            params![track_id, project_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| format!("Could not locate track: {error}"))?;
+    let group_id = group_id.ok_or_else(|| "Track no longer exists in this project.".to_string())?;
     let changed = connection
         .execute(
-            "UPDATE tracks SET title = ?1 WHERE id = ?2 AND project_id = ?3",
-            params![title, track_id, project_id],
+            "UPDATE track_groups SET title = ?1 WHERE id = ?2 AND project_id = ?3",
+            params![title, group_id, project_id],
         )
         .map_err(|error| format!("Could not rename track: {error}"))?;
     if changed == 0 {
-        return Err("Track no longer exists in this project.".to_string());
+        connection
+            .execute(
+                "UPDATE tracks SET title = ?1 WHERE id = ?2 AND project_id = ?3",
+                params![title, track_id, project_id],
+            )
+            .map_err(|error| format!("Could not rename track: {error}"))?;
     }
     connection
         .execute(
@@ -1033,6 +1170,306 @@ fn reorder_tracks(
     transaction
         .commit()
         .map_err(|error| format!("Could not commit track order: {error}"))?;
+    load_project(&connection, &roots, &project_id)
+}
+
+#[tauri::command(rename = "reorderTrackGroups", rename_all = "camelCase")]
+fn reorder_track_groups(
+    app: tauri::AppHandle,
+    project_id: String,
+    group_ids: Vec<String>,
+) -> Result<ProjectDto, String> {
+    let roots = prepare_storage(&app)?;
+    let mut connection = open_database(&roots.db_path)?;
+    let expected_count: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM track_groups WHERE project_id = ?1",
+            params![project_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| format!("Could not count track groups: {error}"))?;
+    if expected_count as usize != group_ids.len() {
+        return Err(
+            "The track order is out of date. Reload the project and try again.".to_string(),
+        );
+    }
+    let unique_ids = group_ids.iter().collect::<HashSet<_>>();
+    if unique_ids.len() != group_ids.len() {
+        return Err("A track cannot appear twice in the order.".to_string());
+    }
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("Could not begin track group reorder: {error}"))?;
+    for group_id in &group_ids {
+        let belongs_to_project: bool = transaction
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM track_groups WHERE id = ?1 AND project_id = ?2)",
+                params![group_id, project_id],
+                |row| row.get(0),
+            )
+            .map_err(|error| format!("Could not validate track group order: {error}"))?;
+        if !belongs_to_project {
+            return Err("The track order contains an unknown group.".to_string());
+        }
+    }
+    transaction
+        .execute(
+            "UPDATE track_groups SET position = -(position + 1) WHERE project_id = ?1",
+            params![project_id],
+        )
+        .map_err(|error| format!("Could not stage track group order: {error}"))?;
+    for (position, group_id) in group_ids.iter().enumerate() {
+        transaction
+            .execute(
+                "UPDATE track_groups SET position = ?1 WHERE id = ?2 AND project_id = ?3",
+                params![position as i64, group_id, project_id],
+            )
+            .map_err(|error| format!("Could not save track group order: {error}"))?;
+    }
+    transaction
+        .execute(
+            "UPDATE projects SET updated_at = ?1 WHERE id = ?2",
+            params![now_ms(), project_id],
+        )
+        .map_err(|error| format!("Could not update project timestamp: {error}"))?;
+    transaction
+        .commit()
+        .map_err(|error| format!("Could not commit track group order: {error}"))?;
+    load_project(&connection, &roots, &project_id)
+}
+
+#[tauri::command(rename = "reorderTrackVersions", rename_all = "camelCase")]
+fn reorder_track_versions(
+    app: tauri::AppHandle,
+    project_id: String,
+    track_ids: Vec<String>,
+) -> Result<ProjectDto, String> {
+    let roots = prepare_storage(&app)?;
+    let mut connection = open_database(&roots.db_path)?;
+    let first_track_id = track_ids
+        .first()
+        .ok_or_else(|| "A version order needs at least one version.".to_string())?;
+    let group_id: String = connection
+        .query_row(
+            "SELECT COALESCE(group_id, id) FROM tracks WHERE id = ?1 AND project_id = ?2",
+            params![first_track_id, project_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| format!("Could not locate track version: {error}"))?
+        .ok_or_else(|| "Track version no longer exists in this project.".to_string())?;
+    let expected_count: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM tracks WHERE project_id = ?1 AND COALESCE(group_id, id) = ?2",
+            params![project_id, group_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| format!("Could not count track versions: {error}"))?;
+    if expected_count as usize != track_ids.len() {
+        return Err(
+            "The version order is out of date. Reload the project and try again.".to_string(),
+        );
+    }
+    let unique_ids = track_ids.iter().collect::<HashSet<_>>();
+    if unique_ids.len() != track_ids.len() {
+        return Err("A version cannot appear twice in the order.".to_string());
+    }
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("Could not begin version reorder: {error}"))?;
+    for track_id in &track_ids {
+        let belongs_to_group: bool = transaction
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM tracks WHERE id = ?1 AND project_id = ?2 AND COALESCE(group_id, id) = ?3)",
+                params![track_id, project_id, group_id],
+                |row| row.get(0),
+            )
+            .map_err(|error| format!("Could not validate version order: {error}"))?;
+        if !belongs_to_group {
+            return Err("The version order contains an unknown version.".to_string());
+        }
+    }
+    transaction
+        .execute(
+            "UPDATE tracks SET version_position = -(version_position + 1) WHERE project_id = ?1 AND COALESCE(group_id, id) = ?2",
+            params![project_id, group_id],
+        )
+        .map_err(|error| format!("Could not stage version order: {error}"))?;
+    for (position, track_id) in track_ids.iter().enumerate() {
+        transaction
+            .execute(
+                "UPDATE tracks SET version_position = ?1 WHERE id = ?2 AND project_id = ?3",
+                params![position as i64, track_id, project_id],
+            )
+            .map_err(|error| format!("Could not save version order: {error}"))?;
+    }
+    transaction
+        .execute(
+            "UPDATE projects SET updated_at = ?1 WHERE id = ?2",
+            params![now_ms(), project_id],
+        )
+        .map_err(|error| format!("Could not update project timestamp: {error}"))?;
+    transaction
+        .commit()
+        .map_err(|error| format!("Could not commit version order: {error}"))?;
+    load_project(&connection, &roots, &project_id)
+}
+
+#[tauri::command(rename = "renameTrackVersion", rename_all = "camelCase")]
+fn rename_track_version(
+    app: tauri::AppHandle,
+    project_id: String,
+    track_id: String,
+    version_name: String,
+) -> Result<ProjectDto, String> {
+    let roots = prepare_storage(&app)?;
+    let version_name = version_name.trim().to_string();
+    if version_name.is_empty() {
+        return Err("A version needs a name.".to_string());
+    }
+    let connection = open_database(&roots.db_path)?;
+    let changed = connection
+        .execute(
+            "UPDATE tracks SET version_name = ?1 WHERE id = ?2 AND project_id = ?3",
+            params![version_name, track_id, project_id],
+        )
+        .map_err(|error| format!("Could not rename track version: {error}"))?;
+    if changed == 0 {
+        return Err("Track version no longer exists in this project.".to_string());
+    }
+    connection
+        .execute(
+            "UPDATE projects SET updated_at = ?1 WHERE id = ?2",
+            params![now_ms(), project_id],
+        )
+        .map_err(|error| format!("Could not update project timestamp: {error}"))?;
+    load_project(&connection, &roots, &project_id)
+}
+
+#[tauri::command(rename = "promoteTrackVersion", rename_all = "camelCase")]
+fn promote_track_version(
+    app: tauri::AppHandle,
+    project_id: String,
+    track_id: String,
+) -> Result<ProjectDto, String> {
+    let roots = prepare_storage(&app)?;
+    let mut connection = open_database(&roots.db_path)?;
+    let group_id: String = connection
+        .query_row(
+            "SELECT COALESCE(group_id, id) FROM tracks WHERE id = ?1 AND project_id = ?2",
+            params![track_id, project_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| format!("Could not locate track version: {error}"))?
+        .ok_or_else(|| "Track version no longer exists in this project.".to_string())?;
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("Could not begin version promotion: {error}"))?;
+    transaction
+        .execute(
+            "UPDATE tracks SET is_current = 0 WHERE project_id = ?1 AND COALESCE(group_id, id) = ?2",
+            params![project_id, group_id],
+        )
+        .map_err(|error| format!("Could not clear current version: {error}"))?;
+    transaction
+        .execute(
+            "UPDATE tracks SET is_current = 1 WHERE id = ?1 AND project_id = ?2",
+            params![track_id, project_id],
+        )
+        .map_err(|error| format!("Could not promote track version: {error}"))?;
+    transaction
+        .execute(
+            "UPDATE projects SET updated_at = ?1 WHERE id = ?2",
+            params![now_ms(), project_id],
+        )
+        .map_err(|error| format!("Could not update project timestamp: {error}"))?;
+    transaction
+        .commit()
+        .map_err(|error| format!("Could not commit version promotion: {error}"))?;
+    load_project(&connection, &roots, &project_id)
+}
+
+#[tauri::command(rename = "deleteTrackVersion", rename_all = "camelCase")]
+fn delete_track_version(
+    app: tauri::AppHandle,
+    project_id: String,
+    track_id: String,
+) -> Result<ProjectDto, String> {
+    let roots = prepare_storage(&app)?;
+    let mut connection = open_database(&roots.db_path)?;
+    let version = connection
+        .query_row(
+            "SELECT managed_file_ref, COALESCE(group_id, id), version_position, is_current,
+                    (SELECT COUNT(*) FROM tracks sibling
+                     WHERE sibling.project_id = tracks.project_id
+                       AND COALESCE(sibling.group_id, sibling.id) = COALESCE(tracks.group_id, tracks.id))
+             FROM tracks WHERE id = ?1 AND project_id = ?2",
+            params![track_id, project_id],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, i64>(3)? != 0,
+                    row.get::<_, i64>(4)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(|error| format!("Could not locate track version: {error}"))?
+        .ok_or_else(|| "Track version no longer exists in this project.".to_string())?;
+    if version.4 <= 1 {
+        return Err("A track must keep one version.".to_string());
+    }
+    let replacement_id = if version.3 {
+        connection
+            .query_row(
+                "SELECT id FROM tracks
+                 WHERE project_id = ?1 AND COALESCE(group_id, id) = ?2 AND id <> ?3
+                 ORDER BY version_position ASC, position ASC LIMIT 1",
+                params![project_id, version.1, track_id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|error| format!("Could not choose a replacement version: {error}"))?
+    } else {
+        None
+    };
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("Could not begin version removal: {error}"))?;
+    if let Some(replacement_id) = replacement_id {
+        transaction
+            .execute(
+                "UPDATE tracks SET is_current = 1 WHERE id = ?1 AND project_id = ?2",
+                params![replacement_id, project_id],
+            )
+            .map_err(|error| format!("Could not select replacement version: {error}"))?;
+    }
+    transaction
+        .execute(
+            "DELETE FROM tracks WHERE id = ?1 AND project_id = ?2",
+            params![track_id, project_id],
+        )
+        .map_err(|error| format!("Could not remove track version: {error}"))?;
+    transaction
+        .execute(
+            "UPDATE tracks SET version_position = version_position - 1
+             WHERE project_id = ?1 AND COALESCE(group_id, id) = ?2 AND version_position > ?3",
+            params![project_id, version.1, version.2],
+        )
+        .map_err(|error| format!("Could not compact version order: {error}"))?;
+    transaction
+        .execute(
+            "UPDATE projects SET updated_at = ?1 WHERE id = ?2",
+            params![now_ms(), project_id],
+        )
+        .map_err(|error| format!("Could not update project timestamp: {error}"))?;
+    transaction
+        .commit()
+        .map_err(|error| format!("Could not commit version removal: {error}"))?;
+    let _ = remove_managed_file_if_unreferenced(&connection, &roots, &version.0);
     load_project(&connection, &roots, &project_id)
 }
 
@@ -1314,9 +1751,10 @@ fn import_audio_files(
     project_id: String,
     paths: Vec<String>,
     allow_duplicates: bool,
+    track_group_id: Option<String>,
 ) -> Result<ImportSummary, String> {
     let _guard = state.begin(&project_id)?;
-    import_audio_files_inner(app, project_id, paths, allow_duplicates)
+    import_audio_files_inner(app, project_id, paths, allow_duplicates, track_group_id)
 }
 
 fn import_audio_files_inner(
@@ -1324,6 +1762,7 @@ fn import_audio_files_inner(
     project_id: String,
     paths: Vec<String>,
     allow_duplicates: bool,
+    track_group_id: Option<String>,
 ) -> Result<ImportSummary, String> {
     let roots = prepare_storage(&app)?;
     if paths.is_empty() {
@@ -1345,6 +1784,19 @@ fn import_audio_files_inner(
     if project_exists.is_none() {
         return Err("Project no longer exists.".to_string());
     }
+    let target_group_id = if let Some(group_id) = track_group_id {
+        let exists: Option<String> = connection
+            .query_row(
+                "SELECT id FROM track_groups WHERE id = ?1 AND project_id = ?2",
+                params![group_id, project_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| format!("Could not verify track group: {error}"))?;
+        Some(exists.ok_or_else(|| "Track group no longer exists in this project.".to_string())?)
+    } else {
+        None
+    };
     let mut position: i64 = connection
         .query_row(
             "SELECT COALESCE(MAX(position), -1) + 1 FROM tracks WHERE project_id = ?1",
@@ -1479,6 +1931,46 @@ fn import_audio_files_inner(
         }
 
         let metadata = extract_audio_metadata(&source);
+        let (group_id, group_title, group_position, version_position, is_current, is_new_group) =
+            if let Some(group_id) = target_group_id.as_ref() {
+                let group = connection
+                    .query_row(
+                        "SELECT title, position FROM track_groups WHERE id = ?1 AND project_id = ?2",
+                        params![group_id, project_id],
+                        |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)),
+                    )
+                    .map_err(|error| format!("Could not load track group: {error}"))?;
+                let version_position: i64 = connection
+                    .query_row(
+                        "SELECT COALESCE(MAX(version_position), -1) + 1 FROM tracks WHERE project_id = ?1 AND COALESCE(group_id, id) = ?2",
+                        params![project_id, group_id],
+                        |row| row.get(0),
+                    )
+                    .map_err(|error| format!("Could not determine version order: {error}"))?;
+                (
+                    group_id.clone(),
+                    group.0,
+                    group.1,
+                    version_position,
+                    false,
+                    false,
+                )
+            } else {
+                (
+                    Uuid::new_v4().to_string(),
+                    metadata.title.clone(),
+                    connection
+                        .query_row(
+                            "SELECT COALESCE(MAX(position), -1) + 1 FROM track_groups WHERE project_id = ?1",
+                            params![project_id],
+                            |row| row.get(0),
+                        )
+                        .map_err(|error| format!("Could not determine track group order: {error}"))?,
+                    0,
+                    true,
+                    true,
+                )
+            };
         let track_id = Uuid::new_v4().to_string();
         let staged_file = batch_dir.join(format!("{track_id}.{}", extension(&source)));
         if let Err(error) = fs::copy(&source, &staged_file) {
@@ -1552,11 +2044,33 @@ fn import_audio_files_inner(
             );
             continue;
         }
+        if is_new_group {
+            connection
+                .execute(
+                    "INSERT INTO track_groups (id, project_id, title, position, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+                    params![group_id, project_id, group_title, group_position, now_ms()],
+                )
+                .map_err(|error| {
+                    let _ = fs::remove_file(&managed_path);
+                    format!("Could not create track group: {error}")
+                })?;
+        }
+        let version_name = if version_position == 0 {
+            "Original".to_string()
+        } else {
+            format!("Bounce {}", version_position + 1)
+        };
         let track = TrackDto {
             id: track_id.clone(),
             project_id: project_id.clone(),
-            title: metadata.title,
-            position,
+            group_id: group_id.clone(),
+            title: group_title,
+            source_title: metadata.title,
+            position: group_position,
+            version_name: version_name.clone(),
+            version_position,
+            is_current,
+            version_count: version_position as usize + 1,
             duration_ms: metadata.duration_ms,
             duration: format_track_duration(metadata.duration_ms),
             format: extension(&source).to_uppercase(),
@@ -1565,11 +2079,17 @@ fn import_audio_files_inner(
             note: None,
         };
         let insert_result = connection.execute(
-      "INSERT INTO tracks (id, project_id, title, position, duration_ms, format, managed_file_ref, source_hash, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-      params![track.id, track.project_id, track.title, track.position, track.duration_ms, track.format, track.managed_file_ref, source_hash, now_ms()],
+      "INSERT INTO tracks (id, project_id, group_id, title, position, version_name, version_position, is_current, duration_ms, format, managed_file_ref, source_hash, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+      params![track.id, track.project_id, track.group_id, track.source_title, position, track.version_name, track.version_position, track.is_current, track.duration_ms, track.format, track.managed_file_ref, source_hash, now_ms()],
     );
         if let Err(error) = insert_result {
             let _ = fs::remove_file(&managed_path);
+            if is_new_group {
+                let _ = connection.execute(
+                    "DELETE FROM track_groups WHERE id = ?1 AND project_id = ?2",
+                    params![track.group_id, project_id],
+                );
+            }
             let message = format!("Could not save the imported track: {error}");
             results.push(ImportItemResult {
                 path: source_string.clone(),
@@ -2082,6 +2602,11 @@ pub fn run() {
             update_project,
             update_track_title,
             reorder_tracks,
+            reorder_track_groups,
+            reorder_track_versions,
+            rename_track_version,
+            promote_track_version,
+            delete_track_version,
             save_note,
             delete_track,
             delete_project,
@@ -2116,7 +2641,7 @@ mod tests {
         let version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("version");
-        assert_eq!(version, 3);
+        assert_eq!(version, 4);
         connection.execute("INSERT INTO projects (id, title, created_at, updated_at) VALUES ('p', 'Project', 1, 1)", []).expect("project insert");
         connection.execute("INSERT INTO tracks (id, project_id, title, position, format, managed_file_ref, source_hash, created_at) VALUES ('t', 'p', 'Track', 0, 'WAV', 'audio/p/t.wav', 'hash', 1)", []).expect("track insert");
         let title: String = connection
@@ -2125,6 +2650,22 @@ mod tests {
             })
             .expect("track title");
         assert_eq!(title, "Track");
+        let version: (Option<String>, String, i64) = connection
+            .query_row(
+                "SELECT group_id, version_name, is_current FROM tracks WHERE id = 't'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("track version metadata");
+        assert_eq!(version, (None, "Original".to_string(), 1));
+        let group_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM track_groups WHERE project_id = 'p'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("track group count");
+        assert_eq!(group_count, 0);
         connection
             .execute(
                 "INSERT INTO notes (id, project_id, text, updated_at) VALUES ('n', 'p', 'A note', 2)",
@@ -2269,7 +2810,7 @@ mod tests {
         let version: i64 = migrated
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("version");
-        assert_eq!(version, 3);
+        assert_eq!(version, 4);
         let cleanup_table: String = migrated
             .query_row(
                 "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'cleanup_queue'",
