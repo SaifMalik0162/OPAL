@@ -20,7 +20,7 @@ use tauri::{Emitter, Manager};
 use uuid::Uuid;
 
 const APP_VERSION: &str = "0.1.0-alpha.1";
-const DATABASE_VERSION: i64 = 4;
+const DATABASE_VERSION: i64 = 5;
 
 #[cfg(target_os = "macos")]
 use tauri::TitleBarStyle;
@@ -86,6 +86,7 @@ struct TrackDto {
     managed_file_ref: String,
     managed_file_path: Option<String>,
     note: Option<NoteDto>,
+    moments: Vec<MomentDto>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -95,6 +96,21 @@ struct NoteDto {
     project_id: Option<String>,
     track_id: Option<String>,
     text: String,
+    updated_at: i64,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct MomentDto {
+    id: String,
+    track_id: String,
+    lineage_id: String,
+    time_ms: i64,
+    state: String,
+    text: String,
+    is_resolved: bool,
+    parent_id: Option<String>,
+    created_at: i64,
     updated_at: i64,
 }
 
@@ -261,6 +277,37 @@ fn backup_database_before_migration(path: &Path) -> Result<Option<PathBuf>, Stri
     Ok(Some(backup_path))
 }
 
+fn migrate_moments_schema(connection: &mut Connection) -> Result<(), String> {
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("Could not begin moments migration: {error}"))?;
+    transaction
+        .execute_batch(
+            "
+          CREATE TABLE moments (
+            id TEXT PRIMARY KEY NOT NULL,
+            track_id TEXT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+            lineage_id TEXT NOT NULL,
+            time_ms INTEGER NOT NULL DEFAULT 0,
+            state TEXT NOT NULL DEFAULT 'question' CHECK (state IN ('keep', 'change', 'question', 'idea')),
+            text TEXT NOT NULL DEFAULT '',
+            is_resolved INTEGER NOT NULL DEFAULT 0,
+            parent_id TEXT REFERENCES moments(id) ON DELETE SET NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+          );
+          CREATE INDEX moments_track_time ON moments(track_id, time_ms);
+          CREATE INDEX moments_lineage ON moments(lineage_id);
+          PRAGMA user_version = 5;
+        ",
+        )
+        .map_err(|error| format!("Could not migrate OPAL moments: {error}"))?;
+    transaction
+        .commit()
+        .map_err(|error| format!("Could not commit OPAL moments migration: {error}"))?;
+    Ok(())
+}
+
 fn initialise_database(path: &Path) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
@@ -334,7 +381,21 @@ fn initialise_database(path: &Path) -> Result<(), String> {
             queued_at INTEGER NOT NULL
           );
           CREATE INDEX cleanup_queue_path ON cleanup_queue(managed_path);
-          PRAGMA user_version = 4;
+          CREATE TABLE moments (
+            id TEXT PRIMARY KEY NOT NULL,
+            track_id TEXT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+            lineage_id TEXT NOT NULL,
+            time_ms INTEGER NOT NULL DEFAULT 0,
+            state TEXT NOT NULL DEFAULT 'question' CHECK (state IN ('keep', 'change', 'question', 'idea')),
+            text TEXT NOT NULL DEFAULT '',
+            is_resolved INTEGER NOT NULL DEFAULT 0,
+            parent_id TEXT REFERENCES moments(id) ON DELETE SET NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+          );
+          CREATE INDEX moments_track_time ON moments(track_id, time_ms);
+          CREATE INDEX moments_lineage ON moments(lineage_id);
+          PRAGMA user_version = 5;
         ",
             )
             .map_err(|error| format!("Could not migrate OPAL database: {error}"))?;
@@ -461,9 +522,15 @@ fn initialise_database(path: &Path) -> Result<(), String> {
         transaction
             .commit()
             .map_err(|error| format!("Could not commit OPAL database migration: {error}"))?;
-    } else if version > DATABASE_VERSION {
+    }
+    let current_version: i64 = connection
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .map_err(|error| format!("Could not read migrated database version: {error}"))?;
+    if current_version == 4 {
+        migrate_moments_schema(&mut connection)?;
+    } else if current_version > DATABASE_VERSION {
         return Err(format!(
-            "RECOVERY_REQUIRED: OPAL database version {version} is newer than this app."
+            "RECOVERY_REQUIRED: OPAL database version {current_version} is newer than this app."
         ));
     }
     database_integrity(&connection)?;
@@ -676,6 +743,7 @@ fn track_from_row(row: &rusqlite::Row<'_>, roots: &StorageRoots) -> rusqlite::Re
             .is_file()
             .then(|| managed_file_path.to_string_lossy().into_owned()),
         note: None,
+        moments: Vec::new(),
     })
 }
 
@@ -709,6 +777,36 @@ fn load_track_note(connection: &Connection, track_id: &str) -> Result<Option<Not
         )
         .optional()
         .map_err(|error| format!("Could not load track note: {error}"))
+}
+
+fn moment_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MomentDto> {
+    Ok(MomentDto {
+        id: row.get(0)?,
+        track_id: row.get(1)?,
+        lineage_id: row.get(2)?,
+        time_ms: row.get(3)?,
+        state: row.get(4)?,
+        text: row.get(5)?,
+        is_resolved: row.get::<_, i64>(6)? != 0,
+        parent_id: row.get(7)?,
+        created_at: row.get(8)?,
+        updated_at: row.get(9)?,
+    })
+}
+
+fn load_track_moments(connection: &Connection, track_id: &str) -> Result<Vec<MomentDto>, String> {
+    let mut statement = connection
+        .prepare(
+            "SELECT id, track_id, lineage_id, time_ms, state, text, is_resolved, parent_id, created_at, updated_at
+             FROM moments WHERE track_id = ?1 ORDER BY time_ms ASC, created_at ASC",
+        )
+        .map_err(|error| format!("Could not load track moments: {error}"))?;
+    let moments = statement
+        .query_map(params![track_id], moment_from_row)
+        .map_err(|error| format!("Could not read track moments: {error}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("Could not decode track moments: {error}"))?;
+    Ok(moments)
 }
 
 fn load_project(
@@ -771,6 +869,7 @@ fn load_project(
     let mut tracks = tracks;
     for track in &mut tracks {
         track.note = load_track_note(connection, &track.id)?;
+        track.moments = load_track_moments(connection, &track.id)?;
     }
     let project_note = load_project_note(connection, project_id)?;
     let group_count = tracks
@@ -820,6 +919,161 @@ fn load_projects(roots: &StorageRoots) -> Result<Vec<ProjectDto>, String> {
     ids.iter()
         .map(|id| load_project(&connection, roots, id))
         .collect()
+}
+
+fn valid_moment_state(state: &str) -> bool {
+    matches!(state, "keep" | "change" | "question" | "idea")
+}
+
+fn carry_unresolved_moments(
+    connection: &Connection,
+    source_track_id: &str,
+    target_track_id: &str,
+) -> Result<(), String> {
+    let mut statement = connection
+        .prepare(
+            "SELECT id, lineage_id, time_ms, state, text
+             FROM moments WHERE track_id = ?1 AND is_resolved = 0
+             ORDER BY time_ms ASC, created_at ASC",
+        )
+        .map_err(|error| format!("Could not prepare moments to carry forward: {error}"))?;
+    let moments = statement
+        .query_map(params![source_track_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+            ))
+        })
+        .map_err(|error| format!("Could not read moments to carry forward: {error}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("Could not decode moments to carry forward: {error}"))?;
+    drop(statement);
+    let timestamp = now_ms();
+    for (parent_id, lineage_id, time_ms, state, text) in moments {
+        connection
+            .execute(
+                "INSERT INTO moments (id, track_id, lineage_id, time_ms, state, text, is_resolved, parent_id, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, ?7, ?8, ?8)",
+                params![
+                    Uuid::new_v4().to_string(),
+                    target_track_id,
+                    lineage_id,
+                    time_ms,
+                    state,
+                    text,
+                    parent_id,
+                    timestamp
+                ],
+            )
+            .map_err(|error| format!("Could not carry a moment into the new version: {error}"))?;
+    }
+    Ok(())
+}
+
+#[tauri::command(rename = "createMoment", rename_all = "camelCase")]
+fn create_moment(
+    app: tauri::AppHandle,
+    project_id: String,
+    track_id: String,
+    time_ms: i64,
+    state: String,
+    text: Option<String>,
+) -> Result<ProjectDto, String> {
+    let roots = prepare_storage(&app)?;
+    let state = state.trim().to_lowercase();
+    if !valid_moment_state(&state) {
+        return Err("Choose a valid moment decision.".to_string());
+    }
+    let connection = open_database(&roots.db_path)?;
+    let duration_ms: i64 = connection
+        .query_row(
+            "SELECT duration_ms FROM tracks WHERE id = ?1 AND project_id = ?2",
+            params![track_id, project_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| format!("Could not verify moment track: {error}"))?
+        .ok_or_else(|| "Track version no longer exists in this project.".to_string())?;
+    let timestamp = now_ms();
+    connection
+        .execute(
+            "INSERT INTO moments (id, track_id, lineage_id, time_ms, state, text, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)",
+            params![
+                Uuid::new_v4().to_string(),
+                track_id,
+                Uuid::new_v4().to_string(),
+                time_ms.max(0).min(duration_ms.max(0)),
+                state,
+                text.unwrap_or_default(),
+                timestamp
+            ],
+        )
+        .map_err(|error| format!("Could not save moment: {error}"))?;
+    connection
+        .execute(
+            "UPDATE projects SET updated_at = ?1 WHERE id = ?2",
+            params![timestamp, project_id],
+        )
+        .map_err(|error| format!("Could not update project timestamp: {error}"))?;
+    load_project(&connection, &roots, &project_id)
+}
+
+#[tauri::command(rename = "updateMoment", rename_all = "camelCase")]
+fn update_moment(
+    app: tauri::AppHandle,
+    project_id: String,
+    moment_id: String,
+    time_ms: i64,
+    state: String,
+    text: String,
+    is_resolved: bool,
+) -> Result<ProjectDto, String> {
+    let roots = prepare_storage(&app)?;
+    let state = state.trim().to_lowercase();
+    if !valid_moment_state(&state) {
+        return Err("Choose a valid moment decision.".to_string());
+    }
+    let connection = open_database(&roots.db_path)?;
+    let duration_ms: i64 = connection
+        .query_row(
+            "SELECT tracks.duration_ms FROM moments JOIN tracks ON tracks.id = moments.track_id
+             WHERE moments.id = ?1 AND tracks.project_id = ?2",
+            params![moment_id, project_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| format!("Could not verify moment: {error}"))?
+        .ok_or_else(|| "Moment no longer exists in this project.".to_string())?;
+    let timestamp = now_ms();
+    let changed = connection
+        .execute(
+            "UPDATE moments SET time_ms = ?1, state = ?2, text = ?3, is_resolved = ?4, updated_at = ?5
+             WHERE id = ?6 AND track_id IN (SELECT id FROM tracks WHERE project_id = ?7)",
+            params![
+                time_ms.max(0).min(duration_ms.max(0)),
+                state,
+                text,
+                is_resolved,
+                timestamp,
+                moment_id,
+                project_id
+            ],
+        )
+        .map_err(|error| format!("Could not update moment: {error}"))?;
+    if changed == 0 {
+        return Err("Moment no longer exists in this project.".to_string());
+    }
+    connection
+        .execute(
+            "UPDATE projects SET updated_at = ?1 WHERE id = ?2",
+            params![timestamp, project_id],
+        )
+        .map_err(|error| format!("Could not update project timestamp: {error}"))?;
+    load_project(&connection, &roots, &project_id)
 }
 
 fn safe_managed_path(roots: &StorageRoots, managed_path: &str) -> Result<PathBuf, String> {
@@ -1931,32 +2185,48 @@ fn import_audio_files_inner(
         }
 
         let metadata = extract_audio_metadata(&source);
-        let (group_id, group_title, group_position, version_position, is_current, is_new_group) =
-            if let Some(group_id) = target_group_id.as_ref() {
-                let group = connection
-                    .query_row(
-                        "SELECT title, position FROM track_groups WHERE id = ?1 AND project_id = ?2",
-                        params![group_id, project_id],
-                        |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)),
-                    )
-                    .map_err(|error| format!("Could not load track group: {error}"))?;
-                let version_position: i64 = connection
+        let (
+            group_id,
+            group_title,
+            group_position,
+            version_position,
+            is_current,
+            is_new_group,
+            source_track_id,
+        ) = if let Some(group_id) = target_group_id.as_ref() {
+            let group = connection
+                .query_row(
+                    "SELECT title, position FROM track_groups WHERE id = ?1 AND project_id = ?2",
+                    params![group_id, project_id],
+                    |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)),
+                )
+                .map_err(|error| format!("Could not load track group: {error}"))?;
+            let version_position: i64 = connection
                     .query_row(
                         "SELECT COALESCE(MAX(version_position), -1) + 1 FROM tracks WHERE project_id = ?1 AND COALESCE(group_id, id) = ?2",
                         params![project_id, group_id],
                         |row| row.get(0),
                     )
                     .map_err(|error| format!("Could not determine version order: {error}"))?;
-                (
-                    group_id.clone(),
-                    group.0,
-                    group.1,
-                    version_position,
-                    false,
-                    false,
-                )
-            } else {
-                (
+            let source_track_id: Option<String> = connection
+                    .query_row(
+                        "SELECT id FROM tracks WHERE project_id = ?1 AND group_id = ?2 AND is_current = 1 LIMIT 1",
+                        params![project_id, group_id],
+                        |row| row.get(0),
+                    )
+                    .optional()
+                    .map_err(|error| format!("Could not locate current track version: {error}"))?;
+            (
+                group_id.clone(),
+                group.0,
+                group.1,
+                version_position,
+                false,
+                false,
+                source_track_id,
+            )
+        } else {
+            (
                     Uuid::new_v4().to_string(),
                     metadata.title.clone(),
                     connection
@@ -1969,8 +2239,9 @@ fn import_audio_files_inner(
                     0,
                     true,
                     true,
+                    None,
                 )
-            };
+        };
         let track_id = Uuid::new_v4().to_string();
         let staged_file = batch_dir.join(format!("{track_id}.{}", extension(&source)));
         if let Err(error) = fs::copy(&source, &staged_file) {
@@ -2077,6 +2348,7 @@ fn import_audio_files_inner(
             managed_file_ref: managed_file_ref.clone(),
             managed_file_path: Some(managed_path.to_string_lossy().into_owned()),
             note: None,
+            moments: Vec::new(),
         };
         let insert_result = connection.execute(
       "INSERT INTO tracks (id, project_id, group_id, title, position, version_name, version_position, is_current, duration_ms, format, managed_file_ref, source_hash, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
@@ -2110,6 +2382,9 @@ fn import_audio_files_inner(
                 },
             );
             continue;
+        }
+        if let Some(source_track_id) = source_track_id {
+            carry_unresolved_moments(&connection, &source_track_id, &track.id)?;
         }
         connection
             .execute(
@@ -2607,6 +2882,8 @@ pub fn run() {
             rename_track_version,
             promote_track_version,
             delete_track_version,
+            create_moment,
+            update_moment,
             save_note,
             delete_track,
             delete_project,
@@ -2641,7 +2918,7 @@ mod tests {
         let version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("version");
-        assert_eq!(version, 4);
+        assert_eq!(version, 5);
         connection.execute("INSERT INTO projects (id, title, created_at, updated_at) VALUES ('p', 'Project', 1, 1)", []).expect("project insert");
         connection.execute("INSERT INTO tracks (id, project_id, title, position, format, managed_file_ref, source_hash, created_at) VALUES ('t', 'p', 'Track', 0, 'WAV', 'audio/p/t.wav', 'hash', 1)", []).expect("track insert");
         let title: String = connection
@@ -2666,6 +2943,27 @@ mod tests {
             )
             .expect("track group count");
         assert_eq!(group_count, 0);
+        connection
+            .execute(
+                "INSERT INTO moments (id, track_id, lineage_id, time_ms, state, text, created_at, updated_at) VALUES ('m', 't', 'lineage', 1250, 'question', 'Check the vocal entrance', 3, 3)",
+                [],
+            )
+            .expect("moment insert");
+        let moment: (i64, String, String) = connection
+            .query_row(
+                "SELECT time_ms, state, text FROM moments WHERE id = 'm'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("moment read");
+        assert_eq!(
+            moment,
+            (
+                1250,
+                "question".to_string(),
+                "Check the vocal entrance".to_string()
+            )
+        );
         connection
             .execute(
                 "INSERT INTO notes (id, project_id, text, updated_at) VALUES ('n', 'p', 'A note', 2)",
@@ -2810,7 +3108,7 @@ mod tests {
         let version: i64 = migrated
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("version");
-        assert_eq!(version, 4);
+        assert_eq!(version, 5);
         let cleanup_table: String = migrated
             .query_row(
                 "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'cleanup_queue'",
@@ -2825,6 +3123,73 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn unresolved_moments_are_carried_to_the_next_version_with_lineage() {
+        let directory = tempdir().expect("temporary moments directory");
+        let database = directory.path().join("opal.sqlite");
+        initialise_database(&database).expect("migration");
+        let connection = open_database(&database).expect("database");
+        connection
+            .execute(
+                "INSERT INTO projects (id, title, created_at, updated_at) VALUES ('p', 'Project', 1, 1)",
+                [],
+            )
+            .expect("project insert");
+        connection
+            .execute(
+                "INSERT INTO tracks (id, project_id, title, position, version_name, version_position, is_current, format, managed_file_ref, source_hash, created_at) VALUES ('source', 'p', 'Track', 0, 'Original', 0, 0, 'WAV', 'audio/p/source.wav', 'source-hash', 1)",
+                [],
+            )
+            .expect("source track insert");
+        connection
+            .execute(
+                "INSERT INTO tracks (id, project_id, title, position, version_name, version_position, is_current, format, managed_file_ref, source_hash, created_at) VALUES ('target', 'p', 'Track', 1, 'Bounce 2', 1, 1, 'WAV', 'audio/p/target.wav', 'target-hash', 1)",
+                [],
+            )
+            .expect("target track insert");
+        connection
+            .execute(
+                "INSERT INTO moments (id, track_id, lineage_id, time_ms, state, text, is_resolved, created_at, updated_at) VALUES ('open', 'source', 'lineage-open', 1850, 'change', 'Tighten the snare', 0, 2, 2)",
+                [],
+            )
+            .expect("open moment insert");
+        connection
+            .execute(
+                "INSERT INTO moments (id, track_id, lineage_id, time_ms, state, text, is_resolved, created_at, updated_at) VALUES ('resolved', 'source', 'lineage-resolved', 4200, 'keep', 'Approved texture', 1, 2, 2)",
+                [],
+            )
+            .expect("resolved moment insert");
+
+        carry_unresolved_moments(&connection, "source", "target").expect("carry moments");
+
+        let carried: (String, i64, String, String, i64, Option<String>) = connection
+            .query_row(
+                "SELECT lineage_id, time_ms, state, text, is_resolved, parent_id FROM moments WHERE track_id = 'target'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?)),
+            )
+            .expect("carried moment");
+        assert_eq!(
+            carried,
+            (
+                "lineage-open".to_string(),
+                1850,
+                "change".to_string(),
+                "Tighten the snare".to_string(),
+                0,
+                Some("open".to_string())
+            )
+        );
+        let carried_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM moments WHERE track_id = 'target'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("carried moment count");
+        assert_eq!(carried_count, 1);
     }
 
     #[test]
