@@ -1,0 +1,7 @@
+# OPAL app icon
+
+Source: `OPAL.icon/Assets/opal-mark.png`. Generated with the built-in image generation tool using the previous `src-tauri/icons/icon.png` as the visual reference. Desktop exports were generated with `npx tauri icon`.
+
+## Final generation prompt
+
+Redesign the referenced OPAL app icon into a professional creative desktop icon. Retain its distinctive pearlescent sculptural aesthetic, faint powder blue and lavender palette, and visual idea of an opal cradled by flowing material. Make the form thoughtfully designed and simple enough for a taskbar: ONE luminous smooth opal lens or softly oval pebble, partially cradled by ONE broad satin folded crescent/sleeve that sweeps underneath and rises at one side. The opal is the primary recognizable shape, the sleeve adds a subtle sense of music and a record sleeve. Strong compact asymmetric silhouette; calm, polished, tangible object, refined soft depth, subtle controlled highlights, delicate blue and lavender color, no neon. NOT a letter or typographic monogram, NOT an O ring, NOT an infinity symbol, no multiple tangled ribbons, no thin wisps, no complicated facets, no particles or starbursts, no text. Straight-on slightly dimensional view, centered large with 10 percent safe padding on a genuinely transparent square canvas. The negative spaces and exterior must be truly transparent. A distinctive premium software icon, restrained professional craft rather than fantasy 3D art. Output one final icon only, no tile or background or mockup.

@@ -1,112 +1,34 @@
 {
-  "features" : [
+  "features": [
     "refractivity"
   ],
-  "fill" : {
-    "linear-gradient" : [
+  "fill": {
+    "linear-gradient": [
       "display-p3:0.97452,0.98089,1.00000,1.00000",
       "display-p3:0.34345,0.35076,0.54728,1.00000"
     ]
   },
-  "groups" : [
+  "groups": [
     {
-      "blur-material" : 0.5,
-      "hidden" : false,
-      "layers" : [
+      "layers": [
         {
-          "blend-mode" : "normal",
-          "fill" : "automatic",
-          "glass" : true,
-          "hidden" : false,
-          "image-name" : "exec-af13d9c3-5929-46c0-a608-1fc1f0d5fb22.png",
-          "name" : "exec-af13d9c3-5929-46c0-a608-1fc1f0d5fb22",
-          "opacity" : 1,
-          "position" : {
-            "scale" : 0.41,
-            "translation-in-points" : [
-              0,
-              0
-            ]
-          }
-        },
-        {
-          "fill" : "automatic",
-          "glass" : true,
-          "hidden" : true,
-          "image-name" : "exec-0b33ecfd-9a0d-40d5-af99-6edcbf64624e.png",
-          "name" : "exec-0b33ecfd-9a0d-40d5-af99-6edcbf64624e",
-          "opacity" : 1,
-          "position" : {
-            "scale" : 0.45,
-            "translation-in-points" : [
-              0,
-              0
-            ]
-          }
-        },
-        {
-          "hidden" : true,
-          "image-name" : "exec-f0699df5-b09d-4050-8621-23f3ced893fc.png",
-          "name" : "exec-f0699df5-b09d-4050-8621-23f3ced893fc",
-          "position" : {
-            "scale" : 0.45,
-            "translation-in-points" : [
-              0,
-              0
-            ]
-          }
-        },
-        {
-          "blend-mode-specializations" : [
-            {
-              "value" : "normal"
-            },
-            {
-              "appearance" : "dark",
-              "value" : "normal"
-            }
-          ],
-          "glass-specializations" : [
-            {
-              "value" : true
-            },
-            {
-              "appearance" : "light",
-              "value" : true
-            }
-          ],
-          "image-name" : "exec-e9e68b65-d1d9-42a5-8514-c59b0bcc6f6f.png",
-          "name" : "exec-e9e68b65-d1d9-42a5-8514-c59b0bcc6f6f",
-          "opacity" : 0.25,
-          "position" : {
-            "scale" : 0.8,
-            "translation-in-points" : [
+          "image-name": "opal-mark.png",
+          "name": "Opal lens and sleeve",
+          "position": {
+            "scale": 0.8,
+            "translation-in-points": [
               0,
               0
             ]
           }
         }
-      ],
-      "refractivity" : {
-        "depth" : 0,
-        "enabled" : true,
-        "strength" : 0.5
-      },
-      "shadow" : {
-        "kind" : "neutral",
-        "opacity" : 1
-      },
-      "specular" : true,
-      "translucency" : {
-        "enabled" : true,
-        "value" : 0.2
-      }
+      ]
     }
   ],
-  "supported-platforms" : {
-    "circles" : [
+  "supported-platforms": {
+    "circles": [
       "watchOS"
     ],
-    "squares" : "shared"
+    "squares": "shared"
   }
 }
