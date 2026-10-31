@@ -1439,12 +1439,12 @@ function App() {
 
   const visibleSelection = filteredProjects.find((project) => project.id === selectedId)?.id ?? filteredProjects[0]?.id ?? "";
 
-  return <div className="opal-app">
+  return <div className="opal-app" data-view={activeView}>
     <div className="ambient-field" aria-hidden="true" />
     <header className="topbar" data-tauri-drag-region="deep" onMouseDown={handleWindowMouseDown}>
       <div className="topbar-left"><button className="brand-lockup" type="button" onClick={returnToLibrary} aria-label="Open OPAL library"><span className="brand-mark">O</span><span className="brand-name">OPAL</span></button><label className="search-field"><MagnifyingGlass size={14} weight="regular" /><input ref={searchInputRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search" />{query && <button type="button" className="clear-search" onClick={() => setQuery("")} aria-label="Clear search"><X size={13} /></button>}</label></div>
       <nav className="top-navigation" aria-label="Primary navigation"><button type="button" className={activeView === "library" ? "is-active" : ""} onClick={returnToLibrary}>Library</button><button type="button" className={activeView === "projects" ? "is-active" : ""} onClick={openProjectsView}>Projects</button></nav>
-      <div className="topbar-actions"><button type="button" className={`topbar-import ${importActive ? "is-busy" : ""}`} onClick={() => importActive ? setImportOpen(true) : (selectedProject ? pickAudioFiles() : setCreateOpen(true))}><Plus size={14} />{importActive ? "Importing…" : "Import"}</button><button type="button" className="profile-button" onClick={openProfile} aria-label="Open OPAL settings" aria-expanded={profileOpen}>SM</button>{profileOpen && <ProfilePopover nativeAvailable={isTauri()} storageInfo={storageInfo} storageError={storageError} preferences={preferences} importProgress={importProgress} onTogglePreference={togglePreference} onRevealFolder={revealStorageFolder} onExportBackup={exportLibraryBackup} onRestoreBackup={restoreLibraryBackup} onRetryStorage={refreshStorageInfo} onDiagnostics={openDiagnostics} onClose={() => setProfileOpen(false)} />}</div>
+      <div className="topbar-actions">{activeView === "library" && <label className="sort-control topbar-sort-control"><span>Sort</span><select value={sortMode} onChange={(event) => setSortMode(event.target.value)} aria-label="Sort projects"><option value="updated">Recently updated</option><option value="newest">Newest</option><option value="alphabetical">A–Z</option></select><CaretDown size={13} /></label>}<button type="button" className={`topbar-import ${importActive ? "is-busy" : ""}`} onClick={() => importActive ? setImportOpen(true) : (selectedProject ? pickAudioFiles() : setCreateOpen(true))}><Plus size={14} />{importActive ? "Importing…" : "Import"}</button><button type="button" className="profile-button" onClick={openProfile} aria-label="Open OPAL settings" aria-expanded={profileOpen}>SM</button>{profileOpen && <ProfilePopover nativeAvailable={isTauri()} storageInfo={storageInfo} storageError={storageError} preferences={preferences} importProgress={importProgress} onTogglePreference={togglePreference} onRevealFolder={revealStorageFolder} onExportBackup={exportLibraryBackup} onRestoreBackup={restoreLibraryBackup} onRetryStorage={refreshStorageInfo} onDiagnostics={openDiagnostics} onClose={() => setProfileOpen(false)} />}</div>
     </header>
     {error && <div className="error-banner" role="alert"><span>{error}</span><button type="button" onClick={() => setError("")} aria-label="Dismiss message"><X size={14} /></button></div>}
     {notice && <div className="notice-banner" role="status"><span>{notice}</span><button type="button" onClick={() => setNotice("")} aria-label="Dismiss message"><X size={14} /></button></div>}
@@ -1481,11 +1481,18 @@ function LibraryView({ loading, projects: visibleProjects, selectedId, query, so
     return <section className="library-screen view-stack empty-library-screen"><div className="empty-library glass"><NotePencil size={27} weight="thin" /><h1>{hasSearch ? "No projects found" : "Your library is empty"}</h1><p>{hasSearch ? <>No project matches “{query}”.</> : "Create a project to start."}</p><div className="empty-library-actions"><button className="button button-primary" type="button" onClick={hasSearch ? onClearSearch : onCreateProject}>{hasSearch ? "Clear search" : "Create project"}</button>{!hasSearch && <button className="text-action" type="button" onClick={onImport}>Import audio <Plus size={14} /></button>}</div></div></section>;
   }
   const selected = visibleProjects.find((project) => project.id === selectedId) ?? visibleProjects[0];
-  if (visibleProjects.length > 6) {
-    return <SleeveWall projects={visibleProjects} selectedId={selected.id} query={query} sortMode={sortMode} trackMatches={trackMatches} onSortChange={onSortChange} onProjectSelect={onProjectSelect} onOpenProject={onOpenProject} onCreateProject={onCreateProject} onImport={onImport} />;
-  }
-  const cards = [selected, ...visibleProjects.filter((project) => project.id !== selected.id).slice(0, 3)];
-  return <section className="library-screen view-stack"><div className="library-hero-copy"><div className="library-heading-row"><h1>Library</h1><label className="sort-control"><span>Sort</span><select value={sortMode} onChange={(event) => onSortChange(event.target.value)} aria-label="Sort projects"><option value="updated">Recently updated</option><option value="newest">Newest</option><option value="alphabetical">A–Z</option></select><CaretDown size={13} /></label></div></div><div className="carousel-wrap"><button type="button" className="carousel-control carousel-control-left" onClick={() => onStep(-1)} aria-label="Previous project"><CaretLeft size={22} /></button><div className="sleeve-orbit" aria-label="Project artwork selection">{cards.map((project, index) => <button type="button" key={project.id} className={`sleeve sleeve-position-${index} ${project.id === selected.id ? "is-selected" : ""}`} onClick={() => onProjectSelect(project.id)} onDoubleClick={() => onOpenProject(project.id, trackMatches.get(project.id)?.id ?? "")} aria-label={`Select ${project.title}`}><span className="sleeve-image-wrap"><img src={project.artwork} alt="" /></span><span className="sleeve-meta"><strong>{project.title}</strong><small>{project.count} tracks</small></span></button>)}</div><button type="button" className="carousel-control carousel-control-right" onClick={() => onStep(1)} aria-label="Next project"><CaretRight size={22} /></button></div><div className="carousel-caption"><h2>{selected.title}</h2><p>{selected.count} tracks · {selected.duration}</p><button className="text-action" type="button" onClick={() => onOpenProject(selected.id, trackMatches.get(selected.id)?.id ?? "")}>Open project <ArrowUpRight size={15} /></button></div><div className="library-rail"><div className="rail-heading"><span>Projects</span></div><div className="rail-projects">{visibleProjects.map((project) => { const match = trackMatches.get(project.id); return <button type="button" className={project.id === selected.id ? "is-active" : ""} key={project.id} onClick={() => onOpenProject(project.id, match?.id ?? "")}><img src={project.artwork} alt="" /><span><strong>{project.title}</strong>{match && <small className="search-hit">{match.title}</small>}</span><ArrowUpRight size={14} /></button>; })}</div><button className="rail-import" type="button" onClick={onImport}><Plus size={17} /><span>Import audio</span></button></div></section>;
+  const selectedIndex = visibleProjects.findIndex((project) => project.id === selected.id);
+  const offsets = visibleProjects.length === 1 ? [0]
+    : visibleProjects.length === 2 ? [0, 1, -1]
+      : visibleProjects.length === 3 ? [0, 1, -1]
+        : visibleProjects.length === 4 ? [0, 1, 2, -1]
+          : [0, 1, 2, -1, -2];
+  const cards = offsets.map((offset) => ({
+    project: visibleProjects[(selectedIndex + offset + visibleProjects.length) % visibleProjects.length],
+    position: offset === 0 ? 0 : offset === 1 ? 1 : offset === 2 ? 2 : offset === -1 ? 3 : 4,
+    offset,
+  }));
+  return <section className="library-screen view-stack" aria-label="OPAL library"><h1 className="library-accessible-title">Library</h1><div className="carousel-wrap"><button type="button" className="carousel-control carousel-control-left" onClick={() => onStep(-1)} aria-label="Previous project"><CaretLeft size={22} /></button><div className="sleeve-orbit" role="group" aria-label="Project artwork selection. Use the left and right arrow keys to change project." onKeyDown={(event) => { if (event.key === "ArrowLeft" || event.key === "ArrowRight") { event.preventDefault(); onStep(event.key === "ArrowLeft" ? -1 : 1); } }}>{cards.map(({ project, position, offset }) => <button type="button" key={`${project.id}-${offset}`} className={`sleeve sleeve-position-${position} ${project.id === selected.id ? "is-selected" : ""}`} onClick={() => onProjectSelect(project.id)} onDoubleClick={() => onOpenProject(project.id, trackMatches.get(project.id)?.id ?? "")} aria-label={`Select ${project.title}; double-click to open`}><span className="sleeve-image-wrap"><img src={project.artwork} alt="" /></span><span className="sleeve-meta"><strong>{project.title}</strong><small>{project.id === selected.id ? (project.tracks[0]?.title || `${project.count} tracks`) : `${project.count} ${project.count === 1 ? "track" : "tracks"}`}</small></span></button>)}</div><button type="button" className="carousel-control carousel-control-right" onClick={() => onStep(1)} aria-label="Next project"><CaretRight size={22} /></button></div><div className="carousel-caption"><button className="caption-open" type="button" aria-label={`Open ${selected.title} project`} onClick={() => onOpenProject(selected.id, trackMatches.get(selected.id)?.id ?? "")}><span>{selected.description?.trim() || `${selected.count} ${selected.count === 1 ? "track" : "tracks"} · ${selected.duration}`}</span><ArrowUpRight size={16} /></button></div></section>;
 }
 
 function SleeveWall({ projects, selectedId, query, sortMode, trackMatches, onSortChange, onProjectSelect, onOpenProject, onCreateProject, onImport }) {
@@ -1785,6 +1792,7 @@ function WaveformProgress({ track, progress, durationMs, moments = [], selectedM
   const renderBars = (layer) => bars.map((height, index) => <span key={`${layer}-${index}`} style={{ height: `${height}%` }} />);
   function createMomentFromClick(event) {
     if (!durationMs || !onCreateMoment) return;
+    if (event.target.closest?.(".waveform-input")) return;
     const pointerStart = pointerStartRef.current;
     pointerStartRef.current = null;
     if (pointerStart && Math.hypot(event.clientX - pointerStart.x, event.clientY - pointerStart.y) > 4) return;
@@ -1811,14 +1819,17 @@ function Player({ project, track, selectedMomentId, status, playbackError, isPla
       <button type="button" className="play-button" onClick={onTogglePlay} aria-label={isPlaying ? "Pause" : "Play"} aria-keyshortcuts="Space" title={`${isPlaying ? "Pause" : "Play"} (Space)`}>{isPlaying ? <Pause size={18} weight="fill" /> : <Play size={18} weight="fill" />}</button>
       <button type="button" onClick={onNext} aria-label="Next track" title="Next track"><SkipForward size={18} weight="fill" /></button>
     </div>
-    <div className="player-track">
-      <img src={project.artwork} alt="" />
-      <span><strong>{track.title}</strong><small>{playbackError || statusText}</small></span>
-      <span className="player-menu-wrap"><button className="player-more" type="button" onClick={onToggleMenu} aria-label="Open player menu" aria-expanded={menuOpen} title="Track options"><DotsThree size={18} /></button>{menuOpen && <PlayerMenu track={track} onOpenProject={onOpenProject} onShowTrack={onShowTrack} onOpenNotes={onOpenNotes} onRevealFile={onRevealFile} onShowInfo={onShowInfo} onClose={onToggleMenu} />}</span>
-    </div>
-    <div className="player-progress">
-      <div className="player-progress-top"><span>{formatTime(elapsedMs)}</span><span>{formatTime(durationMs)}</span></div>
-      <WaveformProgress track={track} moments={track.moments} selectedMomentId={selectedMomentId} progress={progress} durationMs={durationMs} onChange={onProgressChange} onCreateMoment={onCreateMoment} onSelectMoment={onSelectMoment} />
+    <div className="player-center" key={`${project.id}:${track.id}`}>
+      <div className="player-track">
+        <img src={project.artwork} alt="" />
+        <span><strong>{track.title}</strong><small>{playbackError || statusText}</small></span>
+        <button className="player-waveform-action" type="button" onClick={onOpenNotes} aria-label="Open track notes" title="Open track notes"><Waveform size={17} /></button>
+        <span className="player-menu-wrap"><button className="player-more" type="button" onClick={onToggleMenu} aria-label="Open player menu" aria-expanded={menuOpen} title="Track options"><DotsThree size={18} /></button>{menuOpen && <PlayerMenu track={track} onOpenProject={onOpenProject} onShowTrack={onShowTrack} onOpenNotes={onOpenNotes} onRevealFile={onRevealFile} onShowInfo={onShowInfo} onClose={onToggleMenu} />}</span>
+      </div>
+      <div className="player-progress">
+        <div className="player-progress-top"><span>{formatTime(elapsedMs)}</span><span>{formatTime(durationMs)}</span></div>
+        <WaveformProgress track={track} moments={track.moments} selectedMomentId={selectedMomentId} progress={progress} durationMs={durationMs} onChange={onProgressChange} onCreateMoment={onCreateMoment} onSelectMoment={onSelectMoment} />
+      </div>
     </div>
     <div className="player-actions">
       <button className={`player-action-button ${shuffleEnabled ? "is-active" : ""}`} type="button" onClick={onToggleShuffle} aria-label={shuffleEnabled ? "Turn shuffle off" : "Turn shuffle on"} aria-pressed={shuffleEnabled} title={shuffleEnabled ? "Shuffle on" : "Shuffle off"}><Shuffle size={18} /></button>

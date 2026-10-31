@@ -1,0 +1,278 @@
+/* The library borrows the concept's blue-violet field, layered artwork and floating listening dock. */
+.opal-app[data-view="library"] {
+  --night: #18203f;
+  --ivory: #f5f6ff;
+  --lavender: #c8c8ed;
+  --lavender-bright: #ececff;
+  --muted: rgba(237, 239, 255, .68);
+  --line: rgba(235, 237, 255, .2);
+}
+
+.opal-app[data-view="library"]::after {
+  background: linear-gradient(116deg, rgba(13, 21, 47, .22), rgba(23, 27, 58, .02) 51%, rgba(39, 30, 69, .13));
+}
+
+.opal-app[data-view="library"] .ambient-field {
+  inset: 0;
+  opacity: 1;
+  filter: none;
+  transform: none;
+  background:
+    radial-gradient(ellipse 58% 72% at 6% 100%, rgba(17, 28, 61, .68), transparent 76%),
+    radial-gradient(ellipse 55% 65% at 94% 4%, rgba(147, 132, 184, .32), transparent 74%),
+    linear-gradient(112deg, #242e54 0%, #3b416d 52%, #5b557d 100%);
+}
+
+.opal-app[data-view="library"] .ambient-field::before {
+  top: -28%;
+  left: 18%;
+  width: 72vw;
+  height: 62vh;
+  filter: blur(70px);
+  opacity: .34;
+  background: radial-gradient(ellipse at center, rgba(182, 180, 224, .38), transparent 70%);
+}
+
+.opal-app[data-view="library"] .ambient-field::after {
+  right: -20%;
+  bottom: -39%;
+  width: 75vw;
+  height: 75vh;
+  filter: blur(86px);
+  opacity: .25;
+  background: radial-gradient(ellipse at center, rgba(168, 139, 191, .46), transparent 67%);
+}
+
+.opal-app[data-view="library"] .topbar {
+  min-height: 64px;
+  padding: 12px 28px 0 78px;
+}
+
+.opal-app[data-view="library"] .topbar-left { gap: 17px; }
+.opal-app[data-view="library"] .brand-mark { width: 19px; height: 19px; border-color: rgba(245, 246, 255, .72); color: rgba(245, 246, 255, .86); }
+.opal-app[data-view="library"] .brand-name { color: rgba(245, 246, 255, .88); font-size: 16px; letter-spacing: .17em; }
+.opal-app[data-view="library"] .search-field { width: 168px; padding: 8px 11px; border-color: rgba(235, 237, 255, .13); border-radius: 18px; background: rgba(238, 240, 255, .055); }
+.opal-app[data-view="library"] .top-navigation { gap: 2px; padding: 3px; border-color: rgba(235, 237, 255, .12); border-radius: 19px; background: rgba(18, 25, 53, .15); }
+.opal-app[data-view="library"] .top-navigation button { padding: 7px 13px; border-radius: 15px; color: rgba(237, 239, 255, .58); font-size: 11px; }
+.opal-app[data-view="library"] .top-navigation button.is-active { background: rgba(230, 231, 255, .12); color: var(--ivory); }
+.opal-app[data-view="library"] .topbar-actions { gap: 9px; }
+.opal-app[data-view="library"] .topbar-import { width: 34px; height: 34px; justify-content: center; padding: 0; border-color: rgba(235, 237, 255, .16); border-radius: 50%; background: rgba(238, 240, 255, .075); font-size: 0; }
+.opal-app[data-view="library"] .topbar-import svg { width: 16px; height: 16px; }
+.opal-app[data-view="library"] .profile-button { border-color: rgba(235, 237, 255, .2); background: rgba(238, 240, 255, .09); }
+.opal-app[data-view="library"] .topbar-sort-control { margin-right: 3px; }
+.opal-app[data-view="library"] .topbar-sort-control span { display: none; }
+.opal-app[data-view="library"] .topbar-sort-control select { padding: 8px 25px 8px 12px; border: 1px solid rgba(235, 237, 255, .12); border-radius: 17px; background: rgba(238, 240, 255, .06); font-size: 10px; }
+.opal-app[data-view="library"] .topbar-sort-control svg { right: 8px; }
+
+.opal-app[data-view="library"] .stage { padding: 0 32px 154px; }
+.opal-app[data-view="library"] .library-screen {
+  width: min(100%, 1240px);
+  min-height: calc(100vh - 64px);
+  justify-content: flex-start;
+  padding-top: 13px;
+}
+
+.library-accessible-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+.opal-app[data-view="library"] .library-hero-copy,
+.opal-app[data-view="library"] .library-rail { display: none; }
+.opal-app[data-view="library"] .carousel-wrap { position: relative; width: 100%; margin: 0; overflow: visible; }
+.opal-app[data-view="library"] .carousel-control { position: absolute; z-index: 9; top: 50%; width: 42px; height: 42px; margin: 0; border-color: rgba(241, 243, 255, .26); background: rgba(29, 39, 75, .22); opacity: 0; pointer-events: none; transform: translateY(-50%); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+.opal-app[data-view="library"] .carousel-control-left { left: 0; }
+.opal-app[data-view="library"] .carousel-control-right { right: 0; }
+.opal-app[data-view="library"] .carousel-wrap:hover .carousel-control,
+.opal-app[data-view="library"] .carousel-control:focus-visible { opacity: .86; pointer-events: auto; }
+.opal-app[data-view="library"] .carousel-control:hover { transform: translateY(-50%) scale(1.05); }
+.opal-app[data-view="library"] .sleeve-orbit { width: min(100%, 1120px); height: clamp(370px, 59vh, 486px); margin: 0 auto; }
+.opal-app[data-view="library"] .sleeve {
+  top: 0;
+  width: clamp(270px, 31.4vw, 370px);
+  padding: 9px 9px 0;
+  border: 1px solid rgba(239, 241, 255, .46);
+  border-radius: 34px;
+  background: linear-gradient(145deg, rgba(225, 229, 250, .39), rgba(191, 199, 227, .25));
+  box-shadow: 0 24px 56px rgba(10, 16, 39, .31), inset 0 1px 0 rgba(255, 255, 255, .24);
+  backdrop-filter: blur(22px) saturate(1.12);
+  -webkit-backdrop-filter: blur(22px) saturate(1.12);
+  transform-origin: center 82%;
+  transition: transform .56s cubic-bezier(.2, .78, .23, 1), filter .46s ease, opacity .46s ease, box-shadow .46s ease;
+}
+
+.opal-app[data-view="library"] .sleeve:hover {
+  filter: brightness(1.05) saturate(1.02);
+  box-shadow: 0 30px 64px rgba(10, 16, 39, .38), inset 0 1px 0 rgba(255, 255, 255, .3);
+}
+
+.opal-app[data-view="library"] .sleeve:focus-visible { z-index: 8; outline-color: rgba(250, 250, 255, .9); outline-offset: 5px; }
+.opal-app[data-view="library"] .sleeve.is-selected { border-color: rgba(247, 248, 255, .78); box-shadow: 0 30px 72px rgba(10, 16, 39, .42), 0 0 0 1px rgba(235, 237, 255, .15), inset 0 1px 0 rgba(255, 255, 255, .34); }
+.opal-app[data-view="library"] .sleeve-image-wrap { aspect-ratio: 1; border-radius: 25px; }
+.opal-app[data-view="library"] .sleeve img { transition: transform .8s cubic-bezier(.2, .75, .25, 1), filter .5s ease; }
+.opal-app[data-view="library"] .sleeve:hover img { transform: scale(1.025); }
+.opal-app[data-view="library"] .sleeve-meta { display: grid; min-height: 110px; align-content: center; gap: 5px; padding: 12px 15px 14px; background: transparent; }
+.opal-app[data-view="library"] .sleeve-meta strong { color: rgba(249, 249, 255, .96); font-family: inherit; font-size: clamp(17px, 1.8vw, 22px); font-weight: 500; letter-spacing: -.035em; }
+.opal-app[data-view="library"] .sleeve-meta small { margin: 0; color: rgba(237, 239, 255, .68); font-size: 14px; letter-spacing: 0; }
+.opal-app[data-view="library"] .sleeve-position-0 { z-index: 6; top: 0; left: 50%; transform: translateX(-50%); }
+.opal-app[data-view="library"] .sleeve-position-1 { z-index: 4; top: 12px; left: 68%; transform: translateX(-50%) rotate(8deg) scale(.9); filter: saturate(.78); opacity: .92; }
+.opal-app[data-view="library"] .sleeve-position-2 { z-index: 2; top: 10px; left: 84%; transform: translateX(-50%) rotate(14deg) scale(.8); filter: saturate(.64); opacity: .78; }
+.opal-app[data-view="library"] .sleeve-position-3 { z-index: 4; top: 12px; left: 32%; transform: translateX(-50%) rotate(-8deg) scale(.9); filter: saturate(.78); opacity: .92; }
+.opal-app[data-view="library"] .sleeve-position-4 { z-index: 2; top: 10px; left: 16%; transform: translateX(-50%) rotate(-14deg) scale(.8); filter: saturate(.64); opacity: .78; }
+
+.opal-app[data-view="library"] .carousel-caption { margin-top: 24px; }
+.opal-app[data-view="library"] .caption-open { display: flex; max-width: min(80vw, 760px); align-items: center; justify-content: center; gap: 7px; padding: 2px 4px; overflow: hidden; border: 0; background: transparent; color: rgba(237, 239, 255, .82); cursor: pointer; font-size: 16px; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; transition: color .2s ease, transform .2s ease; }
+.opal-app[data-view="library"] .caption-open span { overflow: hidden; text-overflow: ellipsis; }
+.opal-app[data-view="library"] .caption-open svg { flex: 0 0 auto; opacity: .65; transition: opacity .2s ease, transform .2s ease; }
+.opal-app[data-view="library"] .caption-open:hover { color: #fff; transform: translateY(-1px); }
+.opal-app[data-view="library"] .caption-open:hover svg { opacity: 1; transform: translate(2px, -2px); }
+
+.opal-app[data-view="library"] .player-shell {
+  right: auto;
+  bottom: 6.4vh;
+  width: min(1440px, calc(100% - 56px));
+  grid-template-columns: minmax(150px, 1fr) minmax(320px, 420px) minmax(150px, 1fr);
+  gap: 24px;
+  min-height: 124px;
+  padding: 15px clamp(24px, 4vw, 50px);
+  border: 1px solid rgba(232, 236, 255, .3);
+  border-radius: 999px;
+  background: linear-gradient(105deg, rgba(154, 166, 204, .28), rgba(173, 172, 211, .25) 52%, rgba(187, 172, 207, .3));
+  box-shadow: 0 24px 72px rgba(8, 14, 37, .28), inset 0 1px 0 rgba(247, 249, 255, .22);
+  backdrop-filter: blur(28px) saturate(1.22);
+  -webkit-backdrop-filter: blur(28px) saturate(1.22);
+}
+
+.opal-app[data-view="library"] .player-controls { width: min(100%, 244px); justify-content: space-between; gap: 0; }
+.opal-app[data-view="library"] .player-controls button { width: 42px; height: 42px; color: rgba(246, 247, 255, .9); transition: transform .18s ease, background .18s ease, color .18s ease; }
+.opal-app[data-view="library"] .player-controls button:hover { transform: scale(1.06); background: rgba(247, 248, 255, .13); }
+.opal-app[data-view="library"] .player-controls .play-button { width: 46px; height: 46px; background: rgba(239, 241, 255, .2); color: #fff; box-shadow: inset 0 0 0 1px rgba(245, 247, 255, .17); }
+.opal-app[data-view="library"] .player-controls .play-button:hover { background: rgba(245, 247, 255, .31); }
+.opal-app[data-view="library"] .player-center { position: relative; display: flex; min-width: 0; min-height: 84px; align-items: center; border: 1px solid rgba(226, 232, 255, .14); border-radius: 25px; background: linear-gradient(110deg, rgba(18, 28, 58, .96), rgba(18, 27, 55, .92)); box-shadow: 0 10px 28px rgba(8, 14, 37, .17), inset 0 1px 0 rgba(247, 249, 255, .07); animation: opal-track-arrive .28s cubic-bezier(.2, .75, .25, 1) both; }
+.opal-app[data-view="library"] .player-track { width: 100%; min-height: 0; gap: 12px; padding: 9px 13px 15px; border: 0; border-radius: 24px; background: transparent; }
+.opal-app[data-view="library"] .player-track img { width: 60px; height: 60px; border-radius: 14px; }
+.opal-app[data-view="library"] .player-track strong { color: rgba(251, 251, 255, .97); font-family: inherit; font-size: 16px; font-weight: 500; letter-spacing: -.015em; }
+.opal-app[data-view="library"] .player-track small { margin-top: 3px; color: rgba(228, 232, 251, .68); font-size: 13px; }
+.opal-app[data-view="library"] .player-waveform-action { display: grid; width: 30px; height: 30px; flex: 0 0 auto; place-items: center; padding: 0; border: 0; border-radius: 50%; background: transparent; color: rgba(230, 234, 255, .78); cursor: pointer; transition: background .2s ease, color .2s ease, transform .2s ease; }
+.opal-app[data-view="library"] .player-waveform-action:hover { transform: scale(1.08); background: rgba(245, 247, 255, .12); color: #fff; }
+.opal-app[data-view="library"] .player-more { color: rgba(235, 238, 255, .76); }
+.opal-app[data-view="library"] .player-actions { justify-content: flex-end; gap: 18px; padding: 0; }
+.opal-app[data-view="library"] .player-action-button,
+.opal-app[data-view="library"] .queue-button { width: 38px; height: 38px; color: rgba(246, 247, 255, .88); }
+.opal-app[data-view="library"] .player-action-button:hover,
+.opal-app[data-view="library"] .queue-button:hover { background: rgba(245, 247, 255, .14); }
+.opal-app[data-view="library"] .player-action-button.is-active,
+.opal-app[data-view="library"] .queue-button.is-active { background: rgba(245, 247, 255, .17); color: #fff; box-shadow: inset 0 0 0 1px rgba(245, 247, 255, .13); }
+.opal-app[data-view="library"] .volume-control { min-width: 38px; }
+.opal-app[data-view="library"] .player-progress { position: absolute; right: 13px; bottom: 8px; left: 13px; height: 5px; padding: 0; }
+.opal-app[data-view="library"] .player-progress-top { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+.opal-app[data-view="library"] .waveform-progress { height: 5px; overflow: visible; border-radius: 99px; background: linear-gradient(to right, rgba(240, 242, 255, .88) var(--waveform-progress), rgba(221, 227, 255, .17) var(--waveform-progress)); }
+.opal-app[data-view="library"] .waveform-layer { display: none; }
+.opal-app[data-view="library"] .waveform-cursor { top: -2px; bottom: -2px; width: 2px; background: rgba(255, 255, 255, .9); box-shadow: 0 0 8px rgba(238, 241, 255, .6); }
+.opal-app[data-view="library"] .moment-marker { top: -2px; bottom: -2px; width: 2px; min-width: 2px; border: 0; border-radius: 9px; box-shadow: none; opacity: .78; }
+.opal-app[data-view="library"] .moment-marker:hover,
+.opal-app[data-view="library"] .moment-marker:focus-visible,
+.opal-app[data-view="library"] .moment-marker.is-selected { width: 5px; box-shadow: 0 0 8px var(--moment-glow, rgba(255, 255, 255, .7)); opacity: 1; }
+.opal-app[data-view="library"] .queue-popover { right: max(28px, calc((100vw - 1320px) / 2)); bottom: 160px; }
+
+@media (max-width: 980px) {
+  .opal-app[data-view="library"] .sleeve-orbit { width: 100%; }
+  .opal-app[data-view="library"] .player-shell { width: calc(100% - 40px); grid-template-columns: minmax(126px, 1fr) minmax(300px, 1.7fr) minmax(126px, 1fr); gap: 10px; padding-inline: 24px; }
+  .opal-app[data-view="library"] .player-controls { gap: 8px; }
+  .opal-app[data-view="library"] .player-actions { gap: 4px; }
+}
+
+@media (max-width: 760px) {
+  .opal-app[data-view="library"] .topbar { min-height: 56px; padding: 10px 18px 0 76px; }
+  .opal-app[data-view="library"] .topbar-left .search-field { display: none; }
+  .opal-app[data-view="library"] .top-navigation { margin: 0; }
+  .opal-app[data-view="library"] .topbar-actions { gap: 6px; }
+  .opal-app[data-view="library"] .topbar-sort-control { display: none; }
+  .opal-app[data-view="library"] .stage { padding: 0 16px 138px; }
+  .opal-app[data-view="library"] .library-screen { min-height: calc(100vh - 56px); padding-top: 22px; }
+  .opal-app[data-view="library"] .sleeve-orbit { height: clamp(300px, 52vh, 420px); }
+  .opal-app[data-view="library"] .sleeve { width: clamp(218px, 42vw, 300px); padding: 7px 7px 0; border-radius: 28px; }
+  .opal-app[data-view="library"] .sleeve-image-wrap { border-radius: 21px; }
+  .opal-app[data-view="library"] .sleeve-meta { min-height: 76px; padding: 9px 10px 11px; }
+  .opal-app[data-view="library"] .sleeve-meta strong { font-size: clamp(16px, 3vw, 19px); }
+  .opal-app[data-view="library"] .sleeve-meta small { font-size: 12px; }
+  .opal-app[data-view="library"] .sleeve-position-1 { left: 72%; }
+  .opal-app[data-view="library"] .sleeve-position-2 { left: 92%; }
+  .opal-app[data-view="library"] .sleeve-position-3 { left: 28%; }
+  .opal-app[data-view="library"] .sleeve-position-4 { left: 8%; }
+  .opal-app[data-view="library"] .caption-open { font-size: 13px; }
+  .opal-app[data-view="library"] .carousel-control { width: 34px; height: 34px; opacity: .66; pointer-events: auto; }
+  .opal-app[data-view="library"] .player-shell { right: auto; bottom: 14px; left: 50%; width: calc(100% - 28px); grid-template-columns: minmax(94px, 1fr) minmax(190px, 1.7fr) minmax(98px, 1fr); gap: 6px; min-height: 92px; padding: 8px 15px; border-radius: 48px; }
+  .opal-app[data-view="library"] .player-controls { justify-content: center; gap: 2px; }
+  .opal-app[data-view="library"] .player-controls button { width: 30px; height: 30px; }
+  .opal-app[data-view="library"] .player-controls .play-button { width: 36px; height: 36px; }
+  .opal-app[data-view="library"] .player-center { min-height: 70px; border-radius: 20px; }
+  .opal-app[data-view="library"] .player-track { gap: 8px; padding: 7px 8px 13px; }
+  .opal-app[data-view="library"] .player-track img { width: 42px; height: 42px; border-radius: 11px; }
+  .opal-app[data-view="library"] .player-track strong { font-size: 12px; }
+  .opal-app[data-view="library"] .player-track small { margin-top: 2px; font-size: 9px; }
+  .opal-app[data-view="library"] .player-actions { justify-content: center; gap: 1px; }
+  .opal-app[data-view="library"] .player-action-button,
+  .opal-app[data-view="library"] .queue-button { width: 29px; height: 29px; }
+  .opal-app[data-view="library"] .volume-control { min-width: 29px; }
+  .opal-app[data-view="library"] .queue-popover { right: 18px; bottom: 116px; }
+}
+
+@media (max-width: 520px) {
+  .opal-app[data-view="library"] .topbar { justify-content: space-between; padding-left: 66px; padding-right: 12px; }
+  .opal-app[data-view="library"] .brand-name { display: none; }
+  .opal-app[data-view="library"] .top-navigation { position: absolute; left: 50%; transform: translateX(-50%); }
+  .opal-app[data-view="library"] .top-navigation button { padding-inline: 9px; font-size: 10px; }
+  .opal-app[data-view="library"] .topbar-import { display: none; }
+  .opal-app[data-view="library"] .stage { padding-right: 8px; padding-left: 8px; }
+  .opal-app[data-view="library"] .library-screen { padding-top: 34px; }
+  .opal-app[data-view="library"] .sleeve-orbit { height: clamp(260px, 45vh, 340px); }
+  .opal-app[data-view="library"] .sleeve { width: min(70vw, 262px); border-radius: 24px; }
+  .opal-app[data-view="library"] .sleeve-position-1 { left: 79%; }
+  .opal-app[data-view="library"] .sleeve-position-2 { left: 105%; }
+  .opal-app[data-view="library"] .sleeve-position-3 { left: 21%; }
+  .opal-app[data-view="library"] .sleeve-position-4 { left: -5%; }
+  .opal-app[data-view="library"] .sleeve-meta { min-height: 64px; }
+  .opal-app[data-view="library"] .sleeve-meta strong { font-size: 15px; }
+  .opal-app[data-view="library"] .sleeve-meta small { font-size: 11px; }
+  .opal-app[data-view="library"] .caption-open { font-size: 12px; }
+  .opal-app[data-view="library"] .player-shell { grid-template-columns: 83px minmax(0, 1fr) 64px; gap: 3px; padding-inline: 8px; }
+  .opal-app[data-view="library"] .player-controls { gap: 0; }
+  .opal-app[data-view="library"] .player-controls button { width: 26px; height: 28px; }
+  .opal-app[data-view="library"] .player-controls button svg { width: 16px; height: 16px; }
+  .opal-app[data-view="library"] .player-controls .play-button { width: 32px; height: 32px; }
+  .opal-app[data-view="library"] .player-actions { gap: 0; }
+  .opal-app[data-view="library"] .player-action-button,
+  .opal-app[data-view="library"] .queue-button { width: 24px; height: 28px; }
+  .opal-app[data-view="library"] .player-action-button svg,
+  .opal-app[data-view="library"] .queue-button svg { width: 15px; height: 15px; }
+  .opal-app[data-view="library"] .volume-control { min-width: 24px; }
+  .opal-app[data-view="library"] .player-track { gap: 6px; padding-inline: 6px; }
+  .opal-app[data-view="library"] .player-track img { width: 36px; height: 36px; }
+  .opal-app[data-view="library"] .player-track strong { font-size: 10px; }
+  .opal-app[data-view="library"] .player-track small { font-size: 8px; }
+  .opal-app[data-view="library"] .player-more { width: 22px; height: 22px; }
+  .opal-app[data-view="library"] .player-more svg { width: 15px; height: 15px; }
+  .opal-app[data-view="library"] .player-waveform-action { display: none; }
+  .opal-app[data-view="library"] .carousel-control { width: 30px; height: 30px; }
+  .opal-app[data-view="library"] .carousel-control svg { width: 18px; height: 18px; }
+}
+
+@keyframes opal-track-arrive {
+  from { opacity: .72; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opal-app[data-view="library"] .sleeve,
+  .opal-app[data-view="library"] .sleeve img,
+  .opal-app[data-view="library"] .player-controls button,
+  .opal-app[data-view="library"] .player-waveform-action,
+  .opal-app[data-view="library"] .player-center,
+  .opal-app[data-view="library"] .caption-open,
+  .opal-app[data-view="library"] .caption-open svg { transition: none; animation: none; }
+}
+
+.opal-softer-glass .opal-app[data-view="library"] .player-shell { background: rgba(93, 102, 145, .92); backdrop-filter: none; -webkit-backdrop-filter: none; }
+.opal-softer-glass .opal-app[data-view="library"] .sleeve { background: rgba(125, 132, 169, .9); backdrop-filter: none; -webkit-backdrop-filter: none; }
+
+@media (prefers-reduced-transparency: reduce) {
+  .opal-app[data-view="library"] .player-shell { background: rgba(93, 102, 145, .94); backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .opal-app[data-view="library"] .sleeve { background: rgba(125, 132, 169, .94); backdrop-filter: none; -webkit-backdrop-filter: none; }
+}
