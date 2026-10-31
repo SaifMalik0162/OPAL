@@ -1768,11 +1768,10 @@ function MomentCompare({ project, track, moment, versions, onJumpMoment, onClose
   return <div className="moment-compare"><div className="moment-compare-heading"><div><span className="eyebrow">Same marked section</span><strong>Compare versions</strong></div><button type="button" onClick={onClose} aria-label="Close moment comparison"><X size={14} /></button></div>{otherVersions.length > 1 && <label className="moment-compare-select"><span>Compare with</span><select value={compareTrack?.id ?? ""} onChange={(event) => setCompareVersionId(event.target.value)}>{otherVersions.map((version) => <option key={version.id} value={version.id}>{version.versionName}</option>)}</select></label>}<div className="moment-compare-grid"><div className="moment-compare-card"><span className="eyebrow">A · {track.versionName}</span><strong>{formatTime(moment.timeMs)}</strong><small>{momentStateLabel(moment.state)}{moment.isResolved ? " · Resolved" : " · Open"}</small><button type="button" onClick={() => onJumpMoment(project, track, moment)}>Play this moment</button></div><div className="moment-compare-connector" aria-hidden="true">↔</div><div className="moment-compare-card"><span className="eyebrow">B · {compareTrack?.versionName ?? "Version"}</span>{compareTrack ? <><strong>{formatTime(compareMoment?.timeMs ?? moment.timeMs)}</strong><small>{compareMoment ? `${momentStateLabel(compareMoment.state)}${compareMoment.isResolved ? " · Resolved" : " · Open"}` : "No linked decision"}</small><button type="button" onClick={() => compareMoment && onJumpMoment(project, compareTrack, compareMoment)} disabled={!compareMoment}>Play this moment</button></> : <small>Add another version to compare this section.</small>}</div></div></div>;
 }
 
-function WaveformProgress({ track, progress, durationMs, moments = [], selectedMomentId, onChange, onCreateMoment, onSelectMoment }) {
+function WaveformProgress({ track, progress, durationMs, moments = [], selectedMomentId, onChange, onSelectMoment }) {
   const seed = waveformSeed(track);
   const fallbackBars = useMemo(() => createWaveform(seed, 72), [seed]);
   const [bars, setBars] = useState(() => readCachedWaveform(track) ?? fallbackBars);
-  const pointerStartRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -1790,23 +1789,13 @@ function WaveformProgress({ track, progress, durationMs, moments = [], selectedM
 
   const safeProgress = Math.max(0, Math.min(100, Number(progress) || 0));
   const renderBars = (layer) => bars.map((height, index) => <span key={`${layer}-${index}`} style={{ height: `${height}%` }} />);
-  function createMomentFromClick(event) {
-    if (!durationMs || !onCreateMoment) return;
-    if (event.target.closest?.(".waveform-input")) return;
-    const pointerStart = pointerStartRef.current;
-    pointerStartRef.current = null;
-    if (pointerStart && Math.hypot(event.clientX - pointerStart.x, event.clientY - pointerStart.y) > 4) return;
-    const bounds = event.currentTarget.getBoundingClientRect();
-    const fraction = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
-    onCreateMoment(fraction * durationMs);
-  }
 
-  return <div className="waveform-progress" style={{ "--waveform-progress": `${safeProgress}%` }} onPointerDown={(event) => { pointerStartRef.current = { x: event.clientX, y: event.clientY }; }} onClick={createMomentFromClick}>
+  return <div className="waveform-progress" style={{ "--waveform-progress": `${safeProgress}%` }}>
     <div className="waveform-layer waveform-layer-muted" aria-hidden="true">{renderBars("muted")}</div>
     <div className="waveform-layer waveform-layer-active" aria-hidden="true">{renderBars("active")}</div>
     <span className="waveform-cursor" aria-hidden="true" />
     {moments.filter((moment) => durationMs > 0 && moment.timeMs >= 0 && moment.timeMs <= durationMs).map((moment) => <button type="button" key={moment.id} className={`moment-marker state-${moment.state} ${moment.isResolved ? "is-resolved" : ""} ${selectedMomentId === moment.id ? "is-selected" : ""}`} style={{ left: `${(moment.timeMs / durationMs) * 100}%` }} onClick={(event) => { event.stopPropagation(); onSelectMoment?.(moment); }} aria-label={`${momentStateLabel(moment.state)} moment at ${formatTime(moment.timeMs)}`} title={`${momentStateLabel(moment.state)} · ${formatTime(moment.timeMs)}`} />)}
-    <input className="waveform-input" aria-label="Playback position" type="range" min="0" max="100" value={safeProgress} onChange={onChange} disabled={!durationMs} />
+    <input className="waveform-input" aria-label="Playback position" title="Click or drag to seek. Add a moment from the track menu." type="range" min="0" max="100" value={safeProgress} onChange={onChange} disabled={!durationMs} />
   </div>;
 }
 
@@ -1824,11 +1813,11 @@ function Player({ project, track, selectedMomentId, status, playbackError, isPla
         <img src={project.artwork} alt="" />
         <span><strong>{track.title}</strong><small>{playbackError || statusText}</small></span>
         <button className="player-waveform-action" type="button" onClick={onOpenNotes} aria-label="Open track notes" title="Open track notes"><Waveform size={17} /></button>
-        <span className="player-menu-wrap"><button className="player-more" type="button" onClick={onToggleMenu} aria-label="Open player menu" aria-expanded={menuOpen} title="Track options"><DotsThree size={18} /></button>{menuOpen && <PlayerMenu track={track} onOpenProject={onOpenProject} onShowTrack={onShowTrack} onOpenNotes={onOpenNotes} onRevealFile={onRevealFile} onShowInfo={onShowInfo} onClose={onToggleMenu} />}</span>
+        <span className="player-menu-wrap"><button className="player-more" type="button" onClick={onToggleMenu} aria-label="Open player menu" aria-expanded={menuOpen} title="Track options"><DotsThree size={18} /></button>{menuOpen && <PlayerMenu track={track} elapsedMs={elapsedMs} onCreateMoment={onCreateMoment} onOpenProject={onOpenProject} onShowTrack={onShowTrack} onOpenNotes={onOpenNotes} onRevealFile={onRevealFile} onShowInfo={onShowInfo} onClose={onToggleMenu} />}</span>
       </div>
       <div className="player-progress">
         <div className="player-progress-top"><span>{formatTime(elapsedMs)}</span><span>{formatTime(durationMs)}</span></div>
-        <WaveformProgress track={track} moments={track.moments} selectedMomentId={selectedMomentId} progress={progress} durationMs={durationMs} onChange={onProgressChange} onCreateMoment={onCreateMoment} onSelectMoment={onSelectMoment} />
+        <WaveformProgress track={track} moments={track.moments} selectedMomentId={selectedMomentId} progress={progress} durationMs={durationMs} onChange={onProgressChange} onSelectMoment={onSelectMoment} />
       </div>
     </div>
     <div className="player-actions">
@@ -1967,7 +1956,7 @@ function RecoveryView({ onRevealFolder, onRestore, onRetry }) {
   return <section className="recovery-screen view-stack"><div className="recovery-card glass"><WarningCircle size={30} /><span className="eyebrow">Local library</span><h1>Recovery needed</h1><p>OPAL could not safely open the library database. Your managed files were left in place.</p><div className="recovery-actions"><button className="button button-primary" type="button" onClick={onRestore}>Restore backup</button><button className="button button-ghost" type="button" onClick={onRetry}>Try again</button><button className="text-action" type="button" onClick={onRevealFolder}>Reveal library folder <FolderOpen size={14} /></button></div></div></section>;
 }
 
-function PlayerMenu({ track, onOpenProject, onShowTrack, onOpenNotes, onRevealFile, onShowInfo, onClose }) {
+function PlayerMenu({ track, elapsedMs, onCreateMoment, onOpenProject, onShowTrack, onOpenNotes, onRevealFile, onShowInfo, onClose }) {
   const menuRef = useRef(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -2008,7 +1997,7 @@ function PlayerMenu({ track, onOpenProject, onShowTrack, onOpenNotes, onRevealFi
     onClose();
     action();
   };
-  return <div ref={menuRef} className="player-menu glass" data-popover role="menu" aria-label={`Actions for ${track.title}`}><span className="eyebrow">Current track</span><button type="button" role="menuitem" onClick={() => run(onOpenProject)}><FolderOpen size={15} />Open project</button><button type="button" role="menuitem" onClick={() => run(onShowTrack)}><ListBullets size={15} />Show in project</button><button type="button" role="menuitem" onClick={() => run(onOpenNotes)}><NotePencil size={15} />Open track notes</button><button type="button" role="menuitem" onClick={() => run(onRevealFile)} disabled={!track.managedFilePath} title={track.managedFilePath ? "Reveal the managed audio file" : "The managed audio file is missing"}><ArrowSquareOut size={15} />Reveal managed file</button><button type="button" role="menuitem" onClick={() => run(onShowInfo)}><Info size={15} />Track information</button></div>;
+  return <div ref={menuRef} className="player-menu glass" data-popover role="menu" aria-label={`Actions for ${track.title}`}><span className="eyebrow">Current track</span><button type="button" role="menuitem" onClick={() => run(() => onCreateMoment?.(elapsedMs))} disabled={!onCreateMoment || !track.durationMs}><NotePencil size={15} />Add moment here</button><button type="button" role="menuitem" onClick={() => run(onOpenProject)}><FolderOpen size={15} />Open project</button><button type="button" role="menuitem" onClick={() => run(onShowTrack)}><ListBullets size={15} />Show in project</button><button type="button" role="menuitem" onClick={() => run(onOpenNotes)}><NotePencil size={15} />Open track notes</button><button type="button" role="menuitem" onClick={() => run(onRevealFile)} disabled={!track.managedFilePath} title={track.managedFilePath ? "Reveal the managed audio file" : "The managed audio file is missing"}><ArrowSquareOut size={15} />Reveal managed file</button><button type="button" role="menuitem" onClick={() => run(onShowInfo)}><Info size={15} />Track information</button></div>;
 }
 
 function TrackInfoDialog({ project, track, onClose }) {
