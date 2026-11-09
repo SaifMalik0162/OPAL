@@ -1,0 +1,40 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "OPAL Development",
+  "identifier": "com.opal.library.development",
+  "app": {
+    "security": {
+      "assetProtocol": {
+        "enable": true,
+        "scope": [
+          "$APPDATA/audio/**/*",
+          "$APPDATA/artwork/**/*",
+          "$APPDATA/opal-fixtures/**/*"
+        ]
+      }
+    },
+    "windows": [
+      {
+        "label": "main",
+        "title": "OPAL Development",
+        "width": 1240,
+        "height": 820,
+        "minWidth": 980,
+        "minHeight": 620,
+        "resizable": true,
+        "maximizable": true,
+        "minimizable": true,
+        "closable": true,
+        "fullscreen": false,
+        "transparent": true,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "trafficLightPosition": { "x": 28, "y": 28 },
+        "hiddenTitle": true,
+        "acceptFirstMouse": true,
+        "shadow": true,
+        "center": true
+      }
+    ]
+  }
+}

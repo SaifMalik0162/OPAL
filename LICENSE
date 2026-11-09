@@ -1,0 +1,26 @@
+OPAL PROPRIETARY LICENSE
+
+Copyright (c) 2026 Saif Malik. All rights reserved.
+
+OPAL, its source code, object code, documentation, and OPAL-created visual assets
+(collectively, the "Software") are proprietary and protected by copyright law.
+
+This license does not limit rights GitHub grants to users under its Terms of
+Service to interact with this public repository through GitHub's features,
+including viewing and forking it on GitHub. Outside those platform-specific
+rights, no license or other right is granted to use, reproduce, modify,
+distribute, sublicense, publish, or create derivative works from the Software.
+No rights are granted to OPAL names, logos, or marks.
+
+Official OPAL alpha binaries may be downloaded and run solely for personal,
+non-commercial evaluation. This permission does not include redistribution,
+commercial use, or modification of the Software.
+
+Third-party software, fonts, and assets included with or used by OPAL are not
+covered by this license and remain subject to their own license terms.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY ARISING
+FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR ITS USE.

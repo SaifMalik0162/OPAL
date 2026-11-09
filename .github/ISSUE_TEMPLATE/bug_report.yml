@@ -1,0 +1,46 @@
+name: Bug report
+description: Report an OPAL problem without sharing private library content.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Do not include audio, private notes, library backups, credentials, full
+        personal file paths, or unreviewed diagnostics. For security issues, use
+        the private reporting link in the repository instead.
+  - type: input
+    id: version
+    attributes:
+      label: OPAL version
+      placeholder: 0.1.0-alpha.3
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Operating system and device architecture
+      placeholder: macOS, Apple Silicon or Windows, x64
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the problem without including private project or track names.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a disposable test project.
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true

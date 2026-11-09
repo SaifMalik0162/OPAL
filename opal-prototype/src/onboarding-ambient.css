@@ -1,0 +1,58 @@
+/* A self-contained scene behind both welcome steps. */
+.onboarding-ambient {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  isolation: isolate;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 12% 18%, #294c78, transparent 58%),
+    radial-gradient(ellipse at 88% 76%, #253e6e, transparent 53%),
+    radial-gradient(ellipse at 76% 9%, #493b73, transparent 53%),
+    radial-gradient(ellipse at 17% 94%, #392d65, transparent 48%),
+    #111a34;
+}
+
+.onboarding-ambient::after {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at 50% 50%, rgba(14, 22, 44, .42), transparent 75%),
+    rgba(20, 28, 49, .16);
+  content: "";
+}
+
+/* The haze lives inside each still image. Only the image transform animates. */
+.onboarding-ambient-tide {
+  position: absolute;
+  inset: -10%;
+  display: block;
+  width: 120%;
+  height: 120%;
+  object-fit: cover;
+  opacity: .64;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .onboarding-ambient-tide {
+    will-change: transform;
+  }
+
+  .onboarding-ambient-tide-upper {
+    animation: opal-upper-tide 19s ease-in-out infinite alternate;
+  }
+
+  .onboarding-ambient-tide-lower {
+    animation: opal-lower-tide 23s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes opal-upper-tide {
+  from { transform: translate(-2%, -1%) rotate(-3deg); }
+  to { transform: translate(3%, 4%) rotate(3deg); }
+}
+
+@keyframes opal-lower-tide {
+  from { transform: translate(2%, 2%) rotate(3deg); }
+  to { transform: translate(-3%, -4%) rotate(-3deg); }
+}

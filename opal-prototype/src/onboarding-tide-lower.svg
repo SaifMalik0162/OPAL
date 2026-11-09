@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 960">
+  <defs>
+    <linearGradient id="opal-lower-water" x1=".08" y1="0" x2=".88" y2="1">
+      <stop stop-color="#657af0" stop-opacity="0" />
+      <stop offset=".24" stop-color="#b09ff8" stop-opacity=".49" />
+      <stop offset=".43" stop-color="#ffc8ec" stop-opacity=".53" />
+      <stop offset=".64" stop-color="#94daff" stop-opacity=".62" />
+      <stop offset=".83" stop-color="#81cbdc" stop-opacity=".36" />
+      <stop offset="1" stop-color="#6e6fdc" stop-opacity="0" />
+    </linearGradient>
+    <path id="opal-lower-crest" d="M-235 720 C -20 621 78 827 313 816 C 536 805 605 660 817 684 C 1043 710 1104 905 1337 811 C 1510 741 1532 512 1720 466" />
+    <filter id="opal-water-bloom" filterUnits="userSpaceOnUse" x="-100" y="-100" width="1640" height="1160">
+      <feGaussianBlur stdDeviation="28" />
+    </filter>
+  </defs>
+  <g fill="none" filter="url(#opal-water-bloom)">
+    <use href="#opal-lower-crest" stroke="url(#opal-lower-water)" stroke-width="143" opacity=".72" />
+    <path d="M-235 720 C -20 621 78 827 313 816 C 536 805 605 660 817 684 C 1043 710 1104 905 1337 811 C 1510 741 1532 512 1720 466 L1720 496 C 1547 546 1558 771 1354 856 C 1110 956 1036 754 810 729 C 623 708 535 852 321 866 C 74 881 -24 652 -235 745 Z" fill="url(#opal-lower-water)" opacity=".7" />
+  </g>
+</svg>

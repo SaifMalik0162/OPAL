@@ -1,0 +1,39 @@
+[package]
+name = "opal"
+version = "0.1.0-alpha.3"
+description = "OPAL local-first music library"
+authors = ["OPAL"]
+license = "LicenseRef-OPAL-Proprietary"
+repository = "https://github.com/SaifMalik0162/OPAL"
+edition = "2021"
+rust-version = "1.90"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+dirs = "6.0.0"
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2.11.5", features = ["macos-private-api", "protocol-asset"] }
+tauri-plugin-log = "2"
+tauri-plugin-dialog = "2"
+window-vibrancy = "0.8.0"
+rusqlite = { version = "0.40.2", features = ["backup", "bundled"] }
+lofty = "0.25.1"
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp"] }
+sha2 = "0.11.0"
+symphonia = { version = "0.5.5", default-features = false, features = ["aiff", "isomp4", "aac", "alac", "flac", "mp3", "pcm", "wav"] }
+uuid = { version = "1.18.1", features = ["v4"] }
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+
+[dev-dependencies]
+tempfile = "3.23.0"

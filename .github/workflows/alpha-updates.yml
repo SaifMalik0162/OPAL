@@ -1,0 +1,217 @@
+name: Publish OPAL Alpha Update
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_public_feed:
+        description: Confirm the feed and release downloads may be fetched by anyone with access to this public repository
+        required: true
+        type: boolean
+        default: false
+      release_notes:
+        description: Short notes shown in the in-app update window
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: opal-alpha-update
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Confirm public feed access
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLIC_FEED_CONFIRMED: ${{ inputs.confirm_public_feed }}
+          RELEASE_REF_PROTECTED: ${{ github.ref_protected }}
+        run: |
+          if [[ "$GITHUB_REF" != "refs/heads/main" || "$RELEASE_REF_PROTECTED" != "true" ]]; then
+            echo "Dispatch this workflow from the protected main branch." >&2
+            exit 1
+          fi
+          if [[ "$PUBLIC_FEED_CONFIRMED" != "true" ]]; then
+            echo "Confirm public update downloads before publishing the alpha feed." >&2
+            exit 1
+          fi
+          visibility=$(gh api "repos/$GITHUB_REPOSITORY" --jq .visibility)
+          if [[ "$visibility" != "public" ]]; then
+            echo "The static Tauri feed requires public GitHub Releases. Configure an authenticated update host before publishing from a private repository." >&2
+            exit 1
+          fi
+
+  build-macos:
+    needs: preflight
+    if: github.ref == 'refs/heads/main' && github.ref_protected
+    runs-on: macos-14
+    environment: opal-alpha-macos-signing
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: opal-prototype/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - run: npm ci
+        working-directory: opal-prototype
+      - name: Import Developer ID signing certificate
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          : "${APPLE_CERTIFICATE:?Set the base64-encoded APPLE_CERTIFICATE secret.}"
+          : "${APPLE_CERTIFICATE_PASSWORD:?Set APPLE_CERTIFICATE_PASSWORD.}"
+          KEYCHAIN_PATH="$RUNNER_TEMP/opal-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 24)"
+          CERTIFICATE_PATH="$RUNNER_TEMP/opal-developer-id.p12"
+          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$CERTIFICATE_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -k "$KEYCHAIN_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+          echo "OPAL_SIGNING_KEYCHAIN=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+          rm -f "$CERTIFICATE_PATH"
+      - run: npm run release:macos
+        working-directory: opal-prototype
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          OPAL_SKIP_VERIFY: "1"
+          OPAL_BUILD_COMMIT: ${{ github.sha }}
+      - name: Stage release files
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          mkdir -p artifacts/update-candidates/macos-universal
+          cp "artifacts/release/$version/macos-universal/"OPAL-* artifacts/update-candidates/macos-universal/
+        working-directory: opal-prototype
+      - uses: actions/upload-artifact@v4
+        with:
+          name: opal-alpha-macos
+          path: opal-prototype/artifacts/update-candidates/macos-universal/*
+          if-no-files-found: error
+      - name: Remove temporary signing keychain
+        if: always()
+        shell: bash
+        env:
+          KEYCHAIN_PATH: ${{ env.OPAL_SIGNING_KEYCHAIN }}
+        run: if [[ -n "$KEYCHAIN_PATH" ]]; then security delete-keychain "$KEYCHAIN_PATH" || true; fi
+
+  build-windows:
+    needs: preflight
+    if: github.ref == 'refs/heads/main' && github.ref_protected
+    runs-on: windows-2022
+    environment: opal-alpha-windows-signing
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: opal-prototype/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - name: Install NSIS
+        run: choco install nsis --yes --no-progress
+      - run: npm ci
+        working-directory: opal-prototype
+      - run: npm run release:windows
+        working-directory: opal-prototype
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          OPAL_SKIP_VERIFY: "1"
+          OPAL_BUILD_COMMIT: ${{ github.sha }}
+      - name: Stage release files
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          mkdir -p artifacts/update-candidates/windows-x64
+          cp "artifacts/release/$version/windows-x64/"OPAL-* artifacts/update-candidates/windows-x64/
+        working-directory: opal-prototype
+      - uses: actions/upload-artifact@v4
+        with:
+          name: opal-alpha-windows
+          path: opal-prototype/artifacts/update-candidates/windows-x64/*
+          if-no-files-found: error
+
+  publish:
+    needs: [preflight, build-macos, build-windows]
+    if: github.ref == 'refs/heads/main' && github.ref_protected
+    runs-on: ubuntu-latest
+    environment: opal-alpha-publishing
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          name: opal-alpha-macos
+          path: artifacts/macos-universal
+      - uses: actions/download-artifact@v4
+        with:
+          name: opal-alpha-windows
+          path: artifacts/windows-x64
+      - name: Assemble signed updater feed
+        shell: bash
+        env:
+          RELEASE_NOTES: ${{ inputs.release_notes }}
+        run: |
+          cd opal-prototype
+          version=$(node -p 'require("./package.json").version')
+          mkdir -p "artifacts/release/$version/macos-universal" "artifacts/release/$version/windows-x64" "artifacts/release/$version/updater-feed"
+          cp artifacts/macos-universal/* "artifacts/release/$version/macos-universal/"
+          cp artifacts/windows-x64/* "artifacts/release/$version/windows-x64/"
+          cp "artifacts/release/$version/macos-universal/OPAL-$version-macos-universal.app.tar.gz" "artifacts/release/$version/macos-universal/OPAL-$version-macos-universal.app.tar.gz.sig" "artifacts/release/$version/updater-feed/"
+          cp "artifacts/release/$version/windows-x64/OPAL-$version-windows-x64.nsis.zip" "artifacts/release/$version/windows-x64/OPAL-$version-windows-x64.nsis.zip.sig" "artifacts/release/$version/updater-feed/"
+          printf '%s\n' "$RELEASE_NOTES" > artifacts/release-notes.txt
+          node scripts/create-update-manifest.mjs "artifacts/release/$version/updater-feed" artifacts/release-notes.txt
+      - name: Publish versioned downloads, then update the alpha feed
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_NOTES: ${{ inputs.release_notes }}
+        run: |
+          cd opal-prototype
+          if ! gh release view opal-alpha >/dev/null 2>&1; then
+            gh release create opal-alpha --prerelease --title "OPAL Alpha" --notes "$RELEASE_NOTES" --target "${{ github.sha }}"
+          fi
+          gh release edit opal-alpha --prerelease --title "OPAL Alpha · ${{ github.sha }}" --notes "$RELEASE_NOTES"
+          version=$(node -p 'require("./package.json").version')
+          gh release upload opal-alpha \
+            artifacts/release/$version/macos-universal/OPAL-* \
+            artifacts/release/$version/windows-x64/OPAL-*
+          gh release upload opal-alpha "artifacts/release/$version/updater-feed/latest.json" --clobber

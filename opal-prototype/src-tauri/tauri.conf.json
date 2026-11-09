@@ -1,0 +1,77 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "OPAL",
+  "version": "0.1.0-alpha.3",
+  "identifier": "com.opal.library",
+  "build": {
+    "frontendDist": "../dist/client",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev -- --host 0.0.0.0 --port 1420 --strictPort",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "macOSPrivateApi": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "OPAL",
+        "width": 1240,
+        "height": 820,
+        "minWidth": 980,
+        "minHeight": 620,
+        "resizable": true,
+        "maximizable": true,
+        "minimizable": true,
+        "closable": true,
+        "fullscreen": false,
+        "transparent": true,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "trafficLightPosition": { "x": 28, "y": 28 },
+        "hiddenTitle": true,
+        "acceptFirstMouse": true,
+        "shadow": true,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost data: blob:; media-src 'self' asset: http://asset.localhost blob:; connect-src 'self' asset: http://asset.localhost ipc: http://ipc.localhost http://localhost:1420 ws://localhost:1420; font-src 'self' data:; form-action 'self';",
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$APPDATA/audio/**/*", "$APPDATA/artwork/**/*"]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "createUpdaterArtifacts": false,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "dmg": {
+        "background": "dmg/the-passage@2x.png",
+        "windowSize": { "width": 720, "height": 480 },
+        "appPosition": { "x": 180, "y": 240 },
+        "applicationFolderPosition": { "x": 540, "y": 240 }
+      }
+    },
+    "android": {
+      "debugApplicationIdSuffix": ".debug"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEYyRDY0MkYwMjNENzg1MzgKUldRNGhkY2o4RUxXOHQza1BtLzhGaVh3c0pSZVlJSGVjVWNoQVBSWTJIbGNwcnprVkFJbUliQzMK",
+      "endpoints": [],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}

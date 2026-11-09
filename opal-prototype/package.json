@@ -1,0 +1,43 @@
+{
+  "name": "opal",
+  "version": "0.1.0-alpha.3",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node scripts/prepare-sites-build.mjs",
+    "preview": "vite preview",
+    "test:all": "node --test",
+    "test:rust": "cargo test --locked --manifest-path src-tauri/Cargo.toml",
+    "test:sites": "node --test tests/sites-worker.test.mjs",
+    "test:playback": "node --test tests/playback-queue.test.mjs",
+    "test:waveform": "node --test tests/waveform.test.mjs",
+    "test:notes": "node --test tests/note-revisions.test.mjs",
+    "fixtures:audio": "node scripts/generate-audio-corpus.mjs",
+    "check:release": "node scripts/verify-release-metadata.mjs",
+    "verify": "npm run check:release && npm run build && npm run test:all && npm run test:rust",
+    "tauri": "tauri",
+    "tauri:dev": "node scripts/dev-opal.mjs",
+    "tauri:build:development": "node scripts/build-development-opal.mjs",
+    "tauri:build:windows:development": "node scripts/build-development-opal.mjs windows",
+    "tauri:build": "tauri build",
+    "fixtures:create": "cargo run --manifest-path src-tauri/Cargo.toml --example create-fixtures",
+    "release:macos": "bash scripts/release-macos.sh --signed",
+    "release:macos:unsigned": "bash scripts/release-macos.sh --unsigned",
+    "release:windows": "node scripts/release-windows.mjs"
+  },
+  "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
+    "@tauri-apps/api": "2.11.1",
+    "@tauri-apps/plugin-dialog": "^2.7.3",
+    "@tauri-apps/plugin-process": "2.3.1",
+    "@tauri-apps/plugin-updater": "2.12.0",
+    "@vitejs/plugin-react": "5.0.4",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "vite": "6.4.2"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4"
+  }
+}

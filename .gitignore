@@ -1,0 +1,33 @@
+.DS_Store
+
+# Local dependencies and build output
+node_modules/
+dist/
+target/
+**/node_modules/
+**/dist/
+**/target/
+
+# Local environment and logs
+.env
+.env.*
+!.env.example
+*.log
+
+# Signing certificates and private keys
+*.p12
+*.pfx
+*.p8
+*.key
+*.pem
+*.privatekey
+*.private-key
+*.mobileprovision
+
+# Local tooling state
+.vite/
+.turbo/
+.local/
+
+# Temporary Icon Composer output
+opal-prototype/src-tauri/icons/.icon.icns-*

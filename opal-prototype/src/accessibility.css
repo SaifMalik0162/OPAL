@@ -1,0 +1,42 @@
+/* Responsive and accessibility preferences */
+
+@supports not ((backdrop-filter: blur(18px))) {
+  .glass, .library-rail {
+    background: var(--glass-strong);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass, .library-rail {
+    background: var(--glass-strong);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opal-app[data-view="library"] .sleeve, .opal-app[data-view="library"] .sleeve img, .opal-app[data-view="library"] .player-controls button, .opal-app[data-view="library"] .player-waveform-action, .opal-app[data-view="library"] .player-center, .opal-app[data-view="library"] .caption-open, .opal-app[data-view="library"] .caption-open svg {
+    transition: none;
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .opal-app[data-view="library"] .player-shell {
+    background: rgba(93, 102, 145, .94);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .opal-app[data-view="library"] .sleeve {
+    background: rgba(125, 132, 169, .94);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
