@@ -49,7 +49,7 @@ jobs:
   build-macos:
     needs: preflight
     if: github.ref == 'refs/heads/main' && github.ref_protected
-    runs-on: macos-14
+    runs-on: macos-15
     environment: opal-alpha-macos-signing
     permissions:
       contents: read
