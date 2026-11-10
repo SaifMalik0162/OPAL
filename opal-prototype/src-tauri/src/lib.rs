@@ -1882,6 +1882,62 @@ fn update_moment(
     load_project(&connection, &roots, &project_id)
 }
 
+#[tauri::command(rename = "deleteMoment", rename_all = "camelCase")]
+fn delete_moment(
+    app: tauri::AppHandle,
+    project_id: String,
+    moment_id: String,
+) -> Result<ProjectDto, String> {
+    let _operation = lock_library_operation()?;
+    let roots = prepare_storage(&app)?;
+    let mut connection = open_database(&roots.db_path)?;
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("Could not begin moment removal: {error}"))?;
+
+    let exists: bool = transaction
+        .query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM moments
+                JOIN tracks ON tracks.id = moments.track_id
+                WHERE moments.id = ?1 AND tracks.project_id = ?2
+            )",
+            params![moment_id, project_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| format!("Could not verify moment: {error}"))?;
+    if !exists {
+        return Err("Moment no longer exists in this project.".to_string());
+    }
+
+    let timestamp = now_ms();
+    transaction
+        .execute(
+            "UPDATE listening_capsules SET updated_at = ?1
+             WHERE id IN (SELECT capsule_id FROM capsule_responses WHERE moment_id = ?2)",
+            params![timestamp, moment_id],
+        )
+        .map_err(|error| format!("Could not update affected Capsule: {error}"))?;
+    transaction
+        .execute(
+            "DELETE FROM moments
+             WHERE id = ?1 AND track_id IN (SELECT id FROM tracks WHERE project_id = ?2)",
+            params![moment_id, project_id],
+        )
+        .map_err(|error| format!("Could not remove moment: {error}"))?;
+    transaction
+        .execute(
+            "UPDATE projects SET updated_at = ?1 WHERE id = ?2",
+            params![timestamp, project_id],
+        )
+        .map_err(|error| format!("Could not update project timestamp: {error}"))?;
+    transaction
+        .commit()
+        .map_err(|error| format!("Could not commit moment removal: {error}"))?;
+
+    load_project(&connection, &roots, &project_id)
+}
+
 #[tauri::command(rename = "updateTransition", rename_all = "camelCase")]
 fn update_transition(
     app: tauri::AppHandle,
@@ -4610,6 +4666,7 @@ pub fn run() {
             delete_track_version,
             create_moment,
             update_moment,
+            delete_moment,
             update_transition,
             create_capsule,
             get_capsule,
