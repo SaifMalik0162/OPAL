@@ -42,6 +42,8 @@ jobs:
 
   build-macos:
     needs: verify
+    outputs:
+      version: ${{ steps.release_version.outputs.version }}
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -58,6 +60,12 @@ jobs:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
       - run: npm ci
         working-directory: opal-prototype
+      - id: release_version
+        name: Read release version
+        run: |
+          version=$(node -p "require('./package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+        working-directory: opal-prototype
       - name: Build unsigned universal macOS candidate
         run: npm run release:macos:unsigned
         working-directory: opal-prototype
@@ -66,8 +74,8 @@ jobs:
           OPAL_SKIP_VERIFY: "1"
       - uses: actions/upload-artifact@v4
         with:
-          name: opal-alpha3-macos-universal
-          path: opal-prototype/artifacts/release/0.1.0-alpha.3/macos-universal/
+          name: opal-${{ steps.release_version.outputs.version }}-macos-universal
+          path: opal-prototype/artifacts/release/${{ steps.release_version.outputs.version }}/macos-universal/
           if-no-files-found: error
           retention-days: 14
 
@@ -80,10 +88,10 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@v4
         with:
-          name: opal-alpha3-macos-universal
+          name: opal-${{ needs.build-macos.outputs.version }}-macos-universal
           path: opal-prototype/artifacts/macos-universal
       - name: Verify downloaded DMG installation and first launch
-        run: bash scripts/verify-macos-dmg.sh artifacts/macos-universal/OPAL-0.1.0-alpha.3-macos-universal.dmg
+        run: bash scripts/verify-macos-dmg.sh "artifacts/macos-universal/OPAL-${{ needs.build-macos.outputs.version }}-macos-universal.dmg"
         working-directory: opal-prototype
 
   build-windows:
@@ -105,6 +113,13 @@ jobs:
       - name: Install NSIS
         run: choco install nsis --yes --no-progress
       - run: npm ci
+        working-directory: opal-prototype
+      - id: release_version
+        name: Read release version
+        shell: pwsh
+        run: |
+          $version = node -p 'require("./package.json").version'
+          "version=$version" >> $env:GITHUB_OUTPUT
         working-directory: opal-prototype
       - run: npm run verify
         working-directory: opal-prototype
@@ -139,12 +154,12 @@ jobs:
           $fixtureManifest = Get-Content $env:OPAL_FIXTURE_MANIFEST -Raw | ConvertFrom-Json
           $baselineInstaller = Get-ChildItem (Join-Path $baselineRoot "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis") -Filter "*-setup.exe" | Select-Object -First 1
           if (-not $baselineInstaller) { throw "Could not find the baseline installer." }
-          $currentInstaller = Get-ChildItem "opal-prototype/artifacts/release/0.1.0-alpha.3/windows-x64" -Filter "*-setup.exe" | Select-Object -First 1
+          $currentInstaller = Get-ChildItem "opal-prototype/artifacts/release/${{ steps.release_version.outputs.version }}/windows-x64" -Filter "*-setup.exe" | Select-Object -First 1
           if (-not $currentInstaller) { throw "Could not find the current alpha installer." }
           & "opal-prototype/scripts/verify-windows-installer.ps1" -CurrentInstaller $currentInstaller.FullName -BaselineInstaller $baselineInstaller.FullName -UpgradeFixture $fixtureManifest.small
       - uses: actions/upload-artifact@v4
         with:
-          name: opal-alpha3-windows-x64
-          path: opal-prototype/artifacts/release/0.1.0-alpha.3/windows-x64/
+          name: opal-${{ steps.release_version.outputs.version }}-windows-x64
+          path: opal-prototype/artifacts/release/${{ steps.release_version.outputs.version }}/windows-x64/
           if-no-files-found: error
           retention-days: 14
