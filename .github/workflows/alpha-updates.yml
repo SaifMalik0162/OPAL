@@ -217,8 +217,8 @@ jobs:
           cd opal-prototype
           version=$(node -p 'require("./package.json").version')
           mkdir -p "artifacts/release/$version/macos-universal" "artifacts/release/$version/windows-x64" "artifacts/release/$version/updater-feed"
-          cp artifacts/macos-universal/* "artifacts/release/$version/macos-universal/"
-          cp artifacts/windows-x64/* "artifacts/release/$version/windows-x64/"
+          cp ../artifacts/macos-universal/* "artifacts/release/$version/macos-universal/"
+          cp ../artifacts/windows-x64/* "artifacts/release/$version/windows-x64/"
           cp "artifacts/release/$version/macos-universal/OPAL-$version-macos-universal.app.tar.gz" "artifacts/release/$version/macos-universal/OPAL-$version-macos-universal.app.tar.gz.sig" "artifacts/release/$version/updater-feed/"
           cp "artifacts/release/$version/windows-x64/OPAL-$version-windows-x64.nsis.zip" "artifacts/release/$version/windows-x64/OPAL-$version-windows-x64.nsis.zip.sig" "artifacts/release/$version/updater-feed/"
           printf '%s\n' "$RELEASE_NOTES" > artifacts/release-notes.txt
