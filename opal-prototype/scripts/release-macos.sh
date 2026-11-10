@@ -20,7 +20,7 @@ IS_NOTARIZED=0
 if [[ "$RELEASE_MODE" == "--signed" || "$RELEASE_MODE" == "--signed-validation" ]]; then
   IS_SIGNED=1
 fi
-if [[ "$RELEASE_MODE" == "--signed" ]]; then
+if [[ "$RELEASE_MODE" == "--signed" || "$RELEASE_MODE" == "--signed-validation" ]]; then
   IS_NOTARIZED=1
 fi
 
