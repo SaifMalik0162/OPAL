@@ -463,6 +463,17 @@
   color: var(--lavender);
 }
 
+.player-menu button kbd {
+  margin-left: auto;
+  padding: 2px 5px;
+  border: 1px solid rgba(221, 232, 255, .18);
+  border-radius: 5px;
+  color: var(--muted);
+  font: inherit;
+  font-size: 8px;
+  line-height: 1.2;
+}
+
 .player-menu button:hover, .player-menu button:focus-visible {
   background: rgba(230, 238, 255, .11);
 }

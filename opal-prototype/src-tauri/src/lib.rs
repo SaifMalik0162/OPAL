@@ -3118,9 +3118,10 @@ fn set_project_artwork(
         return Err("Project no longer exists.".to_string());
     }
 
+    let artwork_revision = Uuid::new_v4();
     let batch_dir = roots
         .staging_dir
-        .join(format!("artwork-{}", Uuid::new_v4()));
+        .join(format!("artwork-{artwork_revision}"));
     fs::create_dir_all(&batch_dir).map_err(|error| format!("Could not stage artwork: {error}"))?;
     let staged_source = batch_dir.join(format!("source.{}", extension(&source)));
     fs::copy(&source, &staged_source)
@@ -3128,7 +3129,8 @@ fn set_project_artwork(
     let thumbnail = image::open(&staged_source)
         .map_err(|_| "OPAL could not decode that artwork image.".to_string())?
         .thumbnail(1200, 1200);
-    let thumbnail_path = batch_dir.join("thumb.jpg");
+    let thumbnail_name = format!("thumb-{artwork_revision}.jpg");
+    let thumbnail_path = batch_dir.join(&thumbnail_name);
     thumbnail
         .save_with_format(&thumbnail_path, ImageFormat::Jpeg)
         .map_err(|error| format!("Could not create artwork thumbnail: {error}"))?;
@@ -3148,7 +3150,7 @@ fn set_project_artwork(
         }
         return Err(format!("Could not commit artwork: {error}"));
     }
-    let artwork_ref = format!("artwork/{project_id}/thumb.jpg");
+    let artwork_ref = format!("artwork/{project_id}/{thumbnail_name}");
     if let Err(error) = connection.execute(
         "UPDATE projects SET artwork_ref = ?1, updated_at = ?2 WHERE id = ?3",
         params![artwork_ref, now_ms(), project_id],
@@ -4006,7 +4008,7 @@ async fn get_audio_waveform(
         if !supported_audio(&path) {
             return Err("This file type isn’t supported for audio analysis.".to_string());
         }
-        let result = decode_audio_waveform(&path, 72);
+        let result = decode_audio_waveform(&path, 192);
         if result.is_err() {
             record_diagnostic_error("Audio waveform analysis failed");
         }
