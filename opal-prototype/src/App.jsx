@@ -577,7 +577,6 @@ function App() {
     let unlisten;
     let cancelled = false;
     getCurrentWindow().onCloseRequested((event) => {
-      if (allowWindowCloseRef.current) return;
       event.preventDefault();
       if (closeInProgressRef.current) return;
       closeInProgressRef.current = true;
