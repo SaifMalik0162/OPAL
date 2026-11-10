@@ -1,4 +1,4 @@
-name: Publish OPAL Alpha Update
+name: Build OPAL Alpha Update
 
 on:
   workflow_dispatch:
@@ -8,9 +8,14 @@ on:
         required: true
         type: boolean
         default: false
-      release_notes:
-        description: Short notes shown in the in-app update window
+      dry_run:
+        description: Build and validate signed packages without publishing a release or update feed
         required: true
+        type: boolean
+        default: true
+      release_notes:
+        description: Short notes shown in the in-app update window when publishing
+        required: false
         type: string
 
 permissions:
@@ -30,20 +35,25 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PUBLIC_FEED_CONFIRMED: ${{ inputs.confirm_public_feed }}
+          DRY_RUN: ${{ inputs.dry_run }}
           RELEASE_REF_PROTECTED: ${{ github.ref_protected }}
         run: |
           if [[ "$GITHUB_REF" != "refs/heads/main" || "$RELEASE_REF_PROTECTED" != "true" ]]; then
             echo "Dispatch this workflow from the protected main branch." >&2
             exit 1
           fi
-          if [[ "$PUBLIC_FEED_CONFIRMED" != "true" ]]; then
-            echo "Confirm public update downloads before publishing the alpha feed." >&2
-            exit 1
-          fi
-          visibility=$(gh api "repos/$GITHUB_REPOSITORY" --jq .visibility)
-          if [[ "$visibility" != "public" ]]; then
-            echo "The static Tauri feed requires public GitHub Releases. Configure an authenticated update host before publishing from a private repository." >&2
-            exit 1
+          if [[ "$DRY_RUN" != "true" ]]; then
+            if [[ "$PUBLIC_FEED_CONFIRMED" != "true" ]]; then
+              echo "Confirm public update downloads before publishing the alpha feed." >&2
+              exit 1
+            fi
+            visibility=$(gh api "repos/$GITHUB_REPOSITORY" --jq .visibility)
+            if [[ "$visibility" != "public" ]]; then
+              echo "The static Tauri feed requires public GitHub Releases. Configure an authenticated update host before publishing from a private repository." >&2
+              exit 1
+            fi
+          else
+            echo "Running signed artifact validation only. No release files will be published."
           fi
 
   build-macos:
@@ -108,6 +118,7 @@ jobs:
           cp "artifacts/release/$version/macos-universal/"OPAL-* artifacts/update-candidates/macos-universal/
         working-directory: opal-prototype
       - uses: actions/upload-artifact@v4
+        if: inputs.dry_run == false
         with:
           name: opal-alpha-macos
           path: opal-prototype/artifacts/update-candidates/macos-universal/*
@@ -157,6 +168,7 @@ jobs:
           cp "artifacts/release/$version/windows-x64/"OPAL-* artifacts/update-candidates/windows-x64/
         working-directory: opal-prototype
       - uses: actions/upload-artifact@v4
+        if: inputs.dry_run == false
         with:
           name: opal-alpha-windows
           path: opal-prototype/artifacts/update-candidates/windows-x64/*
@@ -164,7 +176,7 @@ jobs:
 
   publish:
     needs: [preflight, build-macos, build-windows]
-    if: github.ref == 'refs/heads/main' && github.ref_protected
+    if: github.ref == 'refs/heads/main' && github.ref_protected && inputs.dry_run == false
     runs-on: ubuntu-latest
     environment: opal-alpha-publishing
     permissions:
