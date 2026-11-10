@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "OPAL",
+    "slug": "opal-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "platforms": ["ios", "android"],
+    "icon": "./assets/images/opal-icon.png",
+    "scheme": "opal",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "bundleIdentifier": "com.opal.library.mobile",
+      "buildNumber": "1",
+      "supportsTablet": false,
+      "icon": "./assets/OPAL.icon"
+    },
+    "android": {
+      "package": "com.opal.library.mobile",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#111018",
+        "foregroundImage": "./assets/images/opal-icon.png",
+        "monochromeImage": "./assets/images/opal-icon.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#111018",
+          "image": "./assets/images/opal-icon.png",
+          "imageWidth": 118
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "enableBackgroundPlayback": true,
+          "recordAudioAndroid": false
+        }
+      ],
+      "expo-sqlite"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}
