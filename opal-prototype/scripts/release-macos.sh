@@ -139,6 +139,13 @@ fi
 
 "$ROOT_DIR/scripts/create-opal-dmg.sh" "$APP_PATH" "$DMG_PATH" "$ROOT_DIR/src-tauri/dmg/the-passage@2x.png"
 
+if [[ "$IS_SIGNED" == "1" ]]; then
+  # The app signature does not sign the outer disk image. Sign the finished
+  # DMG so Gatekeeper can assess the downloaded container as Developer ID.
+  codesign --force --sign "$APPLE_SIGNING_IDENTITY" --timestamp "$DMG_PATH"
+  codesign --verify --verbose=2 "$DMG_PATH"
+fi
+
 if [[ "$IS_NOTARIZED" == "1" ]]; then
   xcrun notarytool submit "$DMG_PATH" "${NOTARY_AUTH_ARGS[@]}" --wait
   xcrun stapler staple "$DMG_PATH"
