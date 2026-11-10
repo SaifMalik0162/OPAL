@@ -170,6 +170,7 @@ jobs:
           OPAL_SKIP_VERIFY: "1"
           OPAL_BUILD_COMMIT: ${{ github.sha }}
       - name: Stage release files
+        shell: bash
         run: |
           version=$(node -p 'require("./package.json").version')
           mkdir -p artifacts/update-candidates/windows-x64
