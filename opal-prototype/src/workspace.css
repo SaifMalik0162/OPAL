@@ -220,7 +220,7 @@
 
 .notes-panel {
   align-self: start;
-  min-height: 250px;
+  min-height: 0;
   padding: 20px;
   border-radius: 18px;
 }
@@ -244,9 +244,11 @@
 .notes-panel textarea {
   display: block;
   width: 100%;
-  min-height: 140px;
+  min-height: 88px;
+  max-height: 112px;
   margin-top: 20px;
-  resize: vertical;
+  overflow: auto;
+  resize: none;
   border: 0;
   border-top: 1px solid var(--line);
   outline: 0;
@@ -467,7 +469,8 @@
 }
 
 .notes-panel textarea {
-  min-height: 190px;
+  min-height: 88px;
+  max-height: 112px;
   color: var(--ivory);
 }
 
@@ -564,7 +567,63 @@
   transform: none;
 }
 
+.project-sleeve-trigger {
+  position: relative;
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  border-radius: 22px;
+  background: transparent;
+  color: var(--ivory);
+  cursor: pointer;
+}
+
+.project-sleeve-trigger:focus-visible {
+  outline: 2px solid rgba(229, 237, 255, .95);
+  outline-offset: 4px;
+}
+
+.project-sleeve-trigger:disabled {
+  cursor: not-allowed;
+}
+
+.project-sleeve-trigger:disabled .project-sleeve-change {
+  display: none;
+}
+
+.project-sleeve-change {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid rgba(237, 243, 255, .25);
+  border-radius: 99px;
+  background: rgba(20, 34, 61, .76);
+  box-shadow: 0 8px 28px rgba(5, 13, 30, .24);
+  color: rgba(245, 248, 255, .96);
+  font-size: 11px;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translate(-50%, 5px);
+  transition: opacity .2s ease, transform .2s ease;
+  backdrop-filter: blur(16px) saturate(1.2);
+  pointer-events: none;
+}
+
+.project-sleeve-trigger:hover .project-sleeve-change,
+.project-sleeve-trigger:focus-visible .project-sleeve-change {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
 .project-cover-column .project-sleeve {
+  display: block;
+  width: 100%;
   border-radius: 22px;
   box-shadow: 0 32px 62px rgba(5,2,23,.48);
 }
@@ -636,8 +695,85 @@
 }
 
 .project-main-column .notes-panel {
-  min-height: 240px;
+  min-height: 0;
   padding: 16px 18px;
+}
+
+.notes-expand-trigger {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--lavender-bright);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  transition: background .18s ease, color .18s ease;
+}
+
+.notes-expand-trigger:hover,
+.notes-expand-trigger:focus-visible {
+  background: rgba(230, 238, 255, .1);
+  color: var(--ivory);
+}
+
+.notes-expand-trigger:focus-visible {
+  outline: 2px solid rgba(221, 232, 255, .8);
+  outline-offset: 2px;
+}
+
+.import-prompt.notes-expand-dialog {
+  width: min(100%, 820px);
+  max-height: calc(100dvh - 48px);
+  overflow: auto;
+  padding: 36px;
+}
+
+.import-prompt.notes-expand-dialog h2 {
+  margin: 17px 0 10px;
+  font-size: clamp(36px, 5vw, 54px);
+}
+
+.notes-expanded-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 16px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.notes-expanded-input {
+  display: block;
+  width: 100%;
+  min-height: min(46vh, 420px);
+  margin-top: 16px;
+  padding: 20px;
+  border: 1px solid rgba(220, 231, 255, .18);
+  border-radius: 17px;
+  outline: 0;
+  background: rgba(11, 24, 48, .28);
+  color: var(--ivory);
+  font-family: Georgia, serif;
+  font-size: 17px;
+  line-height: 1.65;
+  resize: vertical;
+  transition: border-color .18s ease, background .18s ease;
+}
+
+.notes-expanded-input:focus {
+  border-color: rgba(221, 232, 255, .62);
+  background: rgba(11, 24, 48, .42);
+}
+
+.notes-expanded-input:disabled {
+  opacity: .5;
 }
 
 .project-main-column .section-heading h2 {
@@ -1688,5 +1824,29 @@
   .project-main-column .track-main {
     grid-template-columns: 22px 15px minmax(0, 1fr);
     gap: 7px;
+  }
+}
+
+@media (max-width: 760px) {
+  .project-sleeve-change {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+
+  .import-prompt.notes-expand-dialog {
+    max-height: calc(100dvh - 24px);
+    padding: 28px 22px;
+  }
+
+  .notes-expanded-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .notes-expanded-input {
+    min-height: 42vh;
+    padding: 15px;
+    font-size: 15px;
   }
 }

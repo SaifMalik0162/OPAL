@@ -325,6 +325,89 @@
   margin-top: 14px;
 }
 
+.import-complete-action {
+  display: flex;
+  min-height: 62px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 22px;
+  padding: 11px 13px;
+  border: 1px solid rgba(183, 200, 240, .22);
+  border-radius: 15px;
+  background: rgba(15, 30, 56, .28);
+}
+
+.import-complete-copy {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 11px;
+}
+
+.import-complete-copy > svg {
+  flex: 0 0 auto;
+  color: #b9e7c0;
+}
+
+.import-complete-copy span,
+.import-complete-copy strong,
+.import-complete-copy small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.import-complete-copy strong {
+  color: var(--ivory);
+  font-size: 11px;
+  font-weight: 550;
+}
+
+.import-complete-copy small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.import-add-more {
+  display: inline-flex;
+  min-height: 34px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 11px;
+  border: 1px solid rgba(220, 231, 255, .17);
+  border-radius: 10px;
+  background: rgba(230, 238, 255, .08);
+  color: var(--ivory);
+  cursor: pointer;
+  font: inherit;
+  font-size: 9px;
+  transition: background .18s ease, border-color .18s ease, transform .18s ease;
+}
+
+.import-add-more:hover {
+  border-color: rgba(220, 231, 255, .34);
+  background: rgba(230, 238, 255, .14);
+}
+
+.import-add-more:active {
+  transform: scale(.97);
+}
+
+.import-add-more:focus-visible {
+  outline: 2px solid rgba(221, 232, 255, .8);
+  outline-offset: 2px;
+}
+
+.import-summary.is-complete .import-progress-bar span {
+  background: linear-gradient(90deg, #b9e7c0, #d8f0da);
+}
+
 .drop-zone {
   width: 100%;
   padding: 0;

@@ -1,6 +1,6 @@
 import { waveformSeed } from "./waveform.js";
 
-const WAVEFORM_CACHE_KEY = "opal-waveform-cache-v1";
+const WAVEFORM_CACHE_KEY = "opal-waveform-cache-v2";
 
 function readCache() {
   try {
