@@ -100,9 +100,17 @@ jobs:
           security find-identity -v -p codesigning "$KEYCHAIN_PATH"
           echo "OPAL_SIGNING_KEYCHAIN=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
           rm -f "$CERTIFICATE_PATH"
-      - run: npm run release:macos
+      - name: Build signed macOS artifacts
+        shell: bash
+        run: |
+          if [[ "$OPAL_UPDATE_VALIDATION_ONLY" == "true" ]]; then
+            npm run release:macos:validation
+          else
+            npm run release:macos
+          fi
         working-directory: opal-prototype
         env:
+          OPAL_UPDATE_VALIDATION_ONLY: ${{ inputs.dry_run }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
