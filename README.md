@@ -1,45 +1,24 @@
 <div align="center">
+  <img src="docs/images/opal-readme.png" alt="OPAL app icon" width="144" height="144">
   <h1>OPAL</h1>
   <p><strong>Every version, in its place.</strong></p>
-  <p>A local listening room for the songs, alternate takes, notes, and moments behind a record.</p>
-  <p><sub>Early alpha &nbsp;·&nbsp; macOS &nbsp;·&nbsp; Windows x64</sub></p>
+  <p>A listening room for the songs, mixes, and ideas behind a record.</p>
+  <p><strong><a href="https://github.com/SaifMalik0162/OPAL/releases">Download OPAL</a></strong></p>
+  <p><sub>Early alpha &nbsp;·&nbsp; macOS (Apple silicon and Intel) &nbsp;·&nbsp; Windows x64</sub></p>
 </div>
 
 ---
 
-OPAL is a local-first music workspace. Gather a project’s tracks, keep alternate versions beside each song, leave notes where they matter, and shape a sequence for a focused listen.
+## From first take to final sequence
 
-## In OPAL
-
-- **Projects** keep the songs for a record or listening session together.
-- **Versions** keep alternate mixes organized beside their track.
-- **Notes and moments** capture feedback against a project, take, or point in the audio.
-- **Sequences and capsules** let you arrange a listen and save a local reference to it.
+- **Keep every mix with its song.** Organize tracks by project and switch between alternate versions as you listen.
+- **Leave a note right where you hear it.** Mark a moment on the waveform so you can find it again.
+- **Hear the record in order.** Arrange tracks in the Sequence Room, then save a selection of versions as a Listening Capsule to revisit later.
 
 ## Try the alpha
 
-Installers and build notes are on the [Releases page](https://github.com/SaifMalik0162/OPAL/releases). Check each release for its tested platform and known limits.
+OPAL keeps your audio, artwork, and notes on your device. Listening Capsules stay in your library too. Start with a few tracks you already have backed up.
 
-OPAL is early software. Use a disposable library while testing and keep a separate backup of anything you import. Your audio, artwork, notes, and library stay on your device. Capsules are local references; they are not remote sharing, and their contents are not encrypted.
+If something feels off, [tell us what happened](https://github.com/SaifMalik0162/OPAL/issues/new/choose). Include your OPAL version and operating system, and keep personal files out of public reports.
 
-## Run from source
-
-You’ll need Node.js 22, Rust, and the native dependencies for [Tauri](https://v2.tauri.app/start/prerequisites/).
-
-```sh
-cd opal-prototype
-npm ci
-npm run tauri:dev
-```
-
-Run the full repository verification with:
-
-```sh
-npm run verify
-```
-
-## Project terms
-
-OPAL is proprietary. Public access allows GitHub’s platform-level viewing and forking; it does not grant general rights to reuse, modify, or redistribute OPAL. See [`LICENSE`](LICENSE). Third-party dependencies and assets keep their own terms.
-
-Code contributions are not open at this stage. Bug reports are welcome through Issues; report security problems privately as described in [`SECURITY.md`](SECURITY.md). Please don’t post audio, private notes, library backups, credentials, or unreviewed diagnostics in public.
+[License](LICENSE) · [Report a security issue privately](SECURITY.md)
