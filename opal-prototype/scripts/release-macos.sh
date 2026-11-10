@@ -10,9 +10,18 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
 fi
 
 RELEASE_MODE="${1:---unsigned}"
-if [[ "$RELEASE_MODE" != "--unsigned" && "$RELEASE_MODE" != "--signed" ]]; then
-  echo "usage: release-macos.sh [--unsigned|--signed]" >&2
+if [[ "$RELEASE_MODE" != "--unsigned" && "$RELEASE_MODE" != "--signed" && "$RELEASE_MODE" != "--signed-validation" ]]; then
+  echo "usage: release-macos.sh [--unsigned|--signed|--signed-validation]" >&2
   exit 2
+fi
+
+IS_SIGNED=0
+IS_NOTARIZED=0
+if [[ "$RELEASE_MODE" == "--signed" || "$RELEASE_MODE" == "--signed-validation" ]]; then
+  IS_SIGNED=1
+fi
+if [[ "$RELEASE_MODE" == "--signed" ]]; then
+  IS_NOTARIZED=1
 fi
 
 VERSION="$(node -p 'require("./package.json").version')"
@@ -25,12 +34,17 @@ fi
 
 rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
-if [[ "$RELEASE_MODE" == "--signed" ]]; then
+if [[ "$IS_SIGNED" == "1" ]]; then
   : "${APPLE_SIGNING_IDENTITY:?Set APPLE_SIGNING_IDENTITY to a Developer ID Application certificate name.}"
+  : "${TAURI_SIGNING_PRIVATE_KEY:?Set TAURI_SIGNING_PRIVATE_KEY for signed updater artifacts.}"
+fi
+if [[ "$IS_NOTARIZED" == "1" ]]; then
   : "${APPLE_ID:?Set APPLE_ID for notarization.}"
   : "${APPLE_TEAM_ID:?Set APPLE_TEAM_ID for notarization.}"
   : "${APPLE_APP_PASSWORD:?Set APPLE_APP_PASSWORD to an app-specific notarytool password.}"
-  : "${TAURI_SIGNING_PRIVATE_KEY:?Set TAURI_SIGNING_PRIVATE_KEY for signed updater artifacts.}"
+fi
+
+if [[ "$IS_SIGNED" == "1" ]]; then
   if ! security find-identity -v -p codesigning | grep -Fq "$APPLE_SIGNING_IDENTITY"; then
     echo "The requested signing identity is not installed in the keychain." >&2
     exit 1
@@ -38,7 +52,7 @@ if [[ "$RELEASE_MODE" == "--signed" ]]; then
 fi
 
 BUILD_ARGS=(build --target universal-apple-darwin --bundles app --ci)
-if [[ "$RELEASE_MODE" == "--unsigned" ]]; then
+if [[ "$IS_SIGNED" == "0" ]]; then
   BUILD_ARGS+=(--no-sign)
 else
   BUILD_ARGS+=(--config src-tauri/tauri.updater.conf.json)
@@ -58,7 +72,7 @@ ARCHITECTURES="$(lipo -archs "$APP_PATH/Contents/MacOS/$EXECUTABLE")"
   exit 1
 }
 
-if [[ "$RELEASE_MODE" == "--signed" ]]; then
+if [[ "$IS_SIGNED" == "1" ]]; then
   codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 else
   SIGNATURE_INFO="$(codesign -dv --verbose=2 "$APP_PATH" 2>&1 || true)"
@@ -73,12 +87,15 @@ ARTIFACT_DIR="$ROOT_DIR/artifacts/release/$VERSION/macos-universal"
 mkdir -p "$ARTIFACT_DIR"
 DMG_PATH="$ARTIFACT_DIR/OPAL-$VERSION-macos-universal.dmg"
 
-if [[ "$RELEASE_MODE" == "--signed" ]]; then
+if [[ "$IS_NOTARIZED" == "1" ]]; then
   APP_ZIP="$ARTIFACT_DIR/OPAL-$VERSION-macos-universal-app.zip"
   ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$APP_ZIP"
   xcrun notarytool submit "$APP_ZIP" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
   xcrun stapler staple "$APP_PATH"
   xcrun stapler validate "$APP_PATH"
+fi
+
+if [[ "$IS_SIGNED" == "1" ]]; then
   UPDATE_ARCHIVE="$APP_PATH.tar.gz"
   rm -f "$UPDATE_ARCHIVE" "$UPDATE_ARCHIVE.sig"
   tar -czf "$UPDATE_ARCHIVE" -C "$(dirname "$APP_PATH")" "$(basename "$APP_PATH")"
@@ -89,7 +106,7 @@ fi
 
 "$ROOT_DIR/scripts/create-opal-dmg.sh" "$APP_PATH" "$DMG_PATH" "$ROOT_DIR/src-tauri/dmg/the-passage@2x.png"
 
-if [[ "$RELEASE_MODE" == "--signed" ]]; then
+if [[ "$IS_NOTARIZED" == "1" ]]; then
   xcrun notarytool submit "$DMG_PATH" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
   xcrun stapler staple "$DMG_PATH"
   xcrun stapler validate "$DMG_PATH"
@@ -111,12 +128,16 @@ DMG_ARCHITECTURES="$(lipo -archs "$DMG_APP/Contents/MacOS/$EXECUTABLE")"
   exit 1
 }
 
-if [[ "$RELEASE_MODE" == "--signed" ]]; then
+if [[ "$IS_SIGNED" == "1" ]]; then
   codesign --verify --deep --strict --verbose=2 "$DMG_APP"
-  xcrun stapler validate "$DMG_APP"
-  spctl --assess --type execute --verbose=4 "$DMG_APP"
-  xcrun stapler validate "$DMG_PATH"
-  spctl --assess --type open --context context:primary-signature --verbose=4 "$DMG_PATH"
+  if [[ "$IS_NOTARIZED" == "1" ]]; then
+    xcrun stapler validate "$DMG_APP"
+    spctl --assess --type execute --verbose=4 "$DMG_APP"
+    xcrun stapler validate "$DMG_PATH"
+    spctl --assess --type open --context context:primary-signature --verbose=4 "$DMG_PATH"
+  else
+    echo "Gatekeeper notarization checks skipped for signing-only validation."
+  fi
 else
   echo "Final DMG inspection: OPAL.app, version $APP_VERSION, architectures $DMG_ARCHITECTURES."
 fi

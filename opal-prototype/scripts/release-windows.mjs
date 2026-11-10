@@ -29,9 +29,13 @@ const createUpdaterArtifacts = Boolean(environment.TAURI_SIGNING_PRIVATE_KEY);
 const buildArguments = [
   "run", "tauri", "--", "build", "--target", target, "--bundles", "nsis",
   "--config", "src-tauri/tauri.windows.conf.json",
-  "--ci", "--no-sign",
+  "--ci",
 ];
-if (createUpdaterArtifacts) buildArguments.splice(buildArguments.length - 2, 0, "--config", "src-tauri/tauri.updater.conf.json");
+if (createUpdaterArtifacts) {
+  buildArguments.splice(buildArguments.length - 1, 0, "--config", "src-tauri/tauri.updater.conf.json");
+} else {
+  buildArguments.push("--no-sign");
+}
 runNpm(buildArguments);
 
 const nsisDirectory = resolve(projectRoot, "src-tauri/target", target, "release/bundle/nsis");

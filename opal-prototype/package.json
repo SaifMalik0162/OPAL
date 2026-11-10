@@ -23,6 +23,7 @@
     "tauri:build": "tauri build",
     "fixtures:create": "cargo run --manifest-path src-tauri/Cargo.toml --example create-fixtures",
     "release:macos": "bash scripts/release-macos.sh --signed",
+    "release:macos:validation": "bash scripts/release-macos.sh --signed-validation",
     "release:macos:unsigned": "bash scripts/release-macos.sh --unsigned",
     "release:windows": "node scripts/release-windows.mjs"
   },
