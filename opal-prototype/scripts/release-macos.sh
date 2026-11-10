@@ -24,25 +24,58 @@ if [[ "$RELEASE_MODE" == "--signed" || "$RELEASE_MODE" == "--signed-validation" 
   IS_NOTARIZED=1
 fi
 
+NOTARY_KEY_PATH=""
+MOUNT_POINT=""
+NOTARY_AUTH_ARGS=()
+cleanup_release() {
+  if [[ -n "$MOUNT_POINT" ]]; then
+    hdiutil detach "$MOUNT_POINT" -force >/dev/null 2>&1 || true
+    rmdir "$MOUNT_POINT" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "$NOTARY_KEY_PATH" ]]; then
+    rm -f "$NOTARY_KEY_PATH"
+  fi
+}
+trap cleanup_release EXIT
+
 VERSION="$(node -p 'require("./package.json").version')"
 export OPAL_BUILD_COMMIT="${OPAL_BUILD_COMMIT:-$(git rev-parse HEAD)}"
 export VITE_OPAL_BUILD_COMMIT="$OPAL_BUILD_COMMIT"
-npm run check:release
-if [[ "${OPAL_SKIP_VERIFY:-0}" != "1" ]]; then
-  npm run verify
-fi
-
-rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
 if [[ "$IS_SIGNED" == "1" ]]; then
   : "${APPLE_SIGNING_IDENTITY:?Set APPLE_SIGNING_IDENTITY to a Developer ID Application certificate name.}"
   : "${TAURI_SIGNING_PRIVATE_KEY:?Set TAURI_SIGNING_PRIVATE_KEY for signed updater artifacts.}"
 fi
 if [[ "$IS_NOTARIZED" == "1" ]]; then
-  : "${APPLE_ID:?Set APPLE_ID for notarization.}"
-  : "${APPLE_TEAM_ID:?Set APPLE_TEAM_ID for notarization.}"
-  : "${APPLE_APP_PASSWORD:?Set APPLE_APP_PASSWORD to an app-specific notarytool password.}"
+  if [[ -n "${APPLE_API_KEY_BASE64:-}${APPLE_API_KEY_ID:-}${APPLE_API_ISSUER_ID:-}" ]]; then
+    : "${APPLE_API_KEY_BASE64:?Set the base64-encoded App Store Connect Team API key.}"
+    : "${APPLE_API_KEY_ID:?Set the App Store Connect Team API key ID.}"
+    : "${APPLE_API_ISSUER_ID:?Set the App Store Connect Team API issuer ID.}"
+    NOTARY_KEY_PATH="$(mktemp "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/opal-notary-key.XXXXXX")"
+    printf '%s' "$APPLE_API_KEY_BASE64" | base64 --decode > "$NOTARY_KEY_PATH"
+    chmod 600 "$NOTARY_KEY_PATH"
+    NOTARY_AUTH_ARGS=(--key "$NOTARY_KEY_PATH" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER_ID")
+    echo "Checking Apple notarization access with the configured Team API key..."
+  else
+    : "${APPLE_ID:?Set APPLE_ID or configure APPLE_API_KEY_BASE64, APPLE_API_KEY_ID, and APPLE_API_ISSUER_ID.}"
+    : "${APPLE_TEAM_ID:?Set APPLE_TEAM_ID for app-specific password notarization.}"
+    : "${APPLE_APP_PASSWORD:?Set APPLE_APP_PASSWORD or configure an App Store Connect Team API key.}"
+    APPLE_ID="${APPLE_ID//[[:space:]]/}"
+    APPLE_APP_PASSWORD="${APPLE_APP_PASSWORD//[[:space:]]/}"
+    NOTARY_AUTH_ARGS=(--apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD")
+    echo "Checking Apple notarization access with the configured Apple ID..."
+  fi
+
+  # Catch invalid credentials before spending several minutes compiling OPAL.
+  xcrun notarytool history "${NOTARY_AUTH_ARGS[@]}" >/dev/null
 fi
+
+npm run check:release
+if [[ "${OPAL_SKIP_VERIFY:-0}" != "1" ]]; then
+  npm run verify
+fi
+
+rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
 if [[ "$IS_SIGNED" == "1" ]]; then
   if ! security find-identity -v -p codesigning | grep -Fq "$APPLE_SIGNING_IDENTITY"; then
@@ -90,7 +123,7 @@ DMG_PATH="$ARTIFACT_DIR/OPAL-$VERSION-macos-universal.dmg"
 if [[ "$IS_NOTARIZED" == "1" ]]; then
   APP_ZIP="$ARTIFACT_DIR/OPAL-$VERSION-macos-universal-app.zip"
   ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$APP_ZIP"
-  xcrun notarytool submit "$APP_ZIP" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
+  xcrun notarytool submit "$APP_ZIP" "${NOTARY_AUTH_ARGS[@]}" --wait
   xcrun stapler staple "$APP_PATH"
   xcrun stapler validate "$APP_PATH"
 fi
@@ -107,17 +140,12 @@ fi
 "$ROOT_DIR/scripts/create-opal-dmg.sh" "$APP_PATH" "$DMG_PATH" "$ROOT_DIR/src-tauri/dmg/the-passage@2x.png"
 
 if [[ "$IS_NOTARIZED" == "1" ]]; then
-  xcrun notarytool submit "$DMG_PATH" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
+  xcrun notarytool submit "$DMG_PATH" "${NOTARY_AUTH_ARGS[@]}" --wait
   xcrun stapler staple "$DMG_PATH"
   xcrun stapler validate "$DMG_PATH"
 fi
 
 MOUNT_POINT="$(mktemp -d -t opal-alpha-review.XXXXXX)"
-cleanup() {
-  hdiutil detach "$MOUNT_POINT" -force >/dev/null 2>&1 || true
-  rmdir "$MOUNT_POINT" >/dev/null 2>&1 || true
-}
-trap cleanup EXIT
 hdiutil attach "$DMG_PATH" -mountpoint "$MOUNT_POINT" -nobrowse -noautoopen -readonly >/dev/null
 DMG_APP="$MOUNT_POINT/OPAL.app"
 [[ -d "$DMG_APP" ]] || { echo "Final DMG does not contain OPAL.app." >&2; exit 1; }
