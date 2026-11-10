@@ -4,7 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { check } from "@tauri-apps/plugin-updater";
-import { relaunch } from "@tauri-apps/plugin-process";
+import { exit, relaunch } from "@tauri-apps/plugin-process";
 import packageMetadata from "../package.json";
 import { Onboarding } from "./Onboarding.jsx";
 import { OnboardingAmbient } from "./OnboardingAmbient.jsx";
@@ -313,7 +313,6 @@ function App() {
   const noteRevisionRef = useRef(0);
   const noteStoreRef = useRef(null);
   const searchInputRef = useRef(null);
-  const allowWindowCloseRef = useRef(false);
   const closeInProgressRef = useRef(false);
   const importActiveProjectsRef = useRef(new Set());
   const updateCheckRef = useRef(false);
@@ -598,17 +597,9 @@ function App() {
           return;
         }
 
-        allowWindowCloseRef.current = true;
-        const currentWindow = getCurrentWindow();
-        let closeTimeout;
-        const closed = await Promise.race([
-          currentWindow.close().then(() => true, () => false),
-          new Promise((resolve) => { closeTimeout = setTimeout(() => resolve(false), 2000); }),
-        ]);
-        clearTimeout(closeTimeout);
-        if (!closed) await currentWindow.destroy();
+        // Closing OPAL's only window should quit the app on every desktop OS.
+        await exit(0);
       })().catch((closeError) => {
-        allowWindowCloseRef.current = false;
         closeInProgressRef.current = false;
         setError(`OPAL couldn’t close cleanly: ${String(closeError)}`);
       });
