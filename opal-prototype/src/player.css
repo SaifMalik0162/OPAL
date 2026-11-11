@@ -945,39 +945,69 @@
   pointer-events: none;
 }
 
-.player-cover-wash img {
+.player-cover-tide {
   position: absolute;
-  inset: -38% -12%;
-  width: 124%;
-  height: 176%;
-  object-fit: cover;
-  opacity: .67;
-  filter: blur(22px) saturate(1.7);
-  animation: player-cover-flow 11s ease-in-out infinite alternate;
+  inset: -62% -13%;
+  opacity: .92;
+  transform: translate3d(-16%, 3%, 0) rotate(-12deg);
 }
 
-.player-cover-wash img + img {
-  opacity: .46;
+.player-cover-tide img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(20px) saturate(1.55);
+  mask-image: radial-gradient(ellipse, #000 18%, transparent 70%);
+}
+
+.player-cover-current {
+  inset: -50% -2%;
+  opacity: .68;
   mix-blend-mode: screen;
-  animation: player-cover-current 15s ease-in-out infinite alternate;
+  transform: translate3d(23%, -5%, 0) rotate(16deg);
+}
+
+.player-cover-current img {
+  object-position: 50% 72%;
+  filter: blur(27px) saturate(1.7);
 }
 
 .player-cover-wash::after {
   position: absolute;
   inset: 0;
-  background: linear-gradient(105deg, rgba(13, 22, 46, .73), rgba(13, 22, 46, .60) 60%, rgba(13, 22, 46, .75));
+  background:
+    linear-gradient(180deg, transparent 40%, rgba(12, 19, 38, .28)),
+    linear-gradient(105deg, rgba(12, 19, 38, .68), rgba(12, 19, 38, .53) 65%, rgba(12, 19, 38, .59));
   content: "";
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  .player-cover-tide {
+    animation: player-cover-flow 9s cubic-bezier(.42, .18, .58, .82) infinite;
+  }
+
+  .player-cover-current {
+    animation: player-cover-current 12s cubic-bezier(.42, .18, .58, .82) infinite;
+  }
+
+  .player-cover-wash[data-playing="false"] .player-cover-tide {
+    animation-play-state: paused;
+  }
+}
+
 @keyframes player-cover-flow {
-  0% { transform: translate3d(-17%, 9%, 0) scale(1.24) rotate(-11deg); }
-  52% { transform: translate3d(5%, -15%, 0) scale(1.45) rotate(7deg); }
-  100% { transform: translate3d(18%, 5%, 0) scale(1.28) rotate(-4deg); }
+  0%, 100% { transform: translate3d(-25%, 8%, 0) rotate(-16deg) scale(1.12, .92); }
+  25% { transform: translate3d(-3%, -20%, 0) rotate(-4deg) scale(1.26, 1.03); }
+  50% { transform: translate3d(26%, -4%, 0) rotate(13deg) scale(1.06, 1.15); }
+  75% { transform: translate3d(2%, 19%, 0) rotate(3deg) scale(1.28, .92); }
 }
 
 @keyframes player-cover-current {
-  0% { transform: translate3d(19%, -12%, 0) scale(1.35) rotate(15deg); }
-  100% { transform: translate3d(-21%, 12%, 0) scale(1.52) rotate(-17deg); }
+  0%, 100% { transform: translate3d(30%, -12%, 0) rotate(15deg) scale(1.12, .90); }
+  25% { transform: translate3d(1%, 20%, 0) rotate(4deg) scale(1.22, 1.08); }
+  50% { transform: translate3d(-30%, 4%, 0) rotate(-16deg) scale(1.08, .95); }
+  75% { transform: translate3d(-2%, -21%, 0) rotate(-4deg) scale(1.25, 1.09); }
 }
 
 .player-track {
@@ -1101,11 +1131,4 @@
   .player-controls button, .player-action-button, .queue-button { width: 32px; height: 32px; }
   .player-controls .play-button { width: 38px; height: 38px; }
   .queue-popover { bottom: calc(clamp(14px, 3.5vh, 34px) + 132px); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .player-cover-wash img, .player-cover-wash img + img {
-    animation: none;
-    transform: scale(1.28);
-  }
 }
