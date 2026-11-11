@@ -5,16 +5,17 @@ import { IconGlyph, type OpalIcon } from './IconButton';
 import { GlassSurface } from './GlassSurface';
 import { palette } from '../constants/theme';
 
-const tabs: { label: string; path: '/' | '/projects'; icon: OpalIcon }[] = [
+const tabs: { label: string; path: '/' | '/projects' | '/settings'; icon: OpalIcon }[] = [
   { label: 'Library', path: '/', icon: 'music' },
   { label: 'Projects', path: '/projects', icon: 'folder' },
+  { label: 'Settings', path: '/settings', icon: 'settings' },
 ];
 
 export function BottomTabBar() {
   const pathname = usePathname();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const selectedPath = pathname === '/projects' || pathname.startsWith('/project/') ? '/projects' : '/';
+  const selectedPath = pathname === '/settings' ? '/settings' : pathname === '/projects' || pathname.startsWith('/project/') ? '/projects' : '/';
 
   return (
     <View style={[styles.position, { bottom: Math.max(insets.bottom, 8) + 8 }]} pointerEvents="box-none">
@@ -43,10 +44,10 @@ export function BottomTabBar() {
 }
 
 const styles = StyleSheet.create({
-  position: { position: 'absolute', left: 48, right: 48, zIndex: 12, alignItems: 'center' },
-  shell: { width: '100%', maxWidth: 300, minHeight: 60, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 5, borderRadius: 32 },
-  tab: { minWidth: 122, minHeight: 48, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5, borderRadius: 26 },
-  tabContent: { minWidth: 110, minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, paddingHorizontal: 15, borderRadius: 23 },
+  position: { position: 'absolute', left: 26, right: 26, zIndex: 12, alignItems: 'center' },
+  shell: { width: '100%', maxWidth: 352, minHeight: 60, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 5, borderRadius: 32 },
+  tab: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 2, borderRadius: 26 },
+  tabContent: { width: '100%', minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, paddingHorizontal: 6, borderRadius: 23 },
   tabContentSelected: { backgroundColor: 'rgba(237, 241, 255, 0.19)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(248,250,255,0.22)' },
   label: { color: palette.secondary, fontSize: 12, fontWeight: '500' },
   labelSelected: { color: palette.text, fontWeight: '600' },

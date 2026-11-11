@@ -22,14 +22,14 @@ export function MiniPlayer() {
         <View style={styles.topRow}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Open Now Playing for ${track.title}`}
+            accessibilityLabel={`Open Now Playing for ${track.groupTitle || track.title}, ${track.versionName}`}
             onPress={() => router.push('/now-playing')}
             style={({ pressed }) => [styles.trackCapsule, pressed && styles.pressed]}
           >
             <ProjectArtwork project={track} size={40} style={styles.artwork} />
             <View style={styles.copy}>
-              <Text numberOfLines={1} style={styles.title}>{track.title}</Text>
-              <Text numberOfLines={1} style={styles.subtitle}>Original · {track.projectTitle}</Text>
+              <Text numberOfLines={1} style={styles.title}>{track.groupTitle || track.title}</Text>
+              <Text numberOfLines={1} style={styles.subtitle}>{track.versionName} · {track.projectTitle}</Text>
             </View>
             <IconGlyph icon="waveform" size={17} color={palette.lavenderBright} />
           </Pressable>

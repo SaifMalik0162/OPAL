@@ -1,7 +1,7 @@
 use std::{
-    collections::{HashMap, HashSet},
-    fs::{self, File},
-    io::{Read, Write},
+    collections::{BTreeMap, HashMap, HashSet},
+    fs::{self, File, OpenOptions},
+    io::{Read, Seek, Write},
     path::{Path, PathBuf},
     sync::Mutex,
     time::{SystemTime, UNIX_EPOCH},
@@ -181,6 +181,132 @@ struct ProjectDto {
     tracks: Vec<TrackDto>,
     project_note: Option<NoteDto>,
     transitions: Vec<TransitionDto>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct PortableNote {
+    id: String,
+    text: String,
+    updated_at: i64,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct PortableProject {
+    id: String,
+    title: String,
+    description: String,
+    created_at: i64,
+    updated_at: i64,
+    artwork_asset: Option<String>,
+    note: Option<PortableNote>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct PortableMoment {
+    id: String,
+    track_id: String,
+    lineage_id: String,
+    time_ms: i64,
+    state: String,
+    text: String,
+    is_resolved: bool,
+    parent_id: Option<String>,
+    created_at: i64,
+    updated_at: i64,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct PortableTrack {
+    id: String,
+    group_id: String,
+    group_title: String,
+    title: String,
+    source_title: String,
+    position: i64,
+    version_name: String,
+    version_position: i64,
+    is_current: bool,
+    duration_ms: i64,
+    format: String,
+    asset_path: String,
+    sha256: String,
+    size_bytes: u64,
+    note: Option<PortableNote>,
+    moments: Vec<PortableMoment>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct PortableAsset {
+    path: String,
+    role: String,
+    sha256: String,
+    size_bytes: u64,
+    mime_type: String,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct ProjectPackageManifest {
+    format: String,
+    format_version: u32,
+    package_id: String,
+    snapshot_id: String,
+    created_at: i64,
+    project: PortableProject,
+    tracks: Vec<PortableTrack>,
+    transitions: Vec<TransitionDto>,
+    assets: Vec<PortableAsset>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct ProjectPackagePreview {
+    project_title: String,
+    song_count: usize,
+    mix_count: usize,
+    moment_count: usize,
+    asset_bytes: u64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MobileReviewMoment {
+    id: String,
+    track_id: String,
+    lineage_id: String,
+    time_ms: i64,
+    state: String,
+    text: String,
+    is_resolved: bool,
+    parent_id: Option<String>,
+    created_at: i64,
+    updated_at: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MobileReviewExport {
+    format: String,
+    format_version: u32,
+    package_id: String,
+    snapshot_id: String,
+    project_id: String,
+    exported_at: i64,
+    moments: Vec<MobileReviewMoment>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct MobileReviewPreview {
+    project_id: String,
+    project_title: String,
+    new_moments: usize,
+    already_received: usize,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -1136,6 +1262,378 @@ fn load_projects(roots: &StorageRoots) -> Result<Vec<ProjectDto>, String> {
         .collect()
 }
 
+#[derive(Serialize)]
+struct SnapshotPayload<'a> {
+    project: &'a PortableProject,
+    tracks: &'a [PortableTrack],
+    transitions: &'a [TransitionDto],
+    assets: &'a [PortableAsset],
+}
+
+struct PackageAssetSource {
+    archive_path: String,
+    source_path: PathBuf,
+    size_bytes: u64,
+    crc32: u32,
+}
+
+struct ZipCentralEntry {
+    name: Vec<u8>,
+    crc32: u32,
+    size: u32,
+    local_offset: u32,
+}
+
+fn portable_note(note: &Option<NoteDto>) -> Option<PortableNote> {
+    note.as_ref().map(|note| PortableNote {
+        id: note.id.clone(),
+        text: note.text.clone(),
+        updated_at: note.updated_at,
+    })
+}
+
+fn hash_and_crc(path: &Path) -> Result<(String, u64, u32), String> {
+    let mut file = File::open(path).map_err(|error| format!("Could not read project asset: {error}"))?;
+    let mut hasher = Sha256::new();
+    let mut crc = 0xffff_ffff_u32;
+    let mut size = 0_u64;
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let count = file.read(&mut buffer).map_err(|error| format!("Could not read project asset: {error}"))?;
+        if count == 0 { break; }
+        hasher.update(&buffer[..count]);
+        crc = crc32_update(crc, &buffer[..count]);
+        size += count as u64;
+    }
+    let hash = hasher.finalize().iter().map(|byte| format!("{byte:02x}")).collect();
+    Ok((hash, size, crc ^ 0xffff_ffff))
+}
+
+fn crc32_update(mut crc: u32, bytes: &[u8]) -> u32 {
+    for byte in bytes {
+        crc ^= *byte as u32;
+        for _ in 0..8 {
+            crc = if crc & 1 != 0 { (crc >> 1) ^ 0xedb8_8320 } else { crc >> 1 };
+        }
+    }
+    crc
+}
+
+fn package_mime_type(extension: &str) -> &'static str {
+    match extension {
+        "wav" => "audio/wav",
+        "mp3" => "audio/mpeg",
+        "flac" => "audio/flac",
+        "aif" | "aiff" => "audio/aiff",
+        "m4a" => "audio/mp4",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "webp" => "image/webp",
+        _ => "application/octet-stream",
+    }
+}
+
+fn package_asset_entry(
+    role: &str,
+    source_path: &Path,
+    assets: &mut BTreeMap<String, PortableAsset>,
+    sources: &mut BTreeMap<String, PackageAssetSource>,
+) -> Result<String, String> {
+    let extension = extension(source_path);
+    let supported = if role == "audio" { supported_audio(source_path) } else { supported_artwork(source_path) };
+    if !supported {
+        return Err(format!("OPAL cannot package this {} format.", role));
+    }
+    let (sha256, size_bytes, crc32) = hash_and_crc(source_path)?;
+    if size_bytes > u32::MAX as u64 {
+        return Err("A project asset is larger than the supported 4 GB limit.".to_string());
+    }
+    let archive_path = format!("assets/{role}/{sha256}.{extension}");
+    assets.entry(archive_path.clone()).or_insert_with(|| PortableAsset {
+        path: archive_path.clone(),
+        role: role.to_string(),
+        sha256: sha256.clone(),
+        size_bytes,
+        mime_type: package_mime_type(&extension).to_string(),
+    });
+    sources.entry(archive_path.clone()).or_insert_with(|| PackageAssetSource {
+        archive_path: archive_path.clone(),
+        source_path: source_path.to_path_buf(),
+        size_bytes,
+        crc32,
+    });
+    Ok(archive_path)
+}
+
+fn prepare_project_package(
+    roots: &StorageRoots,
+    project_id: &str,
+) -> Result<(ProjectPackageManifest, Vec<PackageAssetSource>, Vec<u8>), String> {
+    let connection = open_database(&roots.db_path)?;
+    let project = load_project(&connection, roots, project_id)?;
+    let mut assets = BTreeMap::<String, PortableAsset>::new();
+    let mut sources = BTreeMap::<String, PackageAssetSource>::new();
+    let artwork_asset = if let Some(reference) = project.artwork_ref.as_deref() {
+        let managed_path = safe_managed_path(roots, reference)?;
+        if !managed_path.is_file() {
+            return Err("The project artwork is missing from OPAL storage.".to_string());
+        }
+        Some(package_asset_entry("artwork", &managed_path, &mut assets, &mut sources)?)
+    } else {
+        None
+    };
+    let mut tracks = Vec::with_capacity(project.tracks.len());
+    for track in &project.tracks {
+        let managed_path = safe_managed_path(roots, &track.managed_file_ref)?;
+        if !managed_path.is_file() {
+            return Err(format!("The original audio for {} · {} is missing.", track.title, track.version_name));
+        }
+        let asset_path = package_asset_entry("audio", &managed_path, &mut assets, &mut sources)?;
+        let sha256 = assets.get(&asset_path).map(|asset| asset.sha256.clone()).unwrap_or_default();
+        let size_bytes = assets.get(&asset_path).map(|asset| asset.size_bytes).unwrap_or_default();
+        tracks.push(PortableTrack {
+            id: track.id.clone(),
+            group_id: track.group_id.clone(),
+            group_title: track.title.clone(),
+            title: track.source_title.clone(),
+            source_title: track.source_title.clone(),
+            position: track.position.max(0),
+            version_name: track.version_name.clone(),
+            version_position: track.version_position.max(0),
+            is_current: track.is_current,
+            duration_ms: track.duration_ms.max(0),
+            format: extension(&managed_path).to_uppercase(),
+            asset_path,
+            sha256,
+            size_bytes,
+            note: portable_note(&track.note),
+            moments: track.moments.iter().map(|moment| PortableMoment {
+                id: moment.id.clone(),
+                track_id: moment.track_id.clone(),
+                lineage_id: moment.lineage_id.clone(),
+                time_ms: moment.time_ms.max(0),
+                state: moment.state.clone(),
+                text: moment.text.clone(),
+                is_resolved: moment.is_resolved,
+                parent_id: moment.parent_id.clone(),
+                created_at: moment.created_at,
+                updated_at: moment.updated_at,
+            }).collect(),
+        });
+    }
+    let project_note = project.project_note.as_ref().map(|note| PortableNote {
+        id: note.id.clone(),
+        text: note.text.clone(),
+        updated_at: note.updated_at,
+    });
+    let portable_project = PortableProject {
+        id: project.id.clone(),
+        title: project.title.clone(),
+        description: project.description.clone(),
+        created_at: project.created_at,
+        updated_at: project.updated_at,
+        artwork_asset,
+        note: project_note,
+    };
+    let transitions = project.transitions.clone();
+    let assets = assets.into_values().collect::<Vec<_>>();
+    let payload = serde_json::to_vec(&SnapshotPayload {
+        project: &portable_project,
+        tracks: &tracks,
+        transitions: &transitions,
+        assets: &assets,
+    }).map_err(|error| format!("Could not create the package snapshot: {error}"))?;
+    let snapshot_id = Sha256::digest(&payload).iter().map(|byte| format!("{byte:02x}")).collect();
+    let manifest = ProjectPackageManifest {
+        format: "opal-project".to_string(),
+        format_version: 1,
+        package_id: project.id,
+        snapshot_id,
+        created_at: now_ms(),
+        project: portable_project,
+        tracks,
+        transitions,
+        assets,
+    };
+    let manifest_bytes = serde_json::to_vec_pretty(&manifest)
+        .map_err(|error| format!("Could not encode the project manifest: {error}"))?;
+    if manifest_bytes.len() > 8 * 1024 * 1024 {
+        return Err("The project manifest is larger than the supported 8 MB limit.".to_string());
+    }
+    let package_assets = sources.into_values().collect();
+    Ok((manifest, package_assets, manifest_bytes))
+}
+
+fn write_zip_entry<W: Write + Seek, R: Read>(
+    output: &mut W,
+    name: &str,
+    source: &mut R,
+    size: u64,
+    crc32: u32,
+) -> Result<ZipCentralEntry, String> {
+    let name_bytes = name.as_bytes();
+    if name_bytes.is_empty() || name_bytes.len() > u16::MAX as usize || !name.is_ascii() {
+        return Err("An OPAL archive path is invalid.".to_string());
+    }
+    if size > u32::MAX as u64 {
+        return Err("OPAL project packages are limited to 4 GB.".to_string());
+    }
+    let offset = output.stream_position().map_err(|error| format!("Could not write project archive: {error}"))?;
+    if offset > u32::MAX as u64 {
+        return Err("OPAL project packages are limited to 4 GB.".to_string());
+    }
+    write_zip_u32(output, 0x0403_4b50)?;
+    write_zip_u16(output, 20)?;
+    write_zip_u16(output, 0)?;
+    write_zip_u16(output, 0)?;
+    write_zip_u16(output, 0)?;
+    write_zip_u16(output, 0x0021)?;
+    write_zip_u32(output, crc32)?;
+    write_zip_u32(output, size as u32)?;
+    write_zip_u32(output, size as u32)?;
+    write_zip_u16(output, name_bytes.len() as u16)?;
+    write_zip_u16(output, 0)?;
+    output.write_all(name_bytes).map_err(|error| format!("Could not write project archive: {error}"))?;
+
+    let mut copied = 0_u64;
+    let mut crc = 0xffff_ffff_u32;
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let count = source.read(&mut buffer).map_err(|error| format!("Could not read project asset: {error}"))?;
+        if count == 0 { break; }
+        copied += count as u64;
+        crc = crc32_update(crc, &buffer[..count]);
+        output.write_all(&buffer[..count]).map_err(|error| format!("Could not write project archive: {error}"))?;
+    }
+    if copied != size || crc ^ 0xffff_ffff != crc32 {
+        return Err("A project file changed while the package was being prepared.".to_string());
+    }
+    Ok(ZipCentralEntry { name: name_bytes.to_vec(), crc32, size: size as u32, local_offset: offset as u32 })
+}
+
+fn write_zip_u16<W: Write>(output: &mut W, value: u16) -> Result<(), String> {
+    output.write_all(&value.to_le_bytes()).map_err(|error| format!("Could not write project archive: {error}"))
+}
+
+fn write_zip_u32<W: Write>(output: &mut W, value: u32) -> Result<(), String> {
+    output.write_all(&value.to_le_bytes()).map_err(|error| format!("Could not write project archive: {error}"))
+}
+
+fn finalize_project_zip(output: &mut File, entries: &[ZipCentralEntry]) -> Result<(), String> {
+    let central_offset = output.stream_position().map_err(|error| format!("Could not finish the project archive: {error}"))?;
+    if entries.len() > u16::MAX as usize || central_offset > u32::MAX as u64 {
+        return Err("This project has too many archive entries for the supported package format.".to_string());
+    }
+    for entry in entries {
+        write_zip_u32(output, 0x0201_4b50)?;
+        write_zip_u16(output, 20)?;
+        write_zip_u16(output, 20)?;
+        write_zip_u16(output, 0)?;
+        write_zip_u16(output, 0)?;
+        write_zip_u16(output, 0)?;
+        write_zip_u16(output, 0x0021)?;
+        write_zip_u32(output, entry.crc32)?;
+        write_zip_u32(output, entry.size)?;
+        write_zip_u32(output, entry.size)?;
+        write_zip_u16(output, entry.name.len() as u16)?;
+        write_zip_u16(output, 0)?;
+        write_zip_u16(output, 0)?;
+        write_zip_u16(output, 0)?;
+        write_zip_u16(output, 0)?;
+        write_zip_u32(output, 0)?;
+        write_zip_u32(output, entry.local_offset)?;
+        output.write_all(&entry.name).map_err(|error| format!("Could not finish the project archive: {error}"))?;
+    }
+    let central_size = output.stream_position().map_err(|error| format!("Could not finish the project archive: {error}"))? - central_offset;
+    if central_size > u32::MAX as u64 {
+        return Err("The project archive directory exceeds the supported size.".to_string());
+    }
+    write_zip_u32(output, 0x0605_4b50)?;
+    write_zip_u16(output, 0)?;
+    write_zip_u16(output, 0)?;
+    write_zip_u16(output, entries.len() as u16)?;
+    write_zip_u16(output, entries.len() as u16)?;
+    write_zip_u32(output, central_size as u32)?;
+    write_zip_u32(output, central_offset as u32)?;
+    write_zip_u16(output, 0)?;
+    output.flush().map_err(|error| format!("Could not finish the project archive: {error}"))?;
+    Ok(())
+}
+
+fn validate_mobile_review(review: &MobileReviewExport) -> Result<(), String> {
+    if review.format != "opal-review" || review.format_version != 1 {
+        return Err("This OPAL review export version is not supported.".to_string());
+    }
+    if !valid_external_id(&review.package_id) || review.package_id != review.project_id ||
+        !valid_sha256(&review.snapshot_id) || review.exported_at < 0 || review.moments.len() > 100_000 {
+        return Err("The OPAL review export has invalid project identity or item limits.".to_string());
+    }
+    let mut ids = HashSet::new();
+    for moment in &review.moments {
+        if !valid_external_id(&moment.id) || !ids.insert(moment.id.as_str()) ||
+            !valid_external_id(&moment.track_id) || !valid_external_id(&moment.lineage_id) ||
+            moment.time_ms < 0 || moment.created_at < 0 || moment.updated_at < 0 ||
+            moment.text.len() > 10_000 ||
+            !matches!(moment.state.as_str(), "keep" | "change" | "question" | "idea") ||
+            moment.parent_id.as_deref().is_some_and(|id| !valid_external_id(id)) {
+            return Err("A review moment is invalid or duplicated.".to_string());
+        }
+    }
+    Ok(())
+}
+
+fn valid_external_id(value: &str) -> bool {
+    !value.is_empty() && value.len() <= 128 && value.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
+}
+
+fn valid_sha256(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+}
+
+fn read_mobile_review(path: &Path) -> Result<MobileReviewExport, String> {
+    let metadata = fs::metadata(path).map_err(|error| format!("Could not read the review export: {error}"))?;
+    if !metadata.is_file() || metadata.len() > 16 * 1024 * 1024 {
+        return Err("Choose an OPAL review export smaller than 16 MB.".to_string());
+    }
+    let bytes = fs::read(path).map_err(|error| format!("Could not read the review export: {error}"))?;
+    let review: MobileReviewExport = serde_json::from_slice(&bytes)
+        .map_err(|error| format!("The review export is not valid OPAL data: {error}"))?;
+    validate_mobile_review(&review)?;
+    Ok(review)
+}
+
+fn summarize_mobile_review(connection: &Connection, review: &MobileReviewExport) -> Result<MobileReviewPreview, String> {
+    let project_title = connection.query_row(
+        "SELECT title FROM projects WHERE id = ?1", params![review.project_id], |row| row.get::<_, String>(0),
+    ).optional().map_err(|error| format!("Could not locate the desktop project: {error}"))?
+      .ok_or_else(|| "This review belongs to a project that is not in this desktop library.".to_string())?;
+    let mut new_moments = 0;
+    let mut already_received = 0;
+    for moment in &review.moments {
+        let track = connection.query_row(
+            "SELECT project_id, duration_ms FROM tracks WHERE id = ?1", params![moment.track_id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)),
+        ).optional().map_err(|error| format!("Could not check the reviewed mix: {error}"))?
+          .ok_or_else(|| format!("The mix for review moment {} is no longer in this project.", moment.id))?;
+        if track.0 != review.project_id || (track.1 > 0 && moment.time_ms > track.1) {
+            return Err(format!("Review moment {} does not match this project's mix or duration.", moment.id));
+        }
+        let existing = connection.query_row(
+            "SELECT project_id, track_id FROM moments WHERE id = ?1", params![moment.id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        ).optional().map_err(|error| format!("Could not check repeated review moments: {error}"))?;
+        if let Some(existing) = existing {
+            if existing.0 != review.project_id || existing.1 != moment.track_id {
+                return Err(format!("Review moment {} conflicts with an existing item.", moment.id));
+            }
+            already_received += 1;
+        } else {
+            new_moments += 1;
+        }
+    }
+    Ok(MobileReviewPreview { project_id: review.project_id.clone(), project_title, new_moments, already_received })
+}
+
 fn capsule_response_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CapsuleResponseDto> {
     Ok(CapsuleResponseDto {
         id: row.get(0)?,
@@ -1903,6 +2401,127 @@ impl ImportState {
 fn list_projects(app: tauri::AppHandle) -> Result<Vec<ProjectDto>, String> {
     let roots = prepare_storage(&app)?;
     load_projects(&roots)
+}
+
+#[tauri::command(rename = "previewProjectPackage", rename_all = "camelCase")]
+fn preview_project_package(app: tauri::AppHandle, project_id: String) -> Result<ProjectPackagePreview, String> {
+    let roots = prepare_storage(&app)?;
+    let connection = open_database(&roots.db_path)?;
+    let project = load_project(&connection, &roots, &project_id)?;
+    let mut unique_assets = HashSet::new();
+    let mut asset_bytes = 0_u64;
+    let mut moment_count = 0_usize;
+    for track in &project.tracks {
+        let path = safe_managed_path(&roots, &track.managed_file_ref)?;
+        if !path.is_file() {
+            return Err(format!("The original audio for {} · {} is missing.", track.title, track.version_name));
+        }
+        if unique_assets.insert(path.clone()) {
+            asset_bytes = asset_bytes.saturating_add(fs::metadata(&path).map_err(|error| format!("Could not inspect project audio: {error}"))?.len());
+        }
+        moment_count += track.moments.len();
+    }
+    if let Some(artwork_ref) = project.artwork_ref.as_deref() {
+        let artwork_path = safe_managed_path(&roots, artwork_ref)?;
+        if !artwork_path.is_file() {
+            return Err("The project artwork is missing from OPAL storage.".to_string());
+        }
+        if unique_assets.insert(artwork_path.clone()) {
+            asset_bytes = asset_bytes.saturating_add(fs::metadata(&artwork_path).map_err(|error| format!("Could not inspect project artwork: {error}"))?.len());
+        }
+    }
+    Ok(ProjectPackagePreview {
+        project_title: project.title,
+        song_count: project.count,
+        mix_count: project.tracks.len(),
+        moment_count,
+        asset_bytes,
+    })
+}
+
+#[tauri::command(rename = "exportProjectPackage", rename_all = "camelCase")]
+fn export_project_package(app: tauri::AppHandle, project_id: String, destination: String) -> Result<String, String> {
+    let roots = prepare_storage(&app)?;
+    let (manifest, asset_sources, manifest_bytes) = prepare_project_package(&roots, &project_id)?;
+    let mut destination = PathBuf::from(destination);
+    if destination.extension().and_then(|value| value.to_str()) != Some("opalproject") {
+        destination.set_extension("opalproject");
+    }
+    if destination.exists() {
+        return Err("Choose a new filename so the export does not replace an existing project package.".to_string());
+    }
+    let parent = destination.parent().filter(|parent| parent.is_dir())
+        .ok_or_else(|| "Choose an existing folder for the project package.".to_string())?;
+    let estimated_size = manifest_bytes.len() as u64 + asset_sources.iter().map(|asset| asset.size_bytes.saturating_add(128)).sum::<u64>() + 1_000_000;
+    if estimated_size > u32::MAX as u64 {
+        return Err("OPAL project packages are limited to 4 GB. Export a smaller project or fewer mixes.".to_string());
+    }
+    let file_name = destination.file_name().and_then(|value| value.to_str()).unwrap_or("OPAL Project.opalproject");
+    let temporary = parent.join(format!(".{file_name}.{}.partial", Uuid::new_v4()));
+    let export_result = (|| {
+        let mut output = OpenOptions::new().write(true).create_new(true).open(&temporary)
+            .map_err(|error| format!("Could not create the project package: {error}"))?;
+        let mut entries = Vec::with_capacity(asset_sources.len() + 1);
+        let manifest_crc = crc32_update(0xffff_ffff, &manifest_bytes) ^ 0xffff_ffff;
+        entries.push(write_zip_entry(
+            &mut output,
+            "manifest.json",
+            &mut std::io::Cursor::new(&manifest_bytes),
+            manifest_bytes.len() as u64,
+            manifest_crc,
+        )?);
+        for asset in &asset_sources {
+            let mut source = File::open(&asset.source_path).map_err(|error| format!("Could not open a project asset: {error}"))?;
+            entries.push(write_zip_entry(&mut output, &asset.archive_path, &mut source, asset.size_bytes, asset.crc32)?);
+        }
+        finalize_project_zip(&mut output, &entries)?;
+        output.sync_all().map_err(|error| format!("Could not finalize the project package: {error}"))?;
+        drop(output);
+        if destination.exists() {
+            return Err("Choose a new filename so the export does not replace an existing project package.".to_string());
+        }
+        fs::rename(&temporary, &destination).map_err(|error| format!("Could not save the project package: {error}"))?;
+        if let Ok(parent_directory) = File::open(parent) { let _ = parent_directory.sync_all(); }
+        Ok::<(), String>(())
+    })();
+    if export_result.is_err() { let _ = fs::remove_file(&temporary); }
+    export_result?;
+    log::info!("Exported project package v{} for {}", manifest.format_version, manifest.package_id);
+    Ok(destination.to_string_lossy().into_owned())
+}
+
+#[tauri::command(rename = "previewMobileReview", rename_all = "camelCase")]
+fn preview_mobile_review(app: tauri::AppHandle, source_path: String) -> Result<MobileReviewPreview, String> {
+    let roots = prepare_storage(&app)?;
+    let review = read_mobile_review(Path::new(&source_path))?;
+    let connection = open_database(&roots.db_path)?;
+    summarize_mobile_review(&connection, &review)
+}
+
+#[tauri::command(rename = "importMobileReview", rename_all = "camelCase")]
+fn import_mobile_review(app: tauri::AppHandle, source_path: String) -> Result<MobileReviewPreview, String> {
+    let roots = prepare_storage(&app)?;
+    let review = read_mobile_review(Path::new(&source_path))?;
+    let mut connection = open_database(&roots.db_path)?;
+    let preview = summarize_mobile_review(&connection, &review)?;
+    if preview.new_moments == 0 { return Ok(preview); }
+    let transaction = connection.transaction().map_err(|error| format!("Could not begin review import: {error}"))?;
+    let mut imported = 0_usize;
+    for moment in &review.moments {
+        let changed = transaction.execute(
+            "INSERT OR IGNORE INTO moments (id, track_id, lineage_id, time_ms, state, text, is_resolved, parent_id, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![moment.id, moment.track_id, moment.lineage_id, moment.time_ms, moment.state, moment.text,
+                moment.is_resolved as i64, moment.parent_id, moment.created_at, moment.updated_at],
+        ).map_err(|error| format!("Could not import a review moment: {error}"))?;
+        imported += changed;
+    }
+    if imported > 0 {
+        transaction.execute("UPDATE projects SET updated_at = ?1 WHERE id = ?2", params![now_ms(), review.project_id])
+            .map_err(|error| format!("Could not update the reviewed project: {error}"))?;
+    }
+    transaction.commit().map_err(|error| format!("Could not commit the review import: {error}"))?;
+    Ok(MobileReviewPreview { new_moments: imported, already_received: review.moments.len() - imported, ..preview })
 }
 
 #[tauri::command(rename = "createProject", rename_all = "camelCase")]
@@ -3535,6 +4154,10 @@ pub fn run() {
             reveal_managed_file,
             export_backup,
             restore_backup,
+            preview_project_package,
+            export_project_package,
+            preview_mobile_review,
+            import_mobile_review,
             retry_storage,
             get_import_status,
             get_diagnostics

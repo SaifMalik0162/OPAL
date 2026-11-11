@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opal.audio/contracts/opal-project/v1.schema.json",
+  "title": "OPAL Project Package v1 manifest",
+  "type": "object",
+  "required": ["format", "formatVersion", "packageId", "snapshotId", "createdAt", "project", "tracks", "transitions", "assets"],
+  "properties": {
+    "format": { "const": "opal-project" },
+    "formatVersion": { "const": 1 },
+    "packageId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9_-]+$" },
+    "snapshotId": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "createdAt": { "type": "integer", "minimum": 0 },
+    "project": {
+      "type": "object",
+      "required": ["id", "title", "description", "createdAt", "updatedAt", "artworkAsset", "note"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9_-]+$" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "description": { "type": "string", "maxLength": 10000 },
+        "createdAt": { "type": "integer", "minimum": 0 },
+        "updatedAt": { "type": "integer", "minimum": 0 },
+        "artworkAsset": { "type": ["string", "null"], "pattern": "^assets/artwork/[a-f0-9]{64}\\.(png|jpg|jpeg|webp)$" },
+        "note": { "$ref": "#/$defs/note" }
+      },
+      "additionalProperties": false
+    },
+    "tracks": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/track" } },
+    "transitions": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/transition" } },
+    "assets": { "type": "array", "maxItems": 20000, "items": { "$ref": "#/$defs/asset" } }
+  },
+  "$defs": {
+    "note": {
+      "type": ["object", "null"],
+      "required": ["id", "text", "updatedAt"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "text": { "type": "string", "maxLength": 10000 },
+        "updatedAt": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "moment": {
+      "type": "object",
+      "required": ["id", "trackId", "lineageId", "timeMs", "state", "text", "isResolved", "parentId", "createdAt", "updatedAt"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9_-]+$" },
+        "trackId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9_-]+$" },
+        "lineageId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9_-]+$" },
+        "timeMs": { "type": "integer", "minimum": 0 },
+        "state": { "enum": ["keep", "change", "question", "idea"] },
+        "text": { "type": "string", "maxLength": 10000 },
+        "isResolved": { "type": "boolean" },
+        "parentId": { "type": ["string", "null"], "pattern": "^[A-Za-z0-9_-]+$" },
+        "createdAt": { "type": "integer", "minimum": 0 },
+        "updatedAt": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "track": {
+      "type": "object",
+      "required": ["id", "groupId", "groupTitle", "title", "sourceTitle", "position", "versionName", "versionPosition", "isCurrent", "durationMs", "format", "assetPath", "sha256", "sizeBytes", "note", "moments"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9_-]+$" },
+        "groupId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9_-]+$" },
+        "groupTitle": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "sourceTitle": { "type": "string", "maxLength": 512 },
+        "position": { "type": "integer", "minimum": 0 },
+        "versionName": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "versionPosition": { "type": "integer", "minimum": 0 },
+        "isCurrent": { "type": "boolean" },
+        "durationMs": { "type": "integer", "minimum": 0 },
+        "format": { "enum": ["WAV", "MP3", "FLAC", "AIFF", "AIF", "M4A"] },
+        "assetPath": { "type": "string", "pattern": "^assets/audio/[a-f0-9]{64}\\.(wav|mp3|flac|aiff|aif|m4a)$" },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "sizeBytes": { "type": "integer", "minimum": 1 },
+        "note": { "$ref": "#/$defs/note" },
+        "moments": { "type": "array", "maxItems": 100000, "items": { "$ref": "#/$defs/moment" } }
+      },
+      "additionalProperties": false
+    },
+    "transition": {
+      "type": "object",
+      "required": ["id", "projectId", "fromGroupId", "toGroupId", "gapMs", "note", "updatedAt"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9_-]+$" },
+        "projectId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9_-]+$" },
+        "fromGroupId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9_-]+$" },
+        "toGroupId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9_-]+$" },
+        "gapMs": { "type": "integer", "minimum": 0, "maximum": 600000 },
+        "note": { "type": "string", "maxLength": 10000 },
+        "updatedAt": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "asset": {
+      "type": "object",
+      "required": ["path", "role", "sha256", "sizeBytes", "mimeType"],
+      "properties": {
+        "path": { "type": "string", "pattern": "^assets/(audio|artwork)/[a-f0-9]{64}\\.[a-z0-9]{1,8}$" },
+        "role": { "enum": ["audio", "artwork"] },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "sizeBytes": { "type": "integer", "minimum": 1 },
+        "mimeType": { "type": "string", "minLength": 1, "maxLength": 128 }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": { "properties": { "role": { "const": "audio" } }, "required": ["role"] },
+          "then": { "properties": { "path": { "pattern": "^assets/audio/[a-f0-9]{64}\\.(wav|mp3|flac|aiff|aif|m4a)$" } } }
+        },
+        {
+          "if": { "properties": { "role": { "const": "artwork" } }, "required": ["role"] },
+          "then": { "properties": { "path": { "pattern": "^assets/artwork/[a-f0-9]{64}\\.(png|jpg|jpeg|webp)$" } } }
+        }
+      ]
+    }
+  },
+  "additionalProperties": false
+}

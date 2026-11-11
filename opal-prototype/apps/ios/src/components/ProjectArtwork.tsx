@@ -9,13 +9,13 @@ const artwork = [
 ];
 
 type Props = {
-  project: Pick<Project, 'artworkIndex'>;
+  project: Pick<Project, 'artworkIndex'> & Partial<Pick<Project, 'artworkUri'>>;
   size: number;
   style?: StyleProp<ViewStyle>;
 };
 
 export function ProjectArtwork({ project, size, style }: Props) {
-  const source = artwork[Math.abs(project.artworkIndex) % artwork.length];
+  const source = project.artworkUri ? { uri: project.artworkUri } : artwork[Math.abs(project.artworkIndex) % artwork.length];
   return (
     <View style={[styles.frame, { width: size, height: size }, style]}>
       <Image source={source} resizeMode="cover" style={StyleSheet.absoluteFill} />

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opal.audio/contracts/opal-review/v1.schema.json",
+  "title": "OPAL Review Export v1",
+  "type": "object",
+  "required": ["format", "formatVersion", "packageId", "snapshotId", "projectId", "exportedAt", "moments"],
+  "properties": {
+    "format": { "const": "opal-review" },
+    "formatVersion": { "const": 1 },
+    "packageId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9_-]+$" },
+    "snapshotId": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "projectId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9_-]+$" },
+    "exportedAt": { "type": "integer", "minimum": 0 },
+    "moments": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": { "$ref": "../opal-project/v1.schema.json#/$defs/moment" }
+    }
+  },
+  "additionalProperties": false
+}

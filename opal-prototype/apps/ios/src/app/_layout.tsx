@@ -35,6 +35,7 @@ function RootNavigator() {
         <Stack.Screen name="projects" />
         <Stack.Screen name="project/[id]" />
         <Stack.Screen name="now-playing" options={{ animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="settings" />
       </Stack>
     </View>
   );

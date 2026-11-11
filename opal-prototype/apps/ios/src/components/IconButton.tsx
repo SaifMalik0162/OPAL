@@ -2,7 +2,7 @@ import { Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-nat
 import { SymbolView, type AndroidSymbol, type SFSymbol } from 'expo-symbols';
 import { palette } from '../constants/theme';
 
-export type OpalIcon = 'back' | 'add' | 'play' | 'pause' | 'next' | 'previous' | 'bookmark' | 'folder' | 'more' | 'close' | 'check' | 'music' | 'search' | 'waveform' | 'open' | 'chevronDown';
+export type OpalIcon = 'back' | 'add' | 'play' | 'pause' | 'next' | 'previous' | 'bookmark' | 'folder' | 'more' | 'close' | 'check' | 'music' | 'search' | 'waveform' | 'open' | 'chevronDown' | 'settings' | 'import' | 'trash' | 'refresh';
 
 const symbols: Record<OpalIcon, { ios: SFSymbol; android: AndroidSymbol }> = {
   back: { ios: 'chevron.left', android: 'arrow_back' },
@@ -21,6 +21,10 @@ const symbols: Record<OpalIcon, { ios: SFSymbol; android: AndroidSymbol }> = {
   waveform: { ios: 'waveform', android: 'graphic_eq' },
   open: { ios: 'arrow.up.right', android: 'arrow_outward' },
   chevronDown: { ios: 'chevron.down', android: 'arrow_drop_down' },
+  settings: { ios: 'gearshape', android: 'settings' },
+  import: { ios: 'square.and.arrow.down', android: 'file_download' },
+  trash: { ios: 'trash', android: 'delete' },
+  refresh: { ios: 'arrow.clockwise', android: 'refresh' },
 };
 
 type Props = {

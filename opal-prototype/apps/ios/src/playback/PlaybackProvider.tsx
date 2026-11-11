@@ -19,7 +19,9 @@ export type PlaybackSnapshot = {
 type PlaybackActions = {
   playQueue: (tracks: Track[], index: number) => Promise<void>;
   playMoment: (tracks: Track[], trackId: string, positionMs: number) => Promise<void>;
+  selectVersion: (track: Track) => Promise<void>;
   toggle: () => void;
+  stop: () => Promise<void>;
   skip: (direction: -1 | 1) => void;
   seek: (positionMs: number) => Promise<void>;
   capturePosition: () => number;
@@ -191,12 +193,27 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   loadTrackRef.current = loadTrack;
 
   const playQueue = useCallback(async (tracks: Track[], index: number) => {
-    if (tracks[index]) await loadTrack(tracks, index, 0, true);
+    const queue = currentVersionQueue(tracks);
+    if (queue[index]) await loadTrack(queue, index, 0, true);
   }, [loadTrack]);
 
   const playMoment = useCallback(async (tracks: Track[], trackId: string, positionMs: number) => {
-    const index = tracks.findIndex((track) => track.id === trackId);
-    if (index >= 0) await loadTrack(tracks, index, positionMs, true);
+    const queue = currentVersionQueue(tracks, trackId);
+    const index = queue.findIndex((track) => track.id === trackId);
+    if (index >= 0) await loadTrack(queue, index, positionMs, true);
+  }, [loadTrack]);
+
+  const selectVersion = useCallback(async (track: Track) => {
+    const current = snapshotRef.current;
+    if (!current.track || current.track.id === track.id || current.track.groupId !== track.groupId) return;
+    const nextQueue = [...current.queue];
+    const index = nextQueue.findIndex((item) => item.groupId === track.groupId);
+    if (index < 0) return;
+    nextQueue[index] = track;
+    const positionMs = playerRef.current
+      ? Math.max(0, Math.round(playerRef.current.currentTime * 1000))
+      : current.positionMs;
+    await loadTrack(nextQueue, index, positionMs, current.playing);
   }, [loadTrack]);
 
   const toggle = useCallback(() => {
@@ -223,6 +240,20 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       void loadTrack(current.queue, current.queueIndex, current.positionMs, true);
     }
   }, [db, loadTrack]);
+
+  const stop = useCallback(async () => {
+    loadGenerationRef.current += 1;
+    loadAbortRef.current?.abort();
+    loadAbortRef.current = null;
+    removeSubscription(statusSubscriptionRef.current);
+    statusSubscriptionRef.current = null;
+    disposeAudioPlayer(pendingPlayerRef.current);
+    disposeAudioPlayer(playerRef.current);
+    pendingPlayerRef.current = null;
+    playerRef.current = null;
+    setSnapshot(EMPTY_SNAPSHOT);
+    await savePlaybackBookmark(db, null);
+  }, [db]);
 
   const seek = useCallback(async (positionMs: number) => {
     const player = playerRef.current;
@@ -254,7 +285,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     return player ? Math.max(0, Math.round(player.currentTime * 1000)) : snapshotRef.current.positionMs;
   }, []);
 
-  const actions = useMemo<PlaybackActions>(() => ({ playQueue, playMoment, toggle, skip, seek, capturePosition }), [playQueue, playMoment, toggle, skip, seek, capturePosition]);
+  const actions = useMemo<PlaybackActions>(() => ({ playQueue, playMoment, selectVersion, toggle, stop, skip, seek, capturePosition }), [playQueue, playMoment, selectVersion, toggle, stop, skip, seek, capturePosition]);
 
   useEffect(() => {
     let cancelled = false;
@@ -267,8 +298,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       if (!bookmark || cancelled) return;
       const project = await getProject(db, bookmark.projectId);
       if (!project || cancelled) return;
-      const index = project.tracks.findIndex((track) => track.id === bookmark.trackId);
-      if (index >= 0) await loadTrackRef.current(project.tracks, index, bookmark.positionMs, false);
+      const queue = currentVersionQueue(project.tracks, bookmark.trackId);
+      const index = queue.findIndex((track) => track.id === bookmark.trackId);
+      if (index >= 0) await loadTrackRef.current(queue, index, bookmark.positionMs, false);
     }).catch((error: unknown) => {
       if (!cancelled) {
         setSnapshot((current) => ({
@@ -304,6 +336,19 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       <PlaybackStateContext.Provider value={snapshot}>{children}</PlaybackStateContext.Provider>
     </PlaybackActionsContext.Provider>
   );
+}
+
+function currentVersionQueue(tracks: Track[], selectedTrackId?: string) {
+  const grouped = new Map<string, Track[]>();
+  for (const track of tracks) {
+    const versions = grouped.get(track.groupId) ?? [];
+    versions.push(track);
+    grouped.set(track.groupId, versions);
+  }
+  return [...grouped.values()]
+    .map((versions) => versions.find((track) => track.id === selectedTrackId) ?? versions.find((track) => track.isCurrent) ?? versions[0])
+    .filter((track): track is Track => Boolean(track))
+    .sort((left, right) => left.position - right.position || left.createdAt - right.createdAt);
 }
 
 export function usePlaybackState() {

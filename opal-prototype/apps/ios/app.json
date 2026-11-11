@@ -12,6 +12,41 @@
       "bundleIdentifier": "com.opal.library.mobile",
       "buildNumber": "1",
       "supportsTablet": false,
+      "infoPlist": {
+        "LSSupportsOpeningDocumentsInPlace": false,
+        "CFBundleDocumentTypes": [
+          {
+            "CFBundleTypeName": "OPAL Project",
+            "LSHandlerRank": "Owner",
+            "LSItemContentTypes": ["com.opal.project"]
+          },
+          {
+            "CFBundleTypeName": "OPAL Review Export",
+            "LSHandlerRank": "Owner",
+            "LSItemContentTypes": ["com.opal.review"]
+          }
+        ],
+        "UTExportedTypeDeclarations": [
+          {
+            "UTTypeIdentifier": "com.opal.project",
+            "UTTypeDescription": "OPAL Project Package",
+            "UTTypeConformsTo": ["public.zip-archive"],
+            "UTTypeTagSpecification": {
+              "public.filename-extension": ["opalproject"],
+              "public.mime-type": "application/vnd.opal.project"
+            }
+          },
+          {
+            "UTTypeIdentifier": "com.opal.review",
+            "UTTypeDescription": "OPAL Review Export",
+            "UTTypeConformsTo": ["public.json"],
+            "UTTypeTagSpecification": {
+              "public.filename-extension": ["opalreview"],
+              "public.mime-type": "application/vnd.opal.review+json"
+            }
+          }
+        ]
+      },
       "icon": "./assets/OPAL.icon"
     },
     "android": {

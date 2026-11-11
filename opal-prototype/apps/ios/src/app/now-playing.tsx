@@ -24,12 +24,13 @@ import { headingFont, palette } from '../constants/theme';
 
 export default function NowPlayingScreen() {
   const { track, playing, loading, positionMs, durationMs, error, queue, queueIndex } = usePlaybackState();
-  const { capturePosition, playMoment, seek, skip, toggle } = usePlaybackActions();
-  const { createMoment, getMoments, getProject, revision } = useLibrary();
+  const { capturePosition, playMoment, seek, selectVersion, skip, toggle } = usePlaybackActions();
+  const { createMoment, getMoments, getProject, revision, setCurrentVersion } = useLibrary();
   const [details, setDetails] = useState<{ trackId: string; project: ProjectWithTracks | null; moments: Moment[] } | null>(null);
   const [scrubValue, setScrubValue] = useState(0);
   const [scrubbing, setScrubbing] = useState(false);
   const [momentOpen, setMomentOpen] = useState(false);
+  const [versionsOpen, setVersionsOpen] = useState(false);
   const [momentTarget, setMomentTarget] = useState<{ trackId: string; projectId: string; timeMs: number } | null>(null);
   const [momentText, setMomentText] = useState('');
   const [savingMoment, setSavingMoment] = useState(false);
@@ -50,6 +51,8 @@ export default function NowPlayingScreen() {
 
   const project = details?.trackId === currentTrackId ? details.project : null;
   const moments = details?.trackId === currentTrackId ? details.moments : [];
+  const versions = project?.tracks.filter((item) => item.groupId === track?.groupId).sort((left, right) => left.versionPosition - right.versionPosition) ?? [];
+  const currentVersion = versions.find((item) => item.isCurrent) ?? track;
 
   const openMoment = () => {
     if (!track) return;
@@ -109,11 +112,18 @@ export default function NowPlayingScreen() {
 
         <View style={styles.trackHeading}>
           <View style={styles.trackTitleWrap}>
-            <Text style={styles.trackTitle} numberOfLines={2}>{track.title}</Text>
-            <Text style={styles.trackSubtitle}>{track.projectTitle} <Text style={styles.subtitleDot}>·</Text> {track.format}</Text>
+            <Text style={styles.trackTitle} numberOfLines={2}>{track.groupTitle || track.title}</Text>
+            <Text style={styles.trackSubtitle}>{track.versionName} <Text style={styles.subtitleDot}>·</Text> {track.projectTitle} <Text style={styles.subtitleDot}>·</Text> {track.format}</Text>
           </View>
           <View style={styles.localBadge}><View style={styles.localDot} /><Text style={styles.localText}>OFFLINE</Text></View>
         </View>
+
+        {versions.length > 1 && <Pressable onPress={() => setVersionsOpen(true)} style={({ pressed }) => [styles.versionPicker, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={`Choose mix version. Listening to ${track.versionName}. Project current mix is ${currentVersion?.versionName ?? 'unavailable'}`}>
+          <View style={styles.versionPickerIcon}><IconGlyph icon="waveform" size={15} color={palette.lavenderBright} /></View>
+          <View style={styles.versionPickerCopy}><Text style={styles.versionPickerLabel}>LISTENING TO</Text><Text style={styles.versionPickerName} numberOfLines={1}>{track.versionName}</Text></View>
+          <View style={styles.currentMixCopy}><Text style={styles.currentMixLabel}>PROJECT CURRENT</Text><Text style={styles.currentMixName} numberOfLines={1}>{currentVersion?.versionName ?? 'Unknown'}</Text></View>
+          <IconGlyph icon="chevronDown" size={14} color={palette.secondary} />
+        </Pressable>}
 
         <View style={styles.scrubber}>
           <Slider
@@ -193,6 +203,36 @@ export default function NowPlayingScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <Modal visible={versionsOpen} transparent animationType="slide" onRequestClose={() => setVersionsOpen(false)}>
+        <View style={styles.versionModalRoot}>
+          <Pressable style={styles.scrim} onPress={() => setVersionsOpen(false)} />
+          <View style={styles.versionModalCard}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalEyebrow}>COMPARE MIXES</Text>
+            <Text style={styles.versionModalTitle}>{track.groupTitle || track.title}</Text>
+            <Text style={styles.modalCopy}>Switching keeps this time and playback state. Make a mix current as a separate choice.</Text>
+            {versions.map((version) => (
+              <View key={version.id} style={styles.versionOptionRow}>
+                <Pressable
+                  onPress={() => { setVersionsOpen(false); void selectVersion(version); }}
+                  style={({ pressed }) => [styles.versionOption, version.id === track.id && styles.versionOptionSelected, pressed && styles.pressed]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: version.id === track.id }}
+                  accessibilityLabel={`Listen to ${version.versionName}${version.isCurrent ? ', project current' : ''}${version.id === track.id ? ', now playing' : ''}`}
+                >
+                  <View style={styles.versionOptionIndicator}>{version.id === track.id ? <IconGlyph icon="play" size={12} color={palette.background} /> : <View style={styles.versionOptionDot} />}</View>
+                  <View style={styles.versionOptionCopy}><Text style={styles.versionOptionName} numberOfLines={1}>{version.versionName}</Text><Text style={styles.versionOptionMeta}>{formatTime(version.durationMs)}{version.isCurrent ? ' · PROJECT CURRENT' : ''}</Text></View>
+                  {version.id === track.id && <Text style={styles.nowPlayingTag}>HEARD NOW</Text>}
+                </Pressable>
+                {!version.isCurrent && <Pressable onPress={() => void setCurrentVersion(version.projectId, version.id)} style={styles.promoteButton} accessibilityRole="button" accessibilityLabel={`Make ${version.versionName} the project current mix`}><Text style={styles.promoteText}>Make current</Text></Pressable>}
+                {version.isCurrent && <Text style={styles.currentTag}>CURRENT</Text>}
+              </View>
+            ))}
+            <Pressable onPress={() => setVersionsOpen(false)} style={styles.versionDoneButton} accessibilityRole="button" accessibilityLabel="Close mix comparison"><Text style={styles.versionDoneText}>Done</Text></Pressable>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -222,6 +262,14 @@ const styles = StyleSheet.create({
   trackTitle: { color: palette.text, fontFamily: headingFont, fontSize: 25, letterSpacing: -0.5 },
   trackSubtitle: { color: palette.secondary, fontSize: 12 },
   subtitleDot: { color: palette.lavender },
+  versionPicker: { width: '100%', maxWidth: 390, minHeight: 59, flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 15, paddingHorizontal: 11, paddingVertical: 8, borderWidth: 1, borderColor: 'rgba(224,233,250,0.22)', borderRadius: 17, backgroundColor: 'rgba(180,198,230,0.11)' },
+  versionPickerIcon: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: 'rgba(214,224,245,0.12)' },
+  versionPickerCopy: { flex: 1, minWidth: 0, gap: 3 },
+  versionPickerLabel: { color: palette.muted, fontSize: 7, letterSpacing: 1.2, fontWeight: '700' },
+  versionPickerName: { color: palette.text, fontSize: 11, fontWeight: '600' },
+  currentMixCopy: { alignItems: 'flex-end', maxWidth: 92, gap: 3 },
+  currentMixLabel: { color: palette.muted, fontSize: 6, letterSpacing: 0.8, fontWeight: '700' },
+  currentMixName: { color: palette.lavenderBright, fontSize: 9, fontWeight: '600' },
   localBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8, paddingVertical: 6, borderWidth: 1, borderColor: palette.line, borderRadius: 12 },
   localDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: palette.success },
   localText: { color: palette.secondary, fontSize: 8, letterSpacing: 1, fontWeight: '700' },
@@ -260,6 +308,23 @@ const styles = StyleSheet.create({
   backButton: { marginTop: 19, paddingVertical: 11, paddingHorizontal: 16, borderRadius: 18, backgroundColor: palette.surfaceRaised },
   backButtonText: { color: palette.text, fontSize: 12, fontWeight: '600' },
   modalRoot: { flex: 1, justifyContent: 'flex-end' },
+  versionModalRoot: { flex: 1, justifyContent: 'flex-end' },
+  versionModalCard: { maxHeight: '76%', paddingHorizontal: 21, paddingTop: 12, paddingBottom: 25, borderTopWidth: 1, borderColor: 'rgba(239,244,255,0.24)', borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: palette.surface },
+  versionModalTitle: { marginTop: 9, color: palette.text, fontFamily: headingFont, fontSize: 24 },
+  versionOptionRow: { minHeight: 57, flexDirection: 'row', alignItems: 'center', gap: 7, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.line },
+  versionOption: { flex: 1, minHeight: 53, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 5, borderRadius: 13 },
+  versionOptionSelected: { backgroundColor: 'rgba(207,220,250,0.10)' },
+  versionOptionIndicator: { width: 29, height: 29, alignItems: 'center', justifyContent: 'center', borderRadius: 15, backgroundColor: 'rgba(221,231,250,0.15)' },
+  versionOptionDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: palette.secondary },
+  versionOptionCopy: { flex: 1, minWidth: 0, gap: 3 },
+  versionOptionName: { color: palette.text, fontSize: 12, fontWeight: '600' },
+  versionOptionMeta: { color: palette.muted, fontSize: 8, letterSpacing: 0.7 },
+  nowPlayingTag: { color: palette.lavenderBright, fontSize: 7, letterSpacing: 0.7, fontWeight: '700' },
+  currentTag: { color: palette.lavenderBright, fontSize: 7, letterSpacing: 0.7, fontWeight: '700' },
+  promoteButton: { minHeight: 34, justifyContent: 'center', paddingHorizontal: 6 },
+  promoteText: { color: palette.lavenderBright, fontSize: 9, fontWeight: '600' },
+  versionDoneButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center', marginTop: 11, borderRadius: 15, backgroundColor: 'rgba(220,230,250,0.15)' },
+  versionDoneText: { color: palette.text, fontSize: 12, fontWeight: '600' },
   scrim: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(8, 15, 29, 0.72)' },
   modalCard: { paddingHorizontal: 22, paddingTop: 12, paddingBottom: 26, borderTopWidth: 1, borderColor: 'rgba(239,244,255,0.24)', borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: palette.surface },
   modalHandle: { alignSelf: 'center', width: 36, height: 4, marginBottom: 22, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.24)' },

@@ -1,0 +1,46 @@
+{
+  "format": "opal-project",
+  "formatVersion": 1,
+  "packageId": "project-fixture-001",
+  "snapshotId": "90e18cd2de4765f322f23da715e90be0b081d465558e2a1007c29dfae7b111dd",
+  "createdAt": 1794355200000,
+  "project": {
+    "id": "project-fixture-001",
+    "title": "Fixture EP",
+    "description": "Synthetic package fixture",
+    "createdAt": 1794355100000,
+    "updatedAt": 1794355200000,
+    "artworkAsset": null,
+    "note": null
+  },
+  "tracks": [
+    {
+      "id": "mix-fixture-001",
+      "groupId": "song-fixture-001",
+      "groupTitle": "First Light",
+      "title": "First Light v1.wav",
+      "sourceTitle": "First Light v1.wav",
+      "position": 0,
+      "versionName": "Original",
+      "versionPosition": 0,
+      "isCurrent": true,
+      "durationMs": 1200,
+      "format": "WAV",
+      "assetPath": "assets/audio/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.wav",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sizeBytes": 4,
+      "note": null,
+      "moments": []
+    }
+  ],
+  "transitions": [],
+  "assets": [
+    {
+      "path": "assets/audio/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.wav",
+      "role": "audio",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sizeBytes": 4,
+      "mimeType": "audio/wav"
+    }
+  ]
+}
