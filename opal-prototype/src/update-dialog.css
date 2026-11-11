@@ -47,5 +47,16 @@
 .update-available-banner { position: fixed; z-index: 16; top: 74px; left: 50%; display: flex; align-items: center; gap: 8px; padding: 9px 14px; transform: translateX(-50%); border: 1px solid rgba(206, 223, 255, .25); border-radius: 999px; color: #eef3ff; background: linear-gradient(120deg, rgba(78, 105, 154, .9), rgba(95, 83, 143, .88)); box-shadow: 0 9px 28px rgba(6, 13, 31, .23); cursor: pointer; font-size: 12px; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); }
 .settings-update-action > span { margin-left: auto; color: var(--muted); font-size: 10px; }
 
+@media (prefers-reduced-motion: no-preference) {
+  .update-available-banner {
+    animation: update-banner-float 3.6s ease-in-out infinite;
+  }
+}
+
+@keyframes update-banner-float {
+  0%, 100% { transform: translate(-50%, 0); }
+  50% { transform: translate(-50%, -4px); }
+}
+
 @keyframes update-dialog-enter { from { opacity: 0; transform: translateY(9px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @media (prefers-reduced-motion: reduce) { .update-dialog { animation: none; } }
