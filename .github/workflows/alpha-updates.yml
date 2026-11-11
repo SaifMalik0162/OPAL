@@ -167,8 +167,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: opal-prototype/src-tauri -> target
-      - name: Install NSIS
-        run: choco install nsis --yes --no-progress
       - run: npm ci
         working-directory: opal-prototype
       - run: npm run release:windows
