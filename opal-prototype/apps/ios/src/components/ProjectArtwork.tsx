@@ -1,5 +1,6 @@
 import { Image, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import type { Project } from '../data/models';
+import { palette } from '../constants/theme';
 
 const artwork = [
   require('../../assets/images/artwork/slow-light.png'),
@@ -23,5 +24,5 @@ export function ProjectArtwork({ project, size, style }: Props) {
 }
 
 const styles = StyleSheet.create({
-  frame: { overflow: 'hidden', borderRadius: 16, backgroundColor: '#343044' },
+  frame: { overflow: 'hidden', borderRadius: 16, backgroundColor: palette.backgroundSoft },
 });

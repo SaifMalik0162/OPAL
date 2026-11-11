@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { IconButton, IconGlyph } from '../components/IconButton';
+import { AmbientCanvas } from '../components/AmbientCanvas';
 import { ProjectArtwork } from '../components/ProjectArtwork';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLibrary } from '../data/LibraryProvider';
@@ -76,6 +77,7 @@ export default function NowPlayingScreen() {
   if (!track) {
     return (
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+        <AmbientCanvas />
         <View style={styles.topBar}><IconButton icon="back" label="Back to library" onPress={() => router.canGoBack() ? router.back() : router.replace('/')} /><Text style={styles.topLabel}>NOW PLAYING</Text><View style={styles.topSpacer} /></View>
         <View style={styles.emptyState}>
           <ProjectArtwork project={{ artworkIndex: 1 }} size={104} style={styles.emptyArtwork} />
@@ -93,6 +95,7 @@ export default function NowPlayingScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+      <AmbientCanvas />
       <View style={styles.topBar}>
         <IconButton icon="back" label="Back" onPress={() => router.canGoBack() ? router.back() : router.replace('/')} />
         <View style={styles.nowPlayingTitle}><Text style={styles.topLabel}>NOW PLAYING</Text><Text numberOfLines={1} style={styles.topProject}>{track.projectTitle}</Text></View>
@@ -204,7 +207,7 @@ function formatTime(valueMs: number) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: palette.background },
+  safe: { flex: 1, backgroundColor: 'transparent' },
   topBar: { height: 54, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12 },
   nowPlayingTitle: { flex: 1, alignItems: 'center', gap: 3 },
   topLabel: { color: palette.lavender, fontSize: 9, letterSpacing: 2, fontWeight: '700' },
@@ -230,8 +233,8 @@ const styles = StyleSheet.create({
   mainPlay: { width: 65, height: 65, alignItems: 'center', justifyContent: 'center', borderRadius: 33, backgroundColor: palette.lavender },
   mainPlayIcon: { width: 65, height: 65 },
   mainPlayPressed: { transform: [{ scale: 0.96 }], opacity: 0.86 },
-  momentButton: { width: '100%', maxWidth: 390, minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 11, marginTop: 23, paddingVertical: 10, paddingHorizontal: 10, borderWidth: 1, borderColor: 'rgba(200,184,236,0.22)', borderRadius: 18, backgroundColor: 'rgba(200,184,236,0.08)' },
-  momentIcon: { width: 40, height: 40, borderRadius: 13, backgroundColor: 'rgba(200,184,236,0.11)' },
+  momentButton: { width: '100%', maxWidth: 390, minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 11, marginTop: 23, paddingVertical: 10, paddingHorizontal: 10, borderWidth: 1, borderColor: 'rgba(224,233,250,0.24)', borderRadius: 18, backgroundColor: 'rgba(180,198,230,0.12)' },
+  momentIcon: { width: 40, height: 40, borderRadius: 13, backgroundColor: 'rgba(214,224,245,0.14)' },
   momentButtonCopy: { flex: 1, gap: 4 },
   momentButtonTitle: { color: palette.text, fontSize: 13, fontWeight: '600' },
   momentButtonSubtitle: { color: palette.muted, fontSize: 10 },
@@ -257,8 +260,8 @@ const styles = StyleSheet.create({
   backButton: { marginTop: 19, paddingVertical: 11, paddingHorizontal: 16, borderRadius: 18, backgroundColor: palette.surfaceRaised },
   backButtonText: { color: palette.text, fontSize: 12, fontWeight: '600' },
   modalRoot: { flex: 1, justifyContent: 'flex-end' },
-  scrim: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(6,5,10,0.7)' },
-  modalCard: { paddingHorizontal: 22, paddingTop: 12, paddingBottom: 26, borderTopWidth: 1, borderColor: 'rgba(232,222,251,0.2)', borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: palette.surface },
+  scrim: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(8, 15, 29, 0.72)' },
+  modalCard: { paddingHorizontal: 22, paddingTop: 12, paddingBottom: 26, borderTopWidth: 1, borderColor: 'rgba(239,244,255,0.24)', borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: palette.surface },
   modalHandle: { alignSelf: 'center', width: 36, height: 4, marginBottom: 22, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.24)' },
   modalEyebrow: { color: palette.lavender, fontSize: 9, letterSpacing: 1.8, fontWeight: '700' },
   modalTitle: { marginTop: 10, color: palette.text, fontFamily: headingFont, fontSize: 27 },

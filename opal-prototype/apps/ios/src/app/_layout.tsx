@@ -1,11 +1,11 @@
-import { usePathname, Stack } from 'expo-router';
+import { Stack } from 'expo-router';
+import { StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SQLiteProvider } from 'expo-sqlite';
 import { LibraryProvider } from '../data/LibraryProvider';
 import { initializeDatabase } from '../data/database';
 import { PlaybackProvider } from '../playback/PlaybackProvider';
-import { MiniPlayer } from '../components/MiniPlayer';
 import { palette } from '../constants/theme';
 
 export default function RootLayout() {
@@ -23,11 +23,8 @@ export default function RootLayout() {
 }
 
 function RootNavigator() {
-  const pathname = usePathname();
-  const isNowPlaying = pathname === '/now-playing';
-
   return (
-    <>
+    <View style={styles.root}>
       <StatusBar style="light" />
       <Stack screenOptions={{
         headerShown: false,
@@ -35,10 +32,14 @@ function RootNavigator() {
         animation: 'fade_from_bottom',
       }}>
         <Stack.Screen name="index" />
+        <Stack.Screen name="projects" />
         <Stack.Screen name="project/[id]" />
         <Stack.Screen name="now-playing" options={{ animation: 'slide_from_bottom' }} />
       </Stack>
-      {!isNowPlaying && <MiniPlayer />}
-    </>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: palette.background },
+});

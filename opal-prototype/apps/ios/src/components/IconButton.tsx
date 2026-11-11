@@ -2,7 +2,7 @@ import { Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-nat
 import { SymbolView, type AndroidSymbol, type SFSymbol } from 'expo-symbols';
 import { palette } from '../constants/theme';
 
-export type OpalIcon = 'back' | 'add' | 'play' | 'pause' | 'next' | 'previous' | 'bookmark' | 'folder' | 'more' | 'close' | 'check' | 'music';
+export type OpalIcon = 'back' | 'add' | 'play' | 'pause' | 'next' | 'previous' | 'bookmark' | 'folder' | 'more' | 'close' | 'check' | 'music' | 'search' | 'waveform' | 'open' | 'chevronDown';
 
 const symbols: Record<OpalIcon, { ios: SFSymbol; android: AndroidSymbol }> = {
   back: { ios: 'chevron.left', android: 'arrow_back' },
@@ -17,6 +17,10 @@ const symbols: Record<OpalIcon, { ios: SFSymbol; android: AndroidSymbol }> = {
   close: { ios: 'xmark', android: 'close' },
   check: { ios: 'checkmark', android: 'check' },
   music: { ios: 'music.note', android: 'music_note' },
+  search: { ios: 'magnifyingglass', android: 'search' },
+  waveform: { ios: 'waveform', android: 'graphic_eq' },
+  open: { ios: 'arrow.up.right', android: 'arrow_outward' },
+  chevronDown: { ios: 'chevron.down', android: 'arrow_drop_down' },
 };
 
 type Props = {

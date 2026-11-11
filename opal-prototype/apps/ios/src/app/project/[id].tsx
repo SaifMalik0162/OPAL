@@ -13,6 +13,9 @@ import {
   View,
 } from 'react-native';
 import { IconButton, IconGlyph } from '../../components/IconButton';
+import { AmbientCanvas } from '../../components/AmbientCanvas';
+import { BottomTabBar } from '../../components/BottomTabBar';
+import { MiniPlayer } from '../../components/MiniPlayer';
 import { ProjectArtwork } from '../../components/ProjectArtwork';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLibrary } from '../../data/LibraryProvider';
@@ -72,20 +75,24 @@ export default function ProjectScreen() {
   };
 
   if (loading) {
-    return <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}><View style={styles.loading}><ActivityIndicator color={palette.lavender} /></View></SafeAreaView>;
+    return <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}><AmbientCanvas /><View style={styles.loading}><ActivityIndicator color={palette.lavender} /></View><BottomTabBar /><MiniPlayer /></SafeAreaView>;
   }
 
   if (!project) {
     return (
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+        <AmbientCanvas />
         <View style={styles.topBar}><IconButton icon="back" label="Back to projects" onPress={() => router.back()} /></View>
         <View style={styles.missing}><Text style={styles.missingTitle}>Project unavailable</Text><Text style={styles.missingCopy}>It may have been removed from this device.</Text></View>
+        <BottomTabBar />
+        <MiniPlayer />
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+      <AmbientCanvas />
       <View style={styles.topBar}>
         <IconButton icon="back" label="Back to projects" onPress={() => router.back()} />
         <Text style={styles.topLabel}>PROJECT</Text>
@@ -128,6 +135,8 @@ export default function ProjectScreen() {
           </View>
         }
       />
+      <BottomTabBar />
+      <MiniPlayer />
 
       <Modal visible={renameOpen} transparent animationType="fade" onRequestClose={() => setRenameOpen(false)}>
         <View style={styles.modalRoot}>
@@ -167,10 +176,10 @@ function formatBytes(bytes: number) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: palette.background },
+  safe: { flex: 1, backgroundColor: 'transparent' },
   topBar: { height: 54, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12 },
   topLabel: { color: palette.muted, fontSize: 9, letterSpacing: 2.2, fontWeight: '700' },
-  listContent: { paddingHorizontal: 21, paddingBottom: 155 },
+  listContent: { paddingHorizontal: 21, paddingBottom: 164 },
   projectHero: { minHeight: 141, flexDirection: 'row', alignItems: 'center', gap: 18, paddingTop: 13, paddingBottom: 28, borderBottomWidth: 1, borderBottomColor: palette.line },
   heroArtwork: { borderRadius: 21 },
   heroCopy: { flex: 1, gap: 7 },
@@ -191,10 +200,10 @@ const styles = StyleSheet.create({
   trackCopy: { flex: 1, minWidth: 0, gap: 5 },
   trackTitle: { color: palette.text, fontSize: 14, fontWeight: '600' },
   trackMeta: { color: palette.muted, fontSize: 10, letterSpacing: 0.4 },
-  trackPlay: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 18, backgroundColor: 'rgba(200,184,236,0.09)' },
+  trackPlay: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 18, backgroundColor: 'rgba(207, 221, 247, 0.13)' },
   trackPlayButton: { width: 36, height: 36 },
   emptyTracks: { alignItems: 'center', paddingHorizontal: 22, paddingTop: 30, paddingBottom: 28, borderTopWidth: 1, borderTopColor: palette.line },
-  emptyIcon: { width: 56, height: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 28, borderWidth: 1, borderColor: 'rgba(200,184,236,0.18)', backgroundColor: 'rgba(200,184,236,0.08)' },
+  emptyIcon: { width: 56, height: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 28, borderWidth: 1, borderColor: 'rgba(231, 239, 255, 0.24)', backgroundColor: 'rgba(207, 221, 247, 0.12)' },
   emptyTitle: { marginTop: 16, color: palette.text, fontFamily: headingFont, fontSize: 23 },
   emptyCopy: { maxWidth: 290, marginTop: 8, color: palette.secondary, fontSize: 13, lineHeight: 20, textAlign: 'center' },
   emptyImport: { marginTop: 18, paddingVertical: 12, paddingHorizontal: 17, borderRadius: 22, backgroundColor: palette.lavender },
@@ -204,8 +213,8 @@ const styles = StyleSheet.create({
   missingTitle: { color: palette.text, fontFamily: headingFont, fontSize: 24 },
   missingCopy: { marginTop: 8, color: palette.muted, fontSize: 13 },
   modalRoot: { flex: 1, justifyContent: 'center', paddingHorizontal: 20 },
-  scrim: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(7,6,10,0.74)' },
-  modalCard: { padding: 23, borderWidth: 1, borderColor: 'rgba(232,222,251,0.2)', borderRadius: 24, backgroundColor: palette.surface },
+  scrim: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(8, 15, 29, 0.72)' },
+  modalCard: { padding: 23, borderWidth: 1, borderColor: 'rgba(239,244,255,0.24)', borderRadius: 24, backgroundColor: palette.surface },
   modalEyebrow: { color: palette.lavender, fontSize: 9, letterSpacing: 1.8, fontWeight: '700' },
   modalTitle: { marginTop: 10, color: palette.text, fontFamily: headingFont, fontSize: 26 },
   input: { marginTop: 18, paddingHorizontal: 14, paddingVertical: 13, borderWidth: 1, borderColor: palette.line, borderRadius: 13, color: palette.text, fontSize: 15, backgroundColor: 'rgba(0,0,0,0.12)' },

@@ -1,196 +1,284 @@
+import * as DocumentPicker from 'expo-document-picker';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
-  Alert,
   ActivityIndicator,
+  Alert,
   FlatList,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
+  Image,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
+  useWindowDimensions,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from 'react-native';
-import { ProjectArtwork } from '../components/ProjectArtwork';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { IconButton, IconGlyph } from '../components/IconButton';
+import { AmbientCanvas } from '../components/AmbientCanvas';
+import { BottomTabBar } from '../components/BottomTabBar';
+import { CreateProjectSheet } from '../components/CreateProjectSheet';
+import { MiniPlayer } from '../components/MiniPlayer';
+import { ProjectArtwork } from '../components/ProjectArtwork';
 import { useLibrary } from '../data/LibraryProvider';
 import type { Project } from '../data/models';
 import { headingFont, palette } from '../constants/theme';
 
 export default function LibraryScreen() {
   const router = useRouter();
-  const { projects, loading, createProject } = useLibrary();
+  const { projects, loading, importAudioFiles } = useLibrary();
+  const { width } = useWindowDimensions();
+  const carouselRef = useRef<FlatList<Project> | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
-  const [projectName, setProjectName] = useState('');
-  const [creating, setCreating] = useState(false);
+  const [importing, setImporting] = useState(false);
 
-  const saveProject = async () => {
-    if (!projectName.trim() || creating) return;
-    setCreating(true);
-    try {
-      const id = await createProject(projectName);
-      setProjectName('');
-      setCreateOpen(false);
-      router.push({ pathname: '/project/[id]', params: { id } });
-    } catch (error) {
-      setCreateOpen(false);
-      Alert.alert('Could not create project', error instanceof Error ? error.message : 'Please try again.');
-    } finally {
-      setCreating(false);
-    }
-  };
+  const filteredProjects = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase();
+    return normalized ? projects.filter((project) => project.title.toLocaleLowerCase().includes(normalized)) : projects;
+  }, [projects, query]);
+  const sleeveWidth = Math.min(252, Math.max(222, width - 82));
+  const carouselStep = sleeveWidth + 16;
+  const selectedIndex = Math.max(0, filteredProjects.findIndex((project) => project.id === selectedId));
+  const selectedProject = filteredProjects[selectedIndex] ?? null;
 
   const openProject = (project: Project) => router.push({ pathname: '/project/[id]', params: { id: project.id } });
 
+  const updateQuery = (value: string) => {
+    setQuery(value);
+    const normalized = value.trim().toLocaleLowerCase();
+    const firstMatch = normalized ? projects.find((project) => project.title.toLocaleLowerCase().includes(normalized)) : projects[0];
+    setSelectedId(firstMatch?.id ?? null);
+    carouselRef.current?.scrollToOffset({ offset: 0, animated: false });
+  };
+
+  const moveToProject = (index: number) => {
+    const nextProject = filteredProjects[index];
+    if (!nextProject) return;
+    if (nextProject.id === selectedId) {
+      openProject(nextProject);
+      return;
+    }
+    setSelectedId(nextProject.id);
+    carouselRef.current?.scrollToOffset({ offset: index * carouselStep, animated: true });
+  };
+
+  const selectAtScrollEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const index = Math.min(filteredProjects.length - 1, Math.max(0, Math.round(event.nativeEvent.contentOffset.x / carouselStep)));
+    const nextProject = filteredProjects[index];
+    if (nextProject) setSelectedId(nextProject.id);
+  };
+
+  const importAudio = async () => {
+    if (!selectedProject) {
+      setCreateOpen(true);
+      return;
+    }
+    if (importing) return;
+    setImporting(true);
+    try {
+      const result = await DocumentPicker.getDocumentAsync({ type: 'audio/*', multiple: true, copyToCacheDirectory: true });
+      if (result.canceled) return;
+      const count = await importAudioFiles(selectedProject.id, result.assets);
+      if (count > 0) Alert.alert('Added to project', `${count} ${count === 1 ? 'audio file is' : 'audio files are'} ready to listen to offline.`);
+      else Alert.alert('No new audio added', 'Those audio files are already in this project.');
+    } catch (error) {
+      Alert.alert('Could not import audio', error instanceof Error ? error.message : 'Please try another audio file.');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const createdProject = (id: string) => {
+    setSelectedId(id);
+    router.push({ pathname: '/project/[id]', params: { id } });
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <FlatList
-        data={projects}
-        keyExtractor={(project) => project.id}
-        renderItem={({ item, index }) => <ProjectRow project={item} index={index} onPress={() => openProject(item)} />}
-        contentContainerStyle={styles.listContent}
-        ListHeaderComponent={
-          <View>
-            <View style={styles.topLine}>
-              <View style={styles.brand}>
-                <View style={styles.brandMark}><View style={styles.brandDot} /></View>
-                <Text style={styles.wordmark}>OPAL</Text>
-              </View>
-              <View style={styles.devicePill}><View style={styles.deviceDot} /><Text style={styles.deviceText}>{Platform.OS === 'ios' ? 'ON THIS IPHONE' : 'ON THIS DEVICE'}</Text></View>
-            </View>
+      <AmbientCanvas />
+      <View style={styles.header}>
+        <View style={styles.brand}>
+          <Image source={require('../../assets/OPAL.icon/Assets/opal-mark.png')} style={styles.brandMark} resizeMode="contain" />
+          <Text style={styles.wordmark}>OPAL</Text>
+        </View>
+        <IconButton icon="add" label="Create a new project" onPress={() => setCreateOpen(true)} style={styles.createIcon} />
+      </View>
 
-            <View style={styles.headingRow}>
-              <View style={styles.headingCopy}>
-                <Text style={styles.eyebrow}>YOUR LISTENING ROOM</Text>
-                <Text style={styles.heading}>Projects</Text>
-              </View>
-              <Pressable onPress={() => setCreateOpen(true)} style={({ pressed }) => [styles.createButton, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel="Create project">
-                <Text style={styles.createPlus}>＋</Text>
-                <Text style={styles.createText}>New project</Text>
-              </Pressable>
-            </View>
+      <View style={styles.searchField}>
+        <IconGlyph icon="search" size={17} color={palette.secondary} />
+        <TextInput
+          value={query}
+          onChangeText={updateQuery}
+          placeholder="Search your library"
+          placeholderTextColor={palette.muted}
+          returnKeyType="search"
+          clearButtonMode="while-editing"
+          style={styles.searchInput}
+          accessibilityLabel="Search projects"
+        />
+      </View>
 
-            <Text style={styles.intro}>A private space for the records you are shaping.</Text>
-          </View>
-        }
-        ListEmptyComponent={
-          loading ? (
-            <View style={styles.loading}><ActivityIndicator color={palette.lavender} /><Text style={styles.loadingText}>Opening your library</Text></View>
-          ) : (
-            <View style={styles.emptyCard}>
-              <ProjectArtwork project={{ artworkIndex: 0 }} size={76} style={styles.emptyArtwork} />
-              <Text style={styles.emptyEyebrow}>MADE FOR THE IN-BETWEEN</Text>
-              <Text style={styles.emptyTitle}>A little room to listen.</Text>
-              <Text style={styles.emptyDescription}>Bring a song into OPAL, take it offline, and save the exact moments you want to revisit.</Text>
-              <Pressable onPress={() => setCreateOpen(true)} style={({ pressed }) => [styles.emptyAction, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel="Create project">
-                <Text style={styles.emptyActionText}>Create your first project</Text>
-              </Pressable>
-              <Text style={styles.localNote}>Your library stays on this device.</Text>
-            </View>
-          )
-        }
-        ListFooterComponent={projects.length ? <Text style={styles.footerNote}>Your music and notes are stored on this device.</Text> : undefined}
-        showsVerticalScrollIndicator={false}
-      />
+      <View style={styles.content}>
+        <View style={styles.libraryLabel}>
+          <Text style={styles.eyebrow}>LIBRARY</Text>
+          <Text style={styles.projectCount}>{filteredProjects.length} {filteredProjects.length === 1 ? 'PROJECT' : 'PROJECTS'}</Text>
+        </View>
 
-      <Modal visible={createOpen} transparent animationType="fade" onRequestClose={() => setCreateOpen(false)}>
-        <KeyboardAvoidingView style={styles.modalRoot} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <Pressable style={styles.scrim} onPress={() => setCreateOpen(false)} />
-          <View style={styles.modalCard}>
-            <Text style={styles.modalEyebrow}>A NEW LISTENING ROOM</Text>
-            <Text style={styles.modalTitle}>Name this project</Text>
-            <TextInput
-              autoFocus
-              value={projectName}
-              onChangeText={setProjectName}
-              onSubmitEditing={() => void saveProject()}
-              returnKeyType="done"
-              placeholder="For example, Blue Hour"
-              placeholderTextColor={palette.muted}
-              maxLength={80}
-              style={styles.input}
-              accessibilityLabel="Project name"
+        {loading ? (
+          <View style={styles.loading}><ActivityIndicator color={palette.lavenderBright} /><Text style={styles.loadingText}>Opening your library</Text></View>
+        ) : filteredProjects.length ? (
+          <>
+            <FlatList
+              ref={carouselRef}
+              horizontal
+              data={filteredProjects}
+              keyExtractor={(project) => project.id}
+              renderItem={({ item, index }) => (
+                <SleeveCard
+                  project={item}
+                  width={sleeveWidth}
+                  selected={item.id === selectedProject?.id}
+                  side={index < selectedIndex ? 'left' : 'right'}
+                  onPress={() => moveToProject(index)}
+                />
+              )}
+              style={[styles.carousel, { height: sleeveWidth + 84 }]}
+              contentContainerStyle={{ paddingHorizontal: Math.max(0, (width - carouselStep) / 2) }}
+              showsHorizontalScrollIndicator={false}
+              snapToInterval={carouselStep}
+              decelerationRate="fast"
+              disableIntervalMomentum
+              onMomentumScrollEnd={selectAtScrollEnd}
+              getItemLayout={(_, index) => ({ length: carouselStep, offset: carouselStep * index, index })}
+              initialNumToRender={3}
+              windowSize={3}
+              extraData={`${selectedProject?.id ?? ''}:${sleeveWidth}`}
+              accessibilityLabel="Project artwork carousel"
             />
-            <View style={styles.modalActions}>
-              <Pressable onPress={() => setCreateOpen(false)} style={styles.cancelButton} accessibilityRole="button" accessibilityLabel="Cancel project creation"><Text style={styles.cancelText}>Cancel</Text></Pressable>
-              <Pressable disabled={!projectName.trim() || creating} onPress={() => void saveProject()} style={[styles.saveButton, (!projectName.trim() || creating) && styles.disabled]} accessibilityRole="button" accessibilityLabel="Create project">
-                {creating ? <ActivityIndicator color={palette.background} /> : <Text style={styles.saveText}>Create project</Text>}
-              </Pressable>
-            </View>
+            {selectedProject && (
+              <>
+                <View style={styles.caption}>
+                  <Text style={styles.captionMeta}>{formatTrackCount(selectedProject.trackCount)} <Text style={styles.captionDot}>·</Text> {formatDuration(selectedProject.durationMs)} <Text style={styles.captionArrow}>↗</Text></Text>
+                </View>
+                <View style={styles.actions}>
+                  <Pressable onPress={() => openProject(selectedProject)} style={({ pressed }) => [styles.openButton, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={`Open project ${selectedProject.title}`}>
+                    <Text style={styles.openText}>Open project</Text>
+                    <IconGlyph icon="open" size={14} color={palette.background} />
+                  </Pressable>
+                  <Pressable onPress={() => void importAudio()} disabled={importing} style={({ pressed }) => [styles.importButton, pressed && styles.pressed, importing && styles.disabled]} accessibilityRole="button" accessibilityLabel="Import audio into selected project">
+                    {importing ? <ActivityIndicator size="small" color={palette.text} /> : <IconGlyph icon="add" size={16} color={palette.text} />}
+                    <Text style={styles.importText}>{importing ? 'Adding' : 'Add songs'}</Text>
+                  </Pressable>
+                </View>
+              </>
+            )}
+          </>
+        ) : projects.length ? (
+          <View style={styles.noResults}>
+            <IconGlyph icon="search" size={25} color={palette.lavender} />
+            <Text style={styles.emptyTitle}>No matches yet.</Text>
+            <Text style={styles.emptyCopy}>Try another project name.</Text>
           </View>
-        </KeyboardAvoidingView>
-      </Modal>
+        ) : (
+          <View style={styles.emptyState}>
+            <ProjectArtwork project={{ artworkIndex: 1 }} size={116} style={styles.emptyArtwork} />
+            <Text style={styles.emptyEyebrow}>A PLACE FOR THE NEXT VERSION</Text>
+            <Text style={styles.emptyTitle}>Start with a project.</Text>
+            <Text style={styles.emptyCopy}>Bring a bounce in from Files, then keep the listening notes and versions together.</Text>
+            <Pressable onPress={() => setCreateOpen(true)} style={({ pressed }) => [styles.openButton, styles.emptyAction, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel="Create your first project">
+              <IconGlyph icon="add" size={16} color={palette.background} />
+              <Text style={styles.openText}>Create project</Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
+
+      <CreateProjectSheet visible={createOpen} onClose={() => setCreateOpen(false)} onCreated={createdProject} />
+      <BottomTabBar />
+      <MiniPlayer />
     </SafeAreaView>
   );
 }
 
-function ProjectRow({ project, index, onPress }: { project: Project; index: number; onPress: () => void }) {
-  const latest = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(project.updatedAt));
+function SleeveCard({ project, width, selected, side, onPress }: { project: Project; width: number; selected: boolean; side: 'left' | 'right'; onPress: () => void }) {
+  const imageSize = width - 16;
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.projectRow, pressed && styles.projectPressed]} accessibilityRole="button" accessibilityLabel={`Open ${project.title}`}>
-      <ProjectArtwork project={project} size={78} style={styles.rowArtwork} />
-      <View style={styles.projectCopy}>
-        <Text style={styles.projectEyebrow}>{index === 0 ? 'RECENT PROJECT' : 'LOCAL PROJECT'}</Text>
-        <Text style={styles.projectTitle} numberOfLines={1}>{project.title}</Text>
-        <Text style={styles.projectMeta}>{project.trackCount === 1 ? '1 song' : `${project.trackCount} songs`} <Text style={styles.metaDot}>·</Text> Updated {latest}</Text>
-      </View>
-      <Text style={styles.chevron}>›</Text>
-    </Pressable>
+    <View style={[styles.carouselItem, { width: width + 16 }]}>
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={`${selected ? 'Open' : 'Select'} project ${project.title}`}
+        style={({ pressed }) => [
+          styles.sleeve,
+          { width, transform: [{ scale: selected ? 1 : 0.84 }, { rotate: selected ? '0deg' : side === 'left' ? '-8deg' : '8deg' }] },
+          selected && styles.sleeveSelected,
+          pressed && styles.pressed,
+        ]}
+      >
+        <ProjectArtwork project={project} size={imageSize} style={styles.sleeveArtwork} />
+        <View style={styles.sleeveMeta}>
+          <Text numberOfLines={1} style={styles.sleeveTitle}>{project.title}</Text>
+          <Text style={styles.sleeveSubtitle}>OPAL PROJECT</Text>
+        </View>
+      </Pressable>
+    </View>
   );
 }
 
+function formatTrackCount(count: number) {
+  return `${count} ${count === 1 ? 'track' : 'tracks'}`;
+}
+
+function formatDuration(durationMs: number) {
+  const totalMinutes = Math.max(0, Math.round(durationMs / 60_000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return hours ? `${hours} hr ${minutes} min` : `${totalMinutes} min`;
+}
+
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: palette.background },
-  listContent: { flexGrow: 1, paddingHorizontal: 22, paddingTop: 12, paddingBottom: 150 },
-  topLine: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  brand: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  brandMark: { width: 23, height: 23, borderWidth: 1.2, borderColor: 'rgba(225,212,250,0.78)', borderRadius: 9, alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '45deg' }] },
-  brandDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: palette.lavenderBright },
-  wordmark: { color: palette.text, fontSize: 13, letterSpacing: 4, fontWeight: '600' },
-  devicePill: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 7, paddingHorizontal: 10, borderWidth: 1, borderColor: palette.line, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.025)' },
-  deviceDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: palette.success },
-  deviceText: { color: palette.secondary, fontSize: 9, letterSpacing: 1.1, fontWeight: '600' },
-  headingRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, marginTop: 42 },
-  headingCopy: { flex: 1 },
-  eyebrow: { color: palette.lavender, fontSize: 10, fontWeight: '600', letterSpacing: 2.1 },
-  heading: { marginTop: 7, color: palette.text, fontFamily: headingFont, fontSize: 42, letterSpacing: -1.6 },
-  intro: { marginTop: 9, marginBottom: 25, color: palette.secondary, fontSize: 14, lineHeight: 21 },
-  createButton: { minHeight: 42, flexDirection: 'row', alignItems: 'center', paddingRight: 14, paddingLeft: 4, borderRadius: 24, backgroundColor: palette.lavender, gap: 4 },
-  createPlus: { width: 35, height: 35, color: palette.background, fontSize: 25, lineHeight: 34, textAlign: 'center' },
-  createText: { color: palette.background, fontSize: 12, fontWeight: '700' },
-  projectRow: { minHeight: 104, flexDirection: 'row', alignItems: 'center', gap: 15, paddingVertical: 12, borderTopWidth: 1, borderTopColor: palette.line },
-  projectPressed: { opacity: 0.7 },
-  rowArtwork: { borderRadius: 15 },
-  projectCopy: { flex: 1, minWidth: 0, gap: 5 },
-  projectEyebrow: { color: palette.lavender, fontSize: 8, letterSpacing: 1.4, fontWeight: '600' },
-  projectTitle: { color: palette.text, fontFamily: headingFont, fontSize: 20, letterSpacing: -0.4 },
-  projectMeta: { color: palette.muted, fontSize: 11 },
-  metaDot: { color: palette.lavender, paddingHorizontal: 4 },
-  chevron: { color: palette.muted, fontSize: 26, paddingHorizontal: 3 },
-  emptyCard: { alignItems: 'flex-start', paddingVertical: 27, paddingHorizontal: 23, borderWidth: 1, borderColor: palette.line, borderRadius: 24, backgroundColor: palette.backgroundSoft },
-  emptyArtwork: { borderRadius: 23, marginBottom: 24 },
-  emptyEyebrow: { color: palette.lavender, fontSize: 9, letterSpacing: 1.9, fontWeight: '700' },
-  emptyTitle: { marginTop: 10, color: palette.text, fontFamily: headingFont, fontSize: 27, letterSpacing: -0.8 },
-  emptyDescription: { marginTop: 9, color: palette.secondary, fontSize: 14, lineHeight: 21 },
-  emptyAction: { marginTop: 20, paddingVertical: 12, paddingHorizontal: 17, borderRadius: 22, backgroundColor: palette.lavender },
-  emptyActionText: { color: palette.background, fontSize: 12, fontWeight: '700' },
-  localNote: { marginTop: 16, color: palette.muted, fontSize: 11 },
-  footerNote: { marginTop: 20, color: palette.muted, fontSize: 11, textAlign: 'center' },
-  loading: { minHeight: 220, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  safe: { flex: 1, backgroundColor: 'transparent' },
+  header: { height: 47, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 19 },
+  brand: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  brandMark: { width: 33, height: 33 },
+  wordmark: { color: palette.text, fontFamily: headingFont, fontSize: 17, letterSpacing: 4.5 },
+  createIcon: { width: 38, height: 38, borderWidth: 1, borderColor: 'rgba(241,245,255,0.28)', borderRadius: 20, backgroundColor: 'rgba(205,216,240,0.15)' },
+  searchField: { height: 42, flexDirection: 'row', alignItems: 'center', gap: 9, marginHorizontal: 19, marginTop: 8, paddingHorizontal: 13, borderWidth: 1, borderColor: 'rgba(236,242,255,0.23)', borderRadius: 22, backgroundColor: 'rgba(220,229,247,0.10)' },
+  searchInput: { flex: 1, minWidth: 0, color: palette.text, fontSize: 12 },
+  content: { flex: 1, paddingTop: 17, paddingBottom: 162 },
+  libraryLabel: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 22, marginBottom: 9 },
+  eyebrow: { color: palette.secondary, fontSize: 9, letterSpacing: 1.9, fontWeight: '700' },
+  projectCount: { color: palette.muted, fontSize: 8, letterSpacing: 1.2, fontWeight: '600' },
+  carousel: { flexGrow: 0, overflow: 'visible' },
+  carouselItem: { alignItems: 'center', justifyContent: 'flex-start', paddingTop: 1 },
+  sleeve: { alignItems: 'center', padding: 7, borderWidth: 1, borderColor: 'rgba(239,244,255,0.36)', borderRadius: 24, backgroundColor: 'rgba(132,150,187,0.58)', shadowColor: '#0C1930', shadowOpacity: 0.32, shadowRadius: 22, shadowOffset: { width: 0, height: 12 }, elevation: 8 },
+  sleeveSelected: { borderColor: 'rgba(246,248,255,0.68)', shadowOpacity: 0.4, shadowRadius: 26 },
+  sleeveArtwork: { borderRadius: 17, borderWidth: 1, borderColor: 'rgba(250,251,255,0.18)' },
+  sleeveMeta: { width: '100%', height: 55, alignItems: 'center', justifyContent: 'center', gap: 3, paddingHorizontal: 8 },
+  sleeveTitle: { maxWidth: '100%', color: palette.text, fontFamily: headingFont, fontSize: 16, letterSpacing: -0.2 },
+  sleeveSubtitle: { color: 'rgba(247,248,255,0.72)', fontSize: 8, letterSpacing: 1.1, fontWeight: '500' },
+  caption: { alignItems: 'center', marginTop: 8, paddingHorizontal: 24 },
+  captionMeta: { color: palette.secondary, fontSize: 12, fontVariant: ['tabular-nums'] },
+  captionDot: { color: palette.lavenderBright },
+  captionArrow: { marginLeft: 4, color: palette.secondary, fontSize: 14 },
+  actions: { flexDirection: 'row', justifyContent: 'center', gap: 9, marginTop: 14, paddingHorizontal: 20 },
+  openButton: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 16, borderRadius: 23, backgroundColor: 'rgba(239,240,255,0.89)' },
+  openText: { color: palette.background, fontSize: 12, fontWeight: '600' },
+  importButton: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, paddingHorizontal: 15, borderWidth: 1, borderColor: 'rgba(238,243,255,0.28)', borderRadius: 23, backgroundColor: 'rgba(225,233,249,0.12)' },
+  importText: { color: palette.text, fontSize: 12, fontWeight: '500' },
+  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', marginHorizontal: 23, marginTop: -25, padding: 23, borderWidth: 1, borderColor: 'rgba(239,244,255,0.22)', borderRadius: 26, backgroundColor: 'rgba(127,145,180,0.20)' },
+  emptyArtwork: { borderRadius: 24 },
+  emptyEyebrow: { marginTop: 22, color: palette.lavenderBright, fontSize: 9, letterSpacing: 1.6, fontWeight: '700', textAlign: 'center' },
+  emptyTitle: { marginTop: 9, color: palette.text, fontFamily: headingFont, fontSize: 27, letterSpacing: -0.6, textAlign: 'center' },
+  emptyCopy: { maxWidth: 270, marginTop: 8, color: palette.secondary, fontSize: 13, lineHeight: 19, textAlign: 'center' },
+  emptyAction: { marginTop: 19 },
+  noResults: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, marginTop: -40 },
+  loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: -40 },
   loadingText: { color: palette.muted, fontSize: 12 },
-  modalRoot: { flex: 1, justifyContent: 'center', paddingHorizontal: 20 },
-  scrim: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(7,6,10,0.74)' },
-  modalCard: { padding: 23, borderWidth: 1, borderColor: 'rgba(232,222,251,0.2)', borderRadius: 24, backgroundColor: palette.surface },
-  modalEyebrow: { color: palette.lavender, fontSize: 9, letterSpacing: 1.8, fontWeight: '700' },
-  modalTitle: { marginTop: 10, color: palette.text, fontFamily: headingFont, fontSize: 26 },
-  input: { marginTop: 18, paddingHorizontal: 14, paddingVertical: 13, borderWidth: 1, borderColor: palette.line, borderRadius: 13, color: palette.text, fontSize: 15, backgroundColor: 'rgba(0,0,0,0.12)' },
-  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 10, marginTop: 18 },
-  cancelButton: { paddingVertical: 12, paddingHorizontal: 14 },
-  cancelText: { color: palette.secondary, fontSize: 13 },
-  saveButton: { minWidth: 122, minHeight: 42, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14, borderRadius: 14, backgroundColor: palette.lavender },
-  saveText: { color: palette.background, fontSize: 12, fontWeight: '700' },
-  disabled: { opacity: 0.45 },
-  pressed: { opacity: 0.76 },
+  pressed: { opacity: 0.76, transform: [{ scale: 0.98 }] },
+  disabled: { opacity: 0.6 },
 });

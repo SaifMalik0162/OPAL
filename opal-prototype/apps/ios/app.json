@@ -18,7 +18,7 @@
       "package": "com.opal.library.mobile",
       "versionCode": 1,
       "adaptiveIcon": {
-        "backgroundColor": "#111018",
+        "backgroundColor": "#2B3B5A",
         "foregroundImage": "./assets/images/opal-icon.png",
         "monochromeImage": "./assets/images/opal-icon.png"
       },
@@ -29,7 +29,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#111018",
+          "backgroundColor": "#2B3B5A",
           "image": "./assets/images/opal-icon.png",
           "imageWidth": 118
         }
