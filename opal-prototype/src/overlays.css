@@ -472,10 +472,13 @@
   position: absolute;
   top: 46px;
   right: 0;
-  width: min(340px, calc(100vw - 32px));
-  padding: 17px;
-  border-radius: 20px;
-  background: rgba(24, 39, 68, .96);
+  width: min(360px, calc(100vw - 32px));
+  padding: 18px;
+  border: 1px solid rgba(220, 232, 255, .2);
+  border-radius: 22px;
+  background: linear-gradient(150deg, rgba(35, 53, 86, .98), rgba(24, 39, 68, .97) 58%, rgba(21, 35, 62, .98));
+  box-shadow: 0 24px 64px rgba(5, 13, 30, .42), inset 0 1px 0 rgba(255, 255, 255, .08);
+  animation: profile-popover-in .18s cubic-bezier(.2, .75, .25, 1) both;
 }
 
 .profile-heading, .popover-footer, .storage-card-heading {
@@ -486,42 +489,46 @@
 }
 
 .profile-heading {
-  padding: 1px 2px 14px;
-  border-bottom: 1px solid var(--line);
+  padding: 1px 2px 13px;
+  border-bottom: 1px solid rgba(224, 234, 255, .13);
 }
 
 .profile-heading h2 {
-  margin: 4px 0 0;
+  margin: 0;
   font-family: Georgia, serif;
-  font-size: 23px;
+  font-size: 25px;
   font-weight: 400;
-  letter-spacing: -.05em;
+  letter-spacing: -.045em;
 }
 
 .popover-close {
   display: grid;
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   place-items: center;
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: rgba(230, 238, 255, .1);
+  background: rgba(230, 238, 255, .085);
   color: var(--ivory);
   cursor: pointer;
+  transition: background .16s ease, transform .16s ease;
 }
 
+.popover-close:hover { background: rgba(230, 238, 255, .16); transform: rotate(5deg); }
+
 .storage-card {
-  margin-top: 14px;
-  padding: 12px;
-  border: 1px solid rgba(230, 238, 255, .12);
-  border-radius: 13px;
-  background: rgba(14, 26, 49, .25);
+  margin-top: 15px;
+  padding: 13px 14px;
+  border: 1px solid rgba(220, 232, 255, .13);
+  border-radius: 15px;
+  background: linear-gradient(120deg, rgba(220, 232, 255, .07), rgba(10, 24, 47, .2));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .035);
 }
 
 .storage-card-heading {
   color: var(--ivory);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .storage-card-heading svg {
@@ -538,17 +545,21 @@
 }
 
 .storage-card p {
-  margin: 7px 0 10px;
+  margin: 8px 0 0 24px;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 10px;
+  line-height: 1.45;
 }
 
 .storage-card code {
   display: block;
   overflow: hidden;
+  margin: 8px 0 0 24px;
+  padding-top: 7px;
+  border-top: 1px solid rgba(224, 234, 255, .09);
   color: rgba(222, 231, 252, .52);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 8px;
+  font-size: 9px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -575,27 +586,31 @@
 
 .popover-actions {
   display: grid;
-  gap: 4px;
-  margin-top: 12px;
+  gap: 3px;
+  margin-top: 13px;
 }
 
 .popover-actions button, .popover-footer button {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 7px;
+  gap: 10px;
+  min-height: 38px;
+  padding: 8px 9px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 10px;
   background: transparent;
   color: var(--ivory);
   cursor: pointer;
-  font-size: 10px;
+  font-size: 11px;
   text-align: left;
 }
 
 .popover-actions button:hover, .popover-footer button:hover {
-  background: rgba(230, 238, 255, .1);
+  background: rgba(220, 232, 255, .085);
 }
+
+.popover-actions button svg { color: rgba(221, 232, 255, .75); }
+.popover-actions .settings-update-action svg { color: var(--lavender-bright); }
 
 .popover-actions button:disabled, .popover-footer button:disabled {
   cursor: not-allowed;
@@ -619,16 +634,27 @@
 }
 
 .popover-footer {
-  margin-top: 13px;
-  padding-top: 13px;
-  border-top: 1px solid var(--line);
+  margin-top: 12px;
+  padding-top: 11px;
+  border-top: 1px solid rgba(224, 234, 255, .13);
   color: var(--muted);
   font-size: 9px;
 }
 
 .popover-footer button {
-  padding: 6px 0;
+  min-height: 32px;
+  padding: 6px 8px;
   color: var(--lavender-bright);
+}
+
+@keyframes profile-popover-in {
+  from { opacity: 0; transform: translateY(-5px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .profile-popover { animation: none; }
+  .popover-close { transition: none; }
 }
 
 .recovery-screen {

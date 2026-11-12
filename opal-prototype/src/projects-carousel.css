@@ -50,10 +50,10 @@
 
 .projects-layout-switch button:hover { color: var(--ivory); }
 /* A single frame keeps the title and controls anchored when the layout changes. */
-.projects-screen { max-width: 1240px; padding-top: clamp(10px, 2.4vh, 24px); }
+.projects-screen { max-width: 1240px; padding-top: clamp(10px, 2.4vh, 24px); container-type: inline-size; }
 
 .projects-carousel {
-  --cover-size: clamp(112px, min(27.4vw, calc(100dvh - var(--player-reserve) - 324px)), 388px);
+  --cover-size: calc((100cqi - 80px) / 4);
   padding-top: clamp(8px, 2.6vh, 28px);
 }
 
@@ -248,8 +248,16 @@
 }
 
 @media (max-width: 760px) {
-  .projects-carousel { --cover-size: clamp(106px, min(40vw, calc(100dvh - var(--player-reserve) - 350px)), 245px); }
+  .projects-carousel { --cover-size: calc((100cqi - 24px) / 2); }
   .projects-carousel-stage { margin-inline: 0; }
+}
+
+@media (min-width: 761px) and (max-width: 980px) {
+  .projects-carousel { --cover-size: calc((100cqi - 56px) / 3); }
+}
+
+@media (max-width: 470px) {
+  .projects-carousel { --cover-size: calc((100cqi - 20px) / 2); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -280,7 +288,6 @@ html:has(.opal-app[data-view="projects"]) { scrollbar-gutter: stable both-edges;
 @media (max-width: 760px) and (max-height: 720px) {
   .projects-screen { padding-top: 10px; }
   .projects-carousel {
-    --cover-size: clamp(86px, min(35vw, calc(100dvh - var(--player-reserve) - 369px)), 190px);
     padding-top: 6px;
   }
   .projects-carousel-stage { height: calc(var(--cover-size) + 18px); }
