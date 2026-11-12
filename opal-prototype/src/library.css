@@ -1117,7 +1117,7 @@
   height: 100%;
   min-height: 0;
   justify-content: center;
-  padding: 12px 0 calc(6.4vh + 136px);
+  padding: 12px 0 calc(6.4vh + 88px);
 }
 
 .library-accessible-title {
