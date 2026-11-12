@@ -905,8 +905,3 @@
 .version-menu .track-menu-danger svg {
   color: #f6c8d3;
 }
-
-.opal-app[data-view="library"] .profile-button {
-  border-color: rgba(235, 237, 255, .2);
-  background: rgba(238, 240, 255, .09);
-}

@@ -102,6 +102,8 @@ struct TrackDto {
     format: String,
     managed_file_ref: String,
     managed_file_path: Option<String>,
+    group_created_at: i64,
+    group_updated_at: i64,
     note: Option<NoteDto>,
     moments: Vec<MomentDto>,
 }
@@ -1193,6 +1195,8 @@ fn track_from_row(row: &rusqlite::Row<'_>, roots: &StorageRoots) -> rusqlite::Re
         managed_file_path: managed_file_path
             .is_file()
             .then(|| managed_file_path.to_string_lossy().into_owned()),
+        group_created_at: row.get(13)?,
+        group_updated_at: row.get(14)?,
         note: None,
         moments: Vec::new(),
     })
@@ -1333,7 +1337,11 @@ fn load_project(
                 ) AS version_count,
                 t.duration_ms,
                 t.format,
-                t.managed_file_ref
+                t.managed_file_ref,
+                COALESCE(g.created_at, t.created_at) AS group_created_at,
+                (SELECT MAX(sibling.created_at)
+                 FROM tracks sibling
+                 WHERE COALESCE(sibling.group_id, sibling.id) = COALESCE(t.group_id, t.id)) AS group_updated_at
              FROM tracks t
              LEFT JOIN track_groups g ON g.id = t.group_id
              WHERE t.project_id = ?1
@@ -3586,6 +3594,8 @@ fn import_audio_files_inner(
             format: extension(&source).to_uppercase(),
             managed_file_ref: managed_file_ref.clone(),
             managed_file_path: Some(managed_path.to_string_lossy().into_owned()),
+            group_created_at: now_ms(),
+            group_updated_at: now_ms(),
             note: None,
             moments: Vec::new(),
         };
@@ -5741,6 +5751,8 @@ mod tests {
                 format: "WAV".to_string(),
                 managed_file_ref: managed_ref,
                 managed_file_path: Some(managed_path.to_string_lossy().into_owned()),
+                group_created_at: 1,
+                group_updated_at: 1,
                 note: None,
                 moments: Vec::new(),
             };

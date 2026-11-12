@@ -677,28 +677,13 @@
   padding-top: 4.2vh;
 }
 
-.projects-heading {
+.projects-toolbar {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 0 4px 5px;
-}
-
-.projects-heading h1 {
-  margin: 0;
-  color: var(--ivory);
-  font-family: Georgia, serif;
-  font-size: clamp(46px, 5.3vw, 72px);
-  font-weight: 400;
-  letter-spacing: -.08em;
-  line-height: .86;
-}
-
-.projects-heading-actions {
-  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  justify-content: flex-end;
+  gap: 8px 12px;
+  padding: 0 4px;
 }
 
 .projects-new-button {
@@ -880,18 +865,7 @@
   .projects-screen {
     padding-top: 3.3vh;
   }
-  .projects-heading {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 18px;
-  }
-  .projects-heading h1 {
-    font-size: 54px;
-  }
-  .projects-heading-actions {
-    width: 100%;
-    justify-content: space-between;
-  }
+  .projects-toolbar { justify-content: space-between; }
   .projects-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 27px 16px;

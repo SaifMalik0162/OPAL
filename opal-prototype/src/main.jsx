@@ -9,6 +9,8 @@ import "./player.css";
 import "./overlays.css";
 import "./workflows.css";
 import "./accessibility.css";
+import "./projects-carousel.css";
+import "./project-detail.css";
 
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>

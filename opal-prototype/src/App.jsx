@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { convertFileSrc, invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -9,6 +9,7 @@ import packageMetadata from "../package.json";
 import { Onboarding } from "./Onboarding.jsx";
 import { OnboardingAmbient } from "./OnboardingAmbient.jsx";
 import { UpdateDialog } from "./UpdateDialog.jsx";
+import { ProjectsCarousel } from "./ProjectsCarousel.jsx";
 import { isCurrentPlaybackRequest, previousQueueIndex, repeatQueueIndex, shuffleQueue } from "./playback-queue.js";
 import { remainingGapMilliseconds } from "./playback-gap.js";
 import { reconcilePlayingQueue } from "./queue-state.js";
@@ -18,6 +19,7 @@ import { playbackErrorMessage } from "./audio-playback-error.js";
 import { serializeDiagnosticsReport } from "./diagnostics-report.js";
 import { readCachedWaveform, writeCachedWaveform } from "./waveform-cache.js";
 import {
+  ArrowsDownUp,
   ArrowLeft,
   ArrowSquareOut,
   ArrowUpRight,
@@ -36,6 +38,8 @@ import {
   FileAudio,
   FolderOpen,
   GearSix,
+  GridFour,
+  Cards,
   Info,
   ImageSquare,
   LockKey,
@@ -71,6 +75,8 @@ const PLAYBACK_STORAGE_KEY = "opal-playback-v1";
 const SORT_STORAGE_KEY = "opal-sort-v1";
 const WELCOME_STORAGE_KEY = "opal-welcome-v1";
 const APP_VERSION = packageMetadata.version;
+const CAPSULES_ENABLED = false;
+const SEQUENCE_ROOM_ENABLED = false;
 
 function isRecoveryError(value) {
   return String(value).startsWith("RECOVERY_REQUIRED:");
@@ -183,8 +189,12 @@ function groupTracks(project) {
       id: groupId,
       title: track.title,
       position: track.position ?? 0,
+      createdAt: track.groupCreatedAt ?? track.createdAt ?? 0,
+      updatedAt: track.groupUpdatedAt ?? track.updatedAt ?? track.createdAt ?? 0,
       versions: [],
     };
+    group.createdAt = Math.min(group.createdAt || Infinity, track.groupCreatedAt ?? track.createdAt ?? group.createdAt);
+    group.updatedAt = Math.max(group.updatedAt, track.groupUpdatedAt ?? track.updatedAt ?? track.createdAt ?? 0);
     group.versions.push(track);
     groups.set(groupId, group);
   });
@@ -284,7 +294,8 @@ function App() {
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [query, setQuery] = useState("");
   const [sortMode, setSortMode] = useState(readSortPreference);
-  const [notesOpen, setNotesOpen] = useState(true);
+  const [projectSection, setProjectSection] = useState("tracks");
+  const projectBackView = useRef("library");
   const [noteTargetId, setNoteTargetId] = useState(null);
   const [noteText, setNoteText] = useState("");
   const [noteStatus, setNoteStatus] = useState("saved");
@@ -709,6 +720,8 @@ function App() {
     setSelectedId(projectId);
     setFocusedTrackId(trackId);
     setNoteTargetId(noteTrackId);
+    setProjectSection(noteTrackId ? "notes" : "tracks");
+    if (activeView === "library" || activeView === "projects") projectBackView.current = activeView;
     setActiveView("project");
   }
 
@@ -716,6 +729,17 @@ function App() {
     if (!(await flushNoteSave())) return;
     setActiveView("library");
     setFocusedTrackId("");
+  }
+
+  async function returnFromProject() {
+    if (!(await flushNoteSave())) return;
+    setActiveView(projectBackView.current);
+    setFocusedTrackId("");
+  }
+
+  async function changeProjectSection(section) {
+    if (section === projectSection || !(await flushNoteSave())) return;
+    setProjectSection(section);
   }
 
   async function openProjectsView() {
@@ -740,6 +764,7 @@ function App() {
   async function changeNoteTarget(trackId) {
     if (!(await flushNoteSave())) return;
     setNoteTargetId(trackId);
+    setProjectSection("notes");
   }
 
   function handleNoteChange(nextText) {
@@ -998,11 +1023,6 @@ function App() {
       setFocusedTrackId(track.id);
       void changeNoteTarget(track.id);
     }
-  }
-
-  async function toggleNotes() {
-    if (!(await flushNoteSave())) return;
-    setNotesOpen((openState) => !openState);
   }
 
   function jumpToMoment(project, track, moment) {
@@ -1366,6 +1386,9 @@ function App() {
       const created = hydrateProject(await invoke("createProject", { title, description }));
       await reloadProjects(created.id);
       setSelectedId(created.id);
+      setNoteTargetId(null);
+      setProjectSection("tracks");
+      if (activeView === "library" || activeView === "projects") projectBackView.current = activeView;
       setActiveView("project");
       setCreateOpen(false);
       setError("");
@@ -1844,7 +1867,7 @@ function App() {
     <header className="topbar" data-tauri-drag-region="deep" onMouseDown={handleWindowMouseDown}>
       <div className="topbar-left"><button className="brand-lockup" type="button" onClick={returnToLibrary} aria-label="Open OPAL library"><img className="brand-mark" src="/opal-mark.png" alt="" /><span className="brand-name">OPAL</span></button>{(import.meta.env.DEV || import.meta.env.VITE_OPAL_DEVELOPMENT === "1") && <span className="development-badge">Development</span>}<label className="search-field"><MagnifyingGlass size={14} weight="regular" /><input ref={searchInputRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search" />{query && <button type="button" className="clear-search" onClick={() => setQuery("")} aria-label="Clear search"><X size={13} /></button>}</label></div>
       <nav className="top-navigation" aria-label="Primary navigation"><button type="button" className={activeView === "library" ? "is-active" : ""} aria-current={activeView === "library" ? "page" : undefined} onClick={returnToLibrary}>Library</button><button type="button" className={activeView === "projects" ? "is-active" : ""} aria-current={activeView === "projects" ? "page" : undefined} onClick={openProjectsView}>Projects</button></nav>
-      <div className="topbar-actions">{activeView === "library" && <label className="sort-control topbar-sort-control"><span>Sort</span><select value={sortMode} onChange={(event) => setSortMode(event.target.value)} aria-label="Sort projects"><option value="updated">Recently updated</option><option value="newest">Newest</option><option value="alphabetical">A–Z</option></select><CaretDown size={13} /></label>}<button type="button" className={`topbar-import ${importActive ? "is-busy" : ""}`} aria-label={importActive ? "Show import progress" : topbarImportProject ? `Import audio into ${topbarImportProject.title}` : "Create a new project"} onClick={() => importActive ? setImportOpen(true) : (topbarImportProject ? pickAudioFiles(topbarImportProject.id) : setCreateOpen(true))}><Plus size={14} />{importActive ? "Importing…" : topbarImportProject ? "Import audio" : "New project"}</button><button type="button" className="profile-button" onClick={openProfile} aria-label="Open OPAL settings" aria-expanded={profileOpen} title="Settings"><GearSix size={17} aria-hidden="true" /></button>{profileOpen && <ProfilePopover nativeAvailable={isTauri()} storageInfo={storageInfo} storageError={storageError} importProgress={importProgress} updateStatus={updateStatus} updateAvailable={Boolean(availableUpdate)} onCheckUpdates={checkForUpdates} onOpenUpdates={openUpdates} onPreviewUpdateBanner={(import.meta.env.DEV || import.meta.env.VITE_OPAL_DEVELOPMENT === "1") ? () => {
+      <div className="topbar-actions"><label className={`sort-control topbar-sort-control${activeView === "library" ? "" : " is-placeholder"}`} aria-hidden={activeView !== "library"}><span>Sort</span><select value={sortMode} onChange={(event) => setSortMode(event.target.value)} aria-label="Sort projects" tabIndex={activeView === "library" ? undefined : -1} disabled={activeView !== "library"}><option value="updated">Recently updated</option><option value="newest">Newest</option><option value="alphabetical">A–Z</option></select><CaretDown size={13} /></label><button type="button" className={`topbar-import ${importActive ? "is-busy" : ""}`} aria-label={importActive ? "Show import progress" : topbarImportProject ? `Import audio into ${topbarImportProject.title}` : "Create a new project"} onClick={() => importActive ? setImportOpen(true) : (topbarImportProject ? pickAudioFiles(topbarImportProject.id) : setCreateOpen(true))}><Plus size={14} />{importActive ? "Importing…" : topbarImportProject ? "Import audio" : "New project"}</button><button type="button" className="profile-button" onClick={openProfile} aria-label="Open OPAL settings" aria-expanded={profileOpen} title="Settings"><GearSix size={17} aria-hidden="true" /></button>{profileOpen && <ProfilePopover nativeAvailable={isTauri()} storageInfo={storageInfo} storageError={storageError} importProgress={importProgress} updateStatus={updateStatus} updateAvailable={Boolean(availableUpdate)} onCheckUpdates={checkForUpdates} onOpenUpdates={openUpdates} onPreviewUpdateBanner={(import.meta.env.DEV || import.meta.env.VITE_OPAL_DEVELOPMENT === "1") ? () => {
         setProfileOpen(false);
         setUpdateBannerPreview((current) => current + 1);
       } : undefined} onRevealFolder={revealStorageFolder} onExportBackup={exportLibraryBackup} onRestoreBackup={restoreLibraryBackup} onRetryStorage={refreshStorageInfo} onDiagnostics={openDiagnostics} onReplayWelcome={() => { setProfileOpen(false); setWelcomeOpen(true); }} onClose={() => setProfileOpen(false)} />}</div>
@@ -1864,7 +1887,7 @@ function App() {
         <ArrowUpRight size={14} />
       </button>
     )}
-    <main className="stage">{compatibilityMode ? <CompatibilityView onRevealFolder={revealStorageFolder} /> : recoveryMode ? <RecoveryView onRevealFolder={revealStorageFolder} onRestore={restoreLibraryBackup} onRetry={retryStorage} /> : activeView === "project" && selectedProject ? <ProjectView project={selectedProject} capsules={capsuleSummaries} capsulesLoading={capsuleShelfLoading} onOpenCapsule={requestOpenCapsule} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} focusedTrackId={focusedTrackId} selectedMomentId={selectedMomentId} notesOpen={notesOpen} noteTargetId={noteTargetId} noteText={noteText} noteStatus={noteStatus} nativeAvailable={isTauri()} onBack={returnToLibrary} onTrackSelect={(track) => startPlayback(selectedProject, track)} onVersionSelect={switchVersion} onMomentSelect={selectMoment} onMomentJump={jumpToMoment} onMomentUpdate={updateMoment} onMomentDelete={removeMoment} onJumpUnresolved={jumpUnresolved} onPlay={() => currentVersions(selectedProject)[0] && startPlayback(selectedProject, currentVersions(selectedProject)[0], 0)} onOpenSequence={() => openSequenceRoom(selectedProject)} onCreateCapsule={() => openCapsuleBuilder(selectedProject)} onToggleNotes={toggleNotes} onNoteChange={handleNoteChange} onFlushNotes={flushNoteSave} onNoteTargetChange={changeNoteTarget} onImport={() => pickAudioFiles(selectedProject.id)} onAddVersion={(group) => pickAudioFiles(selectedProject.id, group.id)} onEditProject={() => setEditOpen(true)} onEditArtwork={pickArtwork} onRemoveArtwork={removeArtwork} onRemoveProject={() => removeProject(selectedProject)} onRenameTrack={renameTrack} onRenameVersion={renameVersion} onPromoteVersion={promoteVersion} onReorderGroups={reorderTrackGroups} onReorderVersions={reorderTrackVersions} onRemoveVersion={(version, group) => removeVersion(selectedProject, version, group)} /> : activeView === "sequence" && selectedProject ? <SequenceRoom project={selectedProject} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} playbackState={playbackState} elapsedMs={elapsedMs} durationMs={durationMs || displayTrack?.durationMs || 0} onBack={leaveSequenceRoom} onPlayTrack={playSequenceTrack} onAuditionTransition={auditionTransition} onReorderGroups={reorderTrackGroups} onUpdateTransition={updateTransition} onPlay={() => toggleSequencePlayback(selectedProject)} onPrevious={playPrevious} onNext={playNext} onProgressChange={seekPlayback} onCreateCapsule={() => openCapsuleBuilder(selectedProject)} /> : activeView === "capsule" && selectedProject && capsule ? <CapsuleView capsule={capsule} project={selectedProject} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} playbackState={playbackState} elapsedMs={elapsedMs} durationMs={durationMs || displayTrack?.durationMs || 0} onBack={leaveCapsuleView} onPlayTrack={playCapsuleTrack} onPlay={() => toggleCapsulePlayback(capsule)} onPrevious={playPrevious} onNext={playNext} onProgressChange={seekPlayback} onCopyReference={() => copyCapsuleReference(capsule)} onOpenResponse={() => setCapsuleResponseOpen(true)} onAddResponse={addCapsuleResponse} /> : activeView === "projects" ? <ProjectsView loading={loading} projects={filteredProjects} query={query} sortMode={sortMode} onSortChange={setSortMode} onOpenProject={openProject} onPlayProject={(project) => currentVersions(project)[0] && startPlayback(project, currentVersions(project)[0], 0)} onCreateProject={() => setCreateOpen(true)} onClearSearch={() => setQuery("")} /> : <LibraryView loading={loading} projects={filteredProjects} selectedId={visibleSelection} query={query} sortMode={sortMode} trackMatches={trackMatches} onSortChange={setSortMode} onProjectSelect={selectLibraryProject} onOpenProject={openProject} onCreateProject={() => setCreateOpen(true)} onClearSearch={() => setQuery("")} onStep={stepLibrarySelection} />}</main>
+    <main className="stage">{compatibilityMode ? <CompatibilityView onRevealFolder={revealStorageFolder} /> : recoveryMode ? <RecoveryView onRevealFolder={revealStorageFolder} onRestore={restoreLibraryBackup} onRetry={retryStorage} /> : activeView === "project" && selectedProject ? <ProjectView key={selectedProject.id} project={selectedProject} capsules={capsuleSummaries} capsulesLoading={capsuleShelfLoading} onOpenCapsule={requestOpenCapsule} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} focusedTrackId={focusedTrackId} selectedMomentId={selectedMomentId} section={projectSection} onSectionChange={changeProjectSection} noteTargetId={noteTargetId} noteText={noteText} noteStatus={noteStatus} nativeAvailable={isTauri()} backLabel={projectBackView.current === "projects" ? "Projects" : "Library"} onBack={returnFromProject} onTrackInfo={(track) => setTrackInfo({ project: selectedProject, track })} onTrackSelect={(track) => startPlayback(selectedProject, track)} onVersionSelect={switchVersion} onMomentSelect={selectMoment} onMomentJump={jumpToMoment} onMomentUpdate={updateMoment} onMomentDelete={removeMoment} onJumpUnresolved={jumpUnresolved} onPlay={() => currentVersions(selectedProject)[0] && startPlayback(selectedProject, currentVersions(selectedProject)[0], 0)} onOpenSequence={() => openSequenceRoom(selectedProject)} onCreateCapsule={() => openCapsuleBuilder(selectedProject)} onNoteChange={handleNoteChange} onFlushNotes={flushNoteSave} onNoteTargetChange={changeNoteTarget} onImport={() => pickAudioFiles(selectedProject.id)} onAddVersion={(group) => pickAudioFiles(selectedProject.id, group.id)} onEditProject={() => setEditOpen(true)} onEditArtwork={pickArtwork} onRemoveArtwork={removeArtwork} onRemoveProject={() => removeProject(selectedProject)} onRenameTrack={renameTrack} onRenameVersion={renameVersion} onPromoteVersion={promoteVersion} onReorderGroups={reorderTrackGroups} onReorderVersions={reorderTrackVersions} onRemoveVersion={(version, group) => removeVersion(selectedProject, version, group)} /> : activeView === "sequence" && selectedProject ? <SequenceRoom project={selectedProject} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} playbackState={playbackState} elapsedMs={elapsedMs} durationMs={durationMs || displayTrack?.durationMs || 0} onBack={leaveSequenceRoom} onPlayTrack={playSequenceTrack} onAuditionTransition={auditionTransition} onReorderGroups={reorderTrackGroups} onUpdateTransition={updateTransition} onPlay={() => toggleSequencePlayback(selectedProject)} onPrevious={playPrevious} onNext={playNext} onProgressChange={seekPlayback} onCreateCapsule={() => openCapsuleBuilder(selectedProject)} /> : activeView === "capsule" && selectedProject && capsule ? <CapsuleView capsule={capsule} project={selectedProject} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} playbackState={playbackState} elapsedMs={elapsedMs} durationMs={durationMs || displayTrack?.durationMs || 0} onBack={leaveCapsuleView} onPlayTrack={playCapsuleTrack} onPlay={() => toggleCapsulePlayback(capsule)} onPrevious={playPrevious} onNext={playNext} onProgressChange={seekPlayback} onCopyReference={() => copyCapsuleReference(capsule)} onOpenResponse={() => setCapsuleResponseOpen(true)} onAddResponse={addCapsuleResponse} /> : activeView === "projects" ? <ProjectsView loading={loading} projects={filteredProjects} selectedId={selectedId} onPlayTrack={startPlayback} query={query} sortMode={sortMode} onSortChange={setSortMode} onOpenProject={openProject} onPlayProject={(project) => currentVersions(project)[0] && startPlayback(project, currentVersions(project)[0], 0)} onCreateProject={() => setCreateOpen(true)} onClearSearch={() => setQuery("")} /> : <LibraryView loading={loading} projects={filteredProjects} selectedId={visibleSelection} query={query} sortMode={sortMode} trackMatches={trackMatches} onSortChange={setSortMode} onProjectSelect={selectLibraryProject} onOpenProject={openProject} onCreateProject={() => setCreateOpen(true)} onClearSearch={() => setQuery("")} onStep={stepLibrarySelection} />}</main>
     {activeView !== "sequence" && activeView !== "capsule" && displayProject && displayTrack && <Player project={displayProject} track={displayTrack} selectedMomentId={selectedMomentId} status={playbackState} playbackError={playbackError} isPlaying={playbackState === "playing"} progress={progressValue} elapsedMs={elapsedMs} durationMs={durationMs || displayTrack.durationMs} volume={volume} muted={muted} volumeOpen={volumeOpen} queueOpen={queueOpen} menuOpen={playerMenuOpen} shuffleEnabled={shuffleEnabled} repeatMode={repeatMode} onTogglePlay={togglePlayback} onPrevious={playPrevious} onNext={playNext} onProgressChange={seekPlayer} onCreateMoment={(timeMs) => createMoment(displayProject, displayTrack, timeMs)} onSelectMoment={(moment) => selectMoment(displayProject, displayTrack, moment)} onVolumeChange={(event) => { setVolume(Number(event.target.value)); setMuted(false); }} onToggleMute={() => setMuted((value) => !value)} onToggleVolume={() => setVolumeOpen((openState) => !openState)} onToggleQueue={() => setQueueOpen((openState) => !openState)} onToggleMenu={() => setPlayerMenuOpen((openState) => !openState)} onToggleShuffle={toggleShuffle} onToggleRepeat={cycleRepeatMode} onOpenProject={() => openProject(displayProject.id)} onShowTrack={() => openProject(displayProject.id, displayTrack.id)} onOpenNotes={() => openProject(displayProject.id, displayTrack.id, displayTrack.id)} onRevealFile={async () => { try { await invoke("revealManagedFile", { managedFileRef: displayTrack.managedFileRef }); } catch (revealError) { setError(String(revealError)); } }} onShowInfo={() => setTrackInfo({ project: displayProject, track: displayTrack })} />}
     {activeView !== "sequence" && activeView !== "capsule" && queueOpen && displayProject && <QueuePopover project={displayProject} currentIndex={displayQueueIndex} onSelect={(track, index) => { startPlayback(displayProject, track, index); setQueueOpen(false); }} onClose={() => setQueueOpen(false)} />}
     {showWelcome && (
@@ -1885,21 +1908,63 @@ function App() {
     {capsuleCreateOpen && selectedProject && <CreateCapsulePrompt project={selectedProject} onClose={() => setCapsuleCreateOpen(false)} onCreate={(options) => createCapsule(selectedProject, options)} />}
     {capsuleUnlockTarget && <CapsuleUnlockPrompt summary={capsuleUnlockTarget} error={capsuleUnlockError} onClose={() => { setCapsuleUnlockTarget(null); setCapsuleUnlockError(""); }} onSubmit={(password) => openCapsuleSummary(capsuleUnlockTarget, password)} />}
     {capsuleResponseOpen && capsule && <CapsuleResponsePrompt capsule={capsule} currentTrack={selectedProject?.tracks.find((track) => track.id === playingTrackId) ?? capsule.tracks[0]} timeMs={playingProjectId === selectedProject?.id ? elapsedMs : 0} onClose={() => setCapsuleResponseOpen(false)} onSend={addCapsuleResponse} />}
-    {trackInfo && <TrackInfoDialog project={trackInfo.project} track={trackInfo.track} onClose={() => setTrackInfo(null)} />}
+    {trackInfo && <TrackInfoDialog project={trackInfo.project} track={trackInfo.track} onClose={() => setTrackInfo(null)} onAddVersion={() => { const group = groupTracks(trackInfo.project).find((item) => item.versions.some((version) => version.id === trackInfo.track.id)); if (group) pickAudioFiles(trackInfo.project.id, group.id); }} />}
     {diagnosticsOpen && <DiagnosticsDialog diagnostics={diagnostics} notice={diagnosticsNotice} onCopy={copyDiagnostics} onExport={exportDiagnostics} onClose={() => setDiagnosticsOpen(false)} />}
     {confirmState && <ConfirmDialog {...confirmState} busy={confirmBusy} onClose={() => { if (!confirmBusy) setConfirmState(null); }} onConfirm={async () => { if (confirmBusy) return; const action = confirmState.onConfirm; setConfirmBusy(true); try { if ((await action()) !== false) setConfirmState(null); } finally { setConfirmBusy(false); } }} />}
   </div>;
 }
 
-function ProjectsView({ loading, projects: visibleProjects, query, sortMode, onSortChange, onOpenProject, onPlayProject, onCreateProject, onClearSearch }) {
+function ProjectsView({ loading, projects: visibleProjects, selectedId, query, sortMode, onSortChange, onOpenProject, onPlayProject, onPlayTrack, onCreateProject, onClearSearch }) {
+  const [layout, setLayout] = useState(() => {
+    try {
+      return window.localStorage.getItem("opal-projects-layout") === "carousel" ? "carousel" : "grid";
+    } catch {
+      return "grid";
+    }
+  });
+  const [focusedId, setFocusedId] = useState(selectedId);
+  const focusedIndex = Math.max(0, visibleProjects.findIndex((project) => project.id === focusedId));
+  const selectProject = useCallback((index) => setFocusedId(visibleProjects[index].id), [visibleProjects]);
+
+  function changeLayout(nextLayout) {
+    if (nextLayout === layout) return;
+    setLayout(nextLayout);
+    window.scrollTo({ top: 0, behavior: "instant" });
+    try {
+      window.localStorage.setItem("opal-projects-layout", nextLayout);
+    } catch {
+      // The choice still applies for this session if storage is unavailable.
+    }
+  }
+
   if (loading) return <section className="projects-screen view-stack loading-library"><div className="library-loading glass"><CircleNotch size={23} weight="thin" /></div></section>;
   const hasSearch = Boolean(query.trim());
-  return <section className="projects-screen view-stack">
-    <div className="projects-heading">
-      <div><h1>Projects</h1></div>
-      <div className="projects-heading-actions"><label className="sort-control"><span>Sort</span><select value={sortMode} onChange={(event) => onSortChange(event.target.value)} aria-label="Sort projects"><option value="updated">Recently updated</option><option value="newest">Newest</option><option value="alphabetical">A–Z</option></select><CaretDown size={13} /></label><button className="button button-primary projects-new-button" type="button" onClick={onCreateProject}><Plus size={14} />New project</button></div>
+  return <section className="projects-screen view-stack" data-layout={layout} aria-label="Projects">
+    <div className="projects-toolbar">
+      <label className="sort-control">
+        <span>Sort</span>
+        <select value={sortMode} onChange={(event) => onSortChange(event.target.value)} aria-label="Sort projects">
+          <option value="updated">Recently updated</option>
+          <option value="newest">Newest</option>
+          <option value="alphabetical">A–Z</option>
+        </select>
+        <CaretDown size={13} />
+      </label>
+      <div className="projects-layout-switch" role="group" aria-label="Projects layout">
+        <button type="button" aria-pressed={layout === "grid"} onClick={() => changeLayout("grid")}><GridFour size={16} />Grid</button>
+        <button className="projects-carousel-option" type="button" aria-label="Carousel, new" aria-pressed={layout === "carousel"} onClick={() => changeLayout("carousel")}><Cards size={16} />Carousel<span className="projects-new-pill" aria-hidden="true">NEW</span></button>
+      </div>
+      <button className="button button-primary projects-new-button" type="button" onClick={onCreateProject}><Plus size={14} />New project</button>
     </div>
-    {!visibleProjects.length ? <div className="projects-empty glass"><FolderOpen size={27} weight="thin" /><h2>{hasSearch ? "No projects found" : "Your collection is empty"}</h2><p>{hasSearch ? <>No project matches “{query}”.</> : "Create a project to start building your collection."}</p><button className="button button-primary" type="button" onClick={hasSearch ? onClearSearch : onCreateProject}>{hasSearch ? "Clear search" : "Create project"}</button></div> : <div className="projects-grid">{visibleProjects.map((project) => <article className="project-card" key={project.id}><div className="project-card-art"><button className="project-card-open" type="button" onClick={() => onOpenProject(project.id)} aria-label={`Open ${project.title}`}><img src={project.artwork} alt="" /></button><button className="project-card-play" type="button" onClick={() => onPlayProject(project)} aria-label={`Play ${project.title}`} disabled={!project.count}><Play size={17} weight="fill" /></button></div><div className="project-card-meta"><button className="project-card-title" type="button" onClick={() => onOpenProject(project.id)}>{project.title}</button><div className="project-card-subline"><span>{project.count} {project.count === 1 ? "track" : "tracks"}</span><span>{project.duration}</span></div></div></article>)}<button className="project-create-card" type="button" onClick={onCreateProject}><span><Plus size={20} /></span><strong>New project</strong></button></div>}
+    {!visibleProjects.length ? <div className="projects-empty glass"><FolderOpen size={27} weight="thin" /><h2>{hasSearch ? "No projects found" : "Your collection is empty"}</h2><p>{hasSearch ? <>No project matches “{query}”.</> : "Create a project to start building your collection."}</p><button className="button button-primary" type="button" onClick={hasSearch ? onClearSearch : onCreateProject}>{hasSearch ? "Clear search" : "Create project"}</button></div> : layout === "carousel" ? <ProjectsCarousel
+      projects={visibleProjects}
+      index={focusedIndex}
+      onSelect={selectProject}
+      onOpen={onOpenProject}
+      onPlay={onPlayProject}
+      tracks={currentVersions(visibleProjects[focusedIndex])}
+      onPlayTrack={onPlayTrack}
+    /> : <div className="projects-grid">{visibleProjects.map((project) => <article className="project-card" key={project.id}><div className="project-card-art"><button className="project-card-open" type="button" onClick={() => onOpenProject(project.id)} aria-label={`Open ${project.title}`}><img src={project.artwork} alt="" /></button><button className="project-card-play" type="button" onClick={() => onPlayProject(project)} aria-label={`Play ${project.title}`} disabled={!project.count}><Play size={17} weight="fill" /></button></div><div className="project-card-meta"><button className="project-card-title" type="button" onClick={() => onOpenProject(project.id)}>{project.title}</button><div className="project-card-subline"><span>{project.count} {project.count === 1 ? "track" : "tracks"}</span><span>{project.duration}</span></div></div></article>)}<button className="project-create-card" type="button" onClick={onCreateProject}><span><Plus size={20} /></span><strong>New project</strong></button></div>}
   </section>;
 }
 
@@ -2144,15 +2209,29 @@ function ProjectNotesPanel({ project, projectId, noteContextId, noteLabel, noteT
   </>;
 }
 
-function ProjectView({ project, capsules, capsulesLoading, onOpenCapsule, playingTrackId, focusedTrackId, selectedMomentId, notesOpen, noteTargetId, noteText, noteStatus, nativeAvailable, onBack, onTrackSelect, onVersionSelect, onMomentSelect, onMomentJump, onMomentUpdate, onMomentDelete, onJumpUnresolved, onPlay, onOpenSequence, onCreateCapsule, onToggleNotes, onNoteChange, onNoteTargetChange, onFlushNotes, onImport, onAddVersion, onEditProject, onEditArtwork, onRemoveArtwork, onRemoveProject, onRenameTrack, onRenameVersion, onPromoteVersion, onReorderGroups, onReorderVersions, onRemoveVersion }) {
-  const groups = useMemo(() => groupTracks(project), [project]);
+function ProjectView({ project, capsules, capsulesLoading, onOpenCapsule, playingTrackId, focusedTrackId, selectedMomentId, section, onSectionChange, noteTargetId, noteText, noteStatus, nativeAvailable, backLabel, onBack, onTrackInfo, onTrackSelect, onVersionSelect, onMomentSelect, onMomentJump, onMomentUpdate, onMomentDelete, onJumpUnresolved, onPlay, onOpenSequence, onCreateCapsule, onNoteChange, onNoteTargetChange, onFlushNotes, onImport, onAddVersion, onEditProject, onEditArtwork, onRemoveArtwork, onRemoveProject, onRenameTrack, onRenameVersion, onPromoteVersion, onReorderGroups, onReorderVersions, onRemoveVersion }) {
+  const baseGroups = useMemo(() => groupTracks(project), [project]);
+  const [trackSortMode, setTrackSortMode] = useState("manual");
+  const groups = useMemo(() => {
+    const ordered = [...baseGroups];
+    if (trackSortMode === "alphabetical") ordered.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: "base" }));
+    if (trackSortMode === "dateAdded") ordered.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+    if (trackSortMode === "dateModified") ordered.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+    return ordered;
+  }, [baseGroups, trackSortMode]);
   const [editingGroupId, setEditingGroupId] = useState("");
   const [editingTitle, setEditingTitle] = useState("");
   const [draggedGroupId, setDraggedGroupId] = useState("");
+  const [dragPreviewIds, setDragPreviewIds] = useState(null);
+  const dragRef = useRef(null);
+  const dragHoldRef = useRef(null);
+  const suppressTrackClickRef = useRef(false);
   const [activeGroupId, setActiveGroupId] = useState(groups[0]?.id ?? "");
+  const [expandedGroupId, setExpandedGroupId] = useState("");
   const [trackMenuId, setTrackMenuId] = useState("");
   const [versionMenuId, setVersionMenuId] = useState("");
   const [projectActionsOpen, setProjectActionsOpen] = useState(false);
+  const [projectSortOpen, setProjectSortOpen] = useState(false);
   const projectActionsRef = useRef(null);
   const projectActionsTriggerRef = useRef(null);
 
@@ -2161,10 +2240,10 @@ function ProjectView({ project, capsules, capsulesLoading, onOpenCapsule, playin
   }, [groups, activeGroupId]);
 
   useEffect(() => {
-    if (!focusedTrackId) return undefined;
+    if (!focusedTrackId || section !== "tracks") return undefined;
     const timer = setTimeout(() => document.getElementById(`track-${focusedTrackId}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
     return () => clearTimeout(timer);
-  }, [focusedTrackId]);
+  }, [focusedTrackId, section]);
 
   useEffect(() => {
     if (!projectActionsOpen) return undefined;
@@ -2204,14 +2283,63 @@ function ProjectView({ project, capsules, capsulesLoading, onOpenCapsule, playin
     onReorderGroups(ids);
   }
 
-  function dropGroup(targetId) {
-    if (!draggedGroupId || draggedGroupId === targetId) return;
-    const ids = groups.map((group) => group.id).filter((id) => id !== draggedGroupId);
-    const targetIndex = ids.indexOf(targetId);
-    ids.splice(targetIndex, 0, draggedGroupId);
-    setDraggedGroupId("");
-    onReorderGroups(ids);
+  function sortGroups(mode) {
+    setTrackSortMode(mode);
+    setProjectSortOpen(false);
   }
+
+  function startTrackReorder(event, groupId) {
+    const row = event.currentTarget;
+    dragRef.current = { groupId, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, active: false, targetId: groupId };
+    if (event.pointerType === "touch") dragHoldRef.current = window.setTimeout(() => {
+      if (dragRef.current?.pointerId !== event.pointerId) return;
+      dragRef.current.active = true;
+      setDraggedGroupId(groupId);
+      setDragPreviewIds(groups.map((group) => group.id));
+      row.setPointerCapture(event.pointerId);
+    }, 260);
+  }
+
+  function moveTrackReorder(event) {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const distance = Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY);
+    if (!drag.active && event.pointerType !== "touch" && distance > 5) {
+      drag.active = true;
+      setDraggedGroupId(drag.groupId);
+      setDragPreviewIds(groups.map((group) => group.id));
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+    if (!drag.active) return;
+    const target = document.elementFromPoint(event.clientX, event.clientY)?.closest("[data-track-group]");
+    if (!target) return;
+    const preview = [...(dragPreviewIds ?? groups.map((group) => group.id))];
+    const from = preview.indexOf(drag.groupId);
+    const to = preview.indexOf(target.dataset.trackGroup);
+    if (from < 0 || to < 0 || from === to) return;
+    preview.splice(from, 1);
+    preview.splice(to, 0, drag.groupId);
+    drag.targetId = target.dataset.trackGroup;
+    setDragPreviewIds([...preview]);
+  }
+
+  function finishTrackReorder(event) {
+    clearTimeout(dragHoldRef.current);
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (drag.active) {
+      const ids = dragPreviewIds ?? groups.map((group) => group.id);
+      onReorderGroups(ids);
+      setTrackSortMode("manual");
+      suppressTrackClickRef.current = true;
+      window.setTimeout(() => { suppressTrackClickRef.current = false; }, 0);
+    }
+    dragRef.current = null;
+    setDraggedGroupId("");
+    setDragPreviewIds(null);
+  }
+
+  const displayGroups = dragPreviewIds ? dragPreviewIds.map((id) => groups.find((group) => group.id === id)).filter(Boolean) : groups;
 
   function moveVersion(group, index, direction) {
     const nextIndex = index + direction;
@@ -2222,37 +2350,160 @@ function ProjectView({ project, capsules, capsulesLoading, onOpenCapsule, playin
   }
 
   const noteLabel = noteTargetId ? project.tracks.find((track) => track.id === noteTargetId)?.versionName ?? "Version" : "Project";
-  const momentTrack = project.tracks.find((track) => track.id === playingTrackId) ?? groups.find((group) => group.id === activeGroupId)?.current ?? groups[0]?.current ?? null;
+  const momentTrack = project.tracks.find((track) => track.id === noteTargetId) ?? project.tracks.find((track) => track.id === playingTrackId) ?? groups.find((group) => group.id === activeGroupId)?.current ?? groups[0]?.current ?? null;
   function runProjectAction(action) {
     setProjectActionsOpen(false);
+    setProjectSortOpen(false);
     action();
   }
-  return <section className="project-screen view-stack">
-    <div className="project-topline"><button className="back-action" type="button" onClick={onBack}><ArrowLeft size={16} />Library</button></div>
-      <div className="project-detail-layout">
-      <ProjectArtwork title={project.title} artwork={project.artwork} nativeAvailable={nativeAvailable} onChange={onEditArtwork} />
-      <div className="project-main-column">
-        <div className="project-header"><div className="project-heading-copy"><h1>{project.title}</h1><p>{project.count} tracks <span>·</span> {project.duration} <span>·</span> {project.year}</p></div><div className="heading-actions"><button className="button button-primary project-play-button" type="button" onClick={onPlay} disabled={!project.count}><Play size={14} weight="fill" />Play</button><div className="project-action-menu-wrap" ref={projectActionsRef}><button ref={projectActionsTriggerRef} className="button button-ghost project-more-trigger" type="button" onClick={() => setProjectActionsOpen((open) => !open)} aria-expanded={projectActionsOpen} aria-controls={`project-actions-${project.id}`} aria-label="More project actions"><DotsThree size={18} /><span>More</span></button>{projectActionsOpen && <div id={`project-actions-${project.id}`} className="project-actions-menu glass" role="group" aria-label="Project actions"><button type="button" disabled={!project.count} onClick={() => runProjectAction(onOpenSequence)}><Queue size={15} />Sequence room</button><button type="button" disabled={!project.count} onClick={() => runProjectAction(onCreateCapsule)}><ShareNetwork size={15} />Make capsule</button><button type="button" onClick={() => runProjectAction(onToggleNotes)}><NotePencil size={15} />{notesOpen ? "Hide notes" : "Show notes"}</button><span className="project-actions-divider" /><button type="button" onClick={() => runProjectAction(onEditProject)}><NotePencil size={15} />Edit details</button><button type="button" onClick={() => runProjectAction(onEditArtwork)}><ImageSquare size={15} />Change artwork</button>{project.artworkRef && <button type="button" onClick={() => runProjectAction(onRemoveArtwork)}><Trash size={15} />Remove artwork</button>}<span className="project-actions-divider" /><button className="is-danger" type="button" onClick={() => runProjectAction(onRemoveProject)}><Trash size={15} />Delete project</button></div>}</div></div></div>
+  return <section className="project-screen project-detail-screen view-stack">
+    <div className="project-topline">
+      <button className="back-action" type="button" onClick={onBack}><ArrowLeft size={16} />{backLabel}</button>
+    </div>
+    <div className="project-detail-layout">
+      <div className="project-artwork-rail">
+        <ProjectArtwork title={project.title} artwork={project.artwork} nativeAvailable={nativeAvailable} onChange={onEditArtwork} />
         {project.description && <p className="project-description project-description-inline">{project.description}</p>}
-        <CapsuleShelf capsules={capsules} loading={capsulesLoading} onOpen={onOpenCapsule} />
-        <div className={`project-workspace ${notesOpen ? "" : "notes-closed"}`}><div className="tracklist-panel"><div className="section-heading project-track-heading"><div className="project-section-title"><h2>Tracks</h2><span className="section-count">{project.count} {project.count === 1 ? "track" : "tracks"}</span></div><button className="project-add-tracks" type="button" onClick={onImport}><Plus size={16} />Add tracks</button></div><div className="track-list">{groups.map((group, index) => { const current = group.current; const isFocused = group.versions.some((version) => version.id === focusedTrackId); const isPlaying = group.versions.some((version) => version.id === playingTrackId); const menuOpen = trackMenuId === group.id; const ribbonOpen = activeGroupId === group.id && group.versions.length > 1; return <React.Fragment key={group.id}><div className={`track-row ${isPlaying ? "is-current" : ""} ${isFocused ? "is-search-match" : ""} ${draggedGroupId === group.id ? "is-dragging" : ""}`} id={`track-${isFocused ? focusedTrackId : group.id}`} draggable={!editingGroupId} onDragStart={() => setDraggedGroupId(group.id)} onDragEnd={() => setDraggedGroupId("")} onDragOver={(event) => event.preventDefault()} onDrop={() => dropGroup(group.id)}><div className="track-main" role="button" tabIndex={0} onClick={() => { setActiveGroupId(group.id); onTrackSelect(current); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setActiveGroupId(group.id); onTrackSelect(current); } }}><span className="track-number">{String(index + 1).padStart(2, "0")}</span><span className="drag-handle" aria-hidden="true"><DotsSixVertical size={14} /></span>{editingGroupId === group.id ? <input className="track-title-editor" autoFocus value={editingTitle} onChange={(event) => setEditingTitle(event.target.value)} onClick={(event) => event.stopPropagation()} onBlur={() => finishEditing(group)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); if (event.key === "Escape") { setEditingGroupId(""); setEditingTitle(group.title); } }} /> : <span className="track-name"><strong>{group.title}</strong><small>{current?.versionName ?? "Original"}{group.versions.length > 1 ? ` · ${group.versions.length} versions` : ""}</small></span>}</div><span className="track-duration">{current?.duration ?? "0:00"}</span><div className="track-actions"><span className="track-menu-wrap"><button type="button" className={`track-action track-menu-trigger ${menuOpen ? "is-active" : ""}`} onClick={(event) => { event.stopPropagation(); setActiveGroupId(group.id); setTrackMenuId(menuOpen ? "" : group.id); }} aria-label={`Open actions for ${group.title}`} aria-expanded={menuOpen}><DotsThree size={17} /></button>{menuOpen && <TrackMenu group={group} index={index} groupCount={groups.length} onMove={(direction) => { setTrackMenuId(""); moveGroup(index, direction); }} onRename={() => { setTrackMenuId(""); startEditing(group); }} onAddVersion={() => { setTrackMenuId(""); onAddVersion(group); }} onNotes={() => { setTrackMenuId(""); onNoteTargetChange(noteTargetId === current?.id ? null : current?.id); }} onRemove={() => { setTrackMenuId(""); onRemoveVersion(current, group); }} onClose={() => setTrackMenuId("")} />}</span></div></div>{ribbonOpen && <div className="version-ribbon" aria-label={`Versions of ${group.title}`}>{group.versions.map((version, versionIndex) => <div className={`version-chip-wrap ${versionMenuId === version.id ? "is-menu-open" : ""}`} key={version.id}><button type="button" className={`version-chip ${version.isCurrent ? "is-current" : ""} ${playingTrackId === version.id ? "is-playing" : ""}`} onClick={() => onVersionSelect(project, version)} aria-pressed={version.isCurrent}><span className="version-chip-marker">{version.isCurrent ? <Check size={11} weight="bold" /> : <span>{String(versionIndex + 1).padStart(2, "0")}</span>}</span><span><strong>{version.versionName}</strong><small>{version.duration}</small></span></button><button type="button" className="version-chip-menu" onClick={() => setVersionMenuId(versionMenuId === version.id ? "" : version.id)} aria-label={`Open actions for ${version.versionName}`} aria-expanded={versionMenuId === version.id}><DotsThree size={15} /></button>{versionMenuId === version.id && <VersionMenu version={version} index={versionIndex} versionCount={group.versions.length} onMove={(direction) => { setVersionMenuId(""); moveVersion(group, versionIndex, direction); }} onRename={() => { setVersionMenuId(""); const nextName = window.prompt("Version name", version.versionName); if (nextName?.trim()) onRenameVersion(version.id, nextName); }} onPromote={() => { setVersionMenuId(""); onPromoteVersion(version); }} onNotes={() => { setVersionMenuId(""); onNoteTargetChange(noteTargetId === version.id ? null : version.id); }} onRemove={() => { setVersionMenuId(""); onRemoveVersion(version, group); }} onClose={() => setVersionMenuId("")} />}</div>)}</div>}</React.Fragment>; })}</div></div>{notesOpen && <ProjectNotesPanel
-          project={project}
-          projectId={project.id}
-          noteContextId={noteTargetId ?? "project"}
-          noteLabel={noteLabel}
-          noteText={noteText}
-          noteStatus={noteStatus}
-          nativeAvailable={nativeAvailable}
-          onNoteChange={onNoteChange}
-          onFlushNotes={onFlushNotes}
-          momentTrack={momentTrack}
-          selectedMomentId={selectedMomentId}
-          onMomentSelect={(moment) => onMomentSelect(project, momentTrack, moment)}
-          onMomentJump={onMomentJump}
-          onMomentUpdate={onMomentUpdate}
-          onMomentDelete={onMomentDelete}
-          onJumpUnresolved={(direction) => onJumpUnresolved(project, momentTrack, direction)}
-        />}</div>
+      </div>
+      <div className="project-main-column">
+        <header className="project-header">
+          <div className="project-heading-copy">
+            <h1>{project.title}</h1>
+            <p>{groups.length} {groups.length === 1 ? "track" : "tracks"} <span>·</span> {project.duration}{project.year && project.year !== "undefined" ? <><span>·</span> {project.year}</> : null}</p>
+          </div>
+          <div className="heading-actions">
+            <button className="button button-primary project-play-button" type="button" onClick={onPlay} disabled={!groups.length}><Play size={16} weight="fill" />Play</button>
+            <div className="project-action-menu-wrap" ref={projectActionsRef}>
+              <button ref={projectActionsTriggerRef} className="button button-ghost project-more-trigger" type="button" onClick={() => { setProjectActionsOpen((open) => !open); setProjectSortOpen(false); }} aria-expanded={projectActionsOpen} aria-controls={projectActionsOpen ? `project-actions-${project.id}` : undefined} aria-label="More project actions"><DotsThree size={23} weight="bold" /></button>
+              {projectActionsOpen && <div id={`project-actions-${project.id}`} className="project-actions-menu glass" role="group" aria-label="Project actions">
+                {SEQUENCE_ROOM_ENABLED && <button type="button" disabled={!groups.length} onClick={() => runProjectAction(onOpenSequence)}><Queue size={16} />Sequence room</button>}
+                {CAPSULES_ENABLED && <button type="button" disabled={!groups.length} onClick={() => runProjectAction(onCreateCapsule)}><ShareNetwork size={16} />Make capsule</button>}
+                <button type="button" className={`project-sort-trigger${projectSortOpen ? " is-open" : ""}`} onClick={() => setProjectSortOpen((open) => !open)} aria-expanded={projectSortOpen}><ArrowsDownUp size={16} /><span>Sort</span>{projectSortOpen ? <CaretDown size={14} /> : <CaretRight size={14} />}</button>
+                {projectSortOpen && <div className="project-sort-options" role="group" aria-label="Sort project tracks">
+                  {[["manual", "Manual"], ["alphabetical", "Alphabetical"], ["dateAdded", "Date added"], ["dateModified", "Date modified"]].map(([mode, label]) => <button type="button" key={mode} aria-pressed={trackSortMode === mode} onClick={() => sortGroups(mode)}>{trackSortMode === mode ? <Check size={15} /> : <span className="project-sort-check-spacer" />}<span>{label}</span></button>)}
+                </div>}
+                <span className="project-actions-divider" />
+                <button type="button" onClick={() => runProjectAction(onEditProject)}><NotePencil size={16} />Edit details</button>
+                <button type="button" onClick={() => runProjectAction(onEditArtwork)}><ImageSquare size={16} />Change artwork</button>
+                {project.artworkRef && <button type="button" onClick={() => runProjectAction(onRemoveArtwork)}><Trash size={16} />Remove artwork</button>}
+                <span className="project-actions-divider" />
+                <button className="is-danger" type="button" onClick={() => runProjectAction(onRemoveProject)}><Trash size={16} />Delete project</button>
+              </div>}
+            </div>
+          </div>
+        </header>
+        <div className="project-section-nav" role="group" aria-label="Project sections">
+          <button type="button" aria-pressed={section === "tracks"} onClick={() => onSectionChange("tracks")}><ListBullets size={16} />Tracks</button>
+          <button type="button" aria-pressed={section === "notes"} onClick={() => onSectionChange("notes")}><NotePencil size={16} />Notes &amp; Moments</button>
+          {CAPSULES_ENABLED && <button type="button" aria-pressed={section === "capsules"} onClick={() => onSectionChange("capsules")}><ShareNetwork size={16} />Capsules</button>}
+        </div>
+        {section === "tracks" && <section className="project-detail-pane tracklist-panel" aria-label="Project tracks">
+          <button className="project-add-tracks" type="button" onClick={onImport}><Plus size={17} />Add tracks</button>
+          {groups.length === 0 && <p className="project-track-empty">Add a track to start your project.</p>}
+          <div className="track-list">{displayGroups.map((group, index) => {
+            const current = group.current;
+            const isFocused = group.versions.some((version) => version.id === focusedTrackId);
+            const isPlaying = group.versions.some((version) => version.id === playingTrackId);
+            const menuOpen = trackMenuId === group.id;
+            const ribbonOpen = expandedGroupId === group.id;
+            function playTrack() {
+              if (suppressTrackClickRef.current) return;
+              setActiveGroupId(group.id);
+              onTrackSelect(current);
+            }
+            return <div className="project-track-group" data-track-group={group.id} key={group.id}>
+              <div
+                className={`track-row ${isPlaying ? "is-current" : ""} ${isFocused ? "is-search-match" : ""} ${draggedGroupId === group.id ? "is-dragging" : ""}`}
+                id={`track-${isFocused ? focusedTrackId : group.id}`}
+                onPointerDown={(event) => !editingGroupId && startTrackReorder(event, group.id)}
+                onPointerMove={moveTrackReorder}
+                onPointerUp={finishTrackReorder}
+                onPointerCancel={finishTrackReorder}
+              >
+                {editingGroupId === group.id ? <div className="track-main">
+                  <span className="track-number">{index + 1}</span>
+                  <input className="track-title-editor" aria-label="Track name" autoFocus value={editingTitle} onChange={(event) => setEditingTitle(event.target.value)} onBlur={() => finishEditing(group)} onKeyDown={(event) => {
+                    if (event.key === "Enter") event.currentTarget.blur();
+                    if (event.key === "Escape") { setEditingGroupId(""); setEditingTitle(group.title); }
+                  }} />
+                </div> : <button type="button" className="track-main" onClick={playTrack} aria-label={`Play ${group.title}`}>
+                  <span className="track-number"><span>{index + 1}</span><Play size={13} weight="fill" /></span>
+                  <span className="track-name"><strong>{group.title}</strong><small>{current?.versionName ?? "Original"}</small></span>
+                </button>}
+                <span className="track-duration">{current?.duration ?? "0:00"}</span>
+                <div className="track-actions">
+                  {group.versions.length > 1 && <button type="button" className="track-action project-versions-trigger" aria-label={`Show versions of ${group.title}`} aria-expanded={ribbonOpen} onClick={() => {
+                    setExpandedGroupId(ribbonOpen ? "" : group.id);
+                    setVersionMenuId("");
+                  }}><span>{group.versions.length}</span><CaretDown size={12} /></button>}
+                  <span className="track-menu-wrap">
+                    <button type="button" className={`track-action track-menu-trigger ${menuOpen ? "is-active" : ""}`} onClick={() => setTrackMenuId(menuOpen ? "" : group.id)} aria-label={`Open actions for ${group.title}`} aria-expanded={menuOpen}><DotsThree size={20} weight="bold" /></button>
+                    {menuOpen && <TrackMenu group={group} index={index} groupCount={groups.length}
+                      onMove={(direction) => { setTrackMenuId(""); moveGroup(index, direction); }}
+                      onRename={() => { setTrackMenuId(""); startEditing(group); }}
+                      onAddVersion={() => { setTrackMenuId(""); onAddVersion(group); }}
+                      onNotes={() => { setTrackMenuId(""); onNoteTargetChange(current.id); }}
+                      onInfo={() => { setTrackMenuId(""); onTrackInfo(current); }}
+                      onRemove={() => { setTrackMenuId(""); onRemoveVersion(current, group); }}
+                      onClose={() => setTrackMenuId("")}
+                    />}
+                  </span>
+                </div>
+              </div>
+              {ribbonOpen && group.versions.length > 1 && <div className="version-ribbon" aria-label={`Versions of ${group.title}`}>
+                {group.versions.map((version, versionIndex) => <div className={`version-chip-wrap ${versionMenuId === version.id ? "is-menu-open" : ""}`} key={version.id}>
+                  <button type="button" className={`version-chip ${version.isCurrent ? "is-current" : ""} ${playingTrackId === version.id ? "is-playing" : ""}`} onClick={() => onVersionSelect(project, version)} aria-pressed={version.isCurrent}>
+                    <span className="version-chip-marker">{version.isCurrent ? <Check size={11} weight="bold" /> : <Play size={10} weight="fill" />}</span>
+                    <span><strong>{version.versionName}</strong><small>{version.duration}</small></span>
+                  </button>
+                  <button type="button" className="version-chip-menu" onClick={() => setVersionMenuId(versionMenuId === version.id ? "" : version.id)} aria-label={`Open actions for ${version.versionName}`} aria-expanded={versionMenuId === version.id}><DotsThree size={15} /></button>
+                  {versionMenuId === version.id && <VersionMenu version={version} index={versionIndex} versionCount={group.versions.length}
+                    onMove={(direction) => { setVersionMenuId(""); moveVersion(group, versionIndex, direction); }}
+                    onRename={() => { setVersionMenuId(""); const nextName = window.prompt("Version name", version.versionName); if (nextName?.trim()) onRenameVersion(version.id, nextName); }}
+                    onPromote={() => { setVersionMenuId(""); onPromoteVersion(version); }}
+                    onNotes={() => { setVersionMenuId(""); onNoteTargetChange(version.id); }}
+                    onInfo={() => { setVersionMenuId(""); onTrackInfo(version); }}
+                    onRemove={() => { setVersionMenuId(""); onRemoveVersion(version, group); }}
+                    onClose={() => setVersionMenuId("")}
+                  />}
+                </div>)}
+              </div>}
+            </div>;
+          })}</div>
+        </section>}
+        {section === "notes" && <section className="project-detail-pane" aria-label="Project notes and moments">
+          <label className="project-note-picker">
+            <span>Notes for</span>
+            <select value={noteTargetId ?? ""} onChange={(event) => onNoteTargetChange(event.target.value || null)}>
+              <option value="">Project</option>
+              {groups.map((group) => <optgroup key={group.id} label={group.title}>
+                {group.versions.map((version) => <option key={version.id} value={version.id}>{group.title} · {version.versionName}</option>)}
+              </optgroup>)}
+            </select>
+          </label>
+          <ProjectNotesPanel
+            project={project}
+            projectId={project.id}
+            noteContextId={noteTargetId ?? "project"}
+            noteLabel={noteLabel}
+            noteText={noteText}
+            noteStatus={noteStatus}
+            nativeAvailable={nativeAvailable}
+            onNoteChange={onNoteChange}
+            onFlushNotes={onFlushNotes}
+            momentTrack={momentTrack}
+            selectedMomentId={selectedMomentId}
+            onMomentSelect={(moment) => onMomentSelect(project, momentTrack, moment)}
+            onMomentJump={onMomentJump}
+            onMomentUpdate={onMomentUpdate}
+            onMomentDelete={onMomentDelete}
+            onJumpUnresolved={(direction) => onJumpUnresolved(project, momentTrack, direction)}
+          />
+        </section>}
+        {CAPSULES_ENABLED && section === "capsules" && <section className="project-detail-pane" aria-label="Project capsules">
+          <button className="project-add-tracks" type="button" onClick={onCreateCapsule} disabled={!groups.length}><Plus size={17} />Make capsule</button>
+          <CapsuleShelf capsules={capsules} loading={capsulesLoading} onOpen={onOpenCapsule} />
+        </section>}
       </div>
     </div>
   </section>;
@@ -2278,7 +2529,7 @@ function SequenceRoom({ project, playingTrackId, playbackState, elapsedMs, durat
   if (!current) return <section className="sequence-room sequence-room-empty"><button className="back-action" type="button" onClick={onBack}><ArrowLeft size={16} />Project</button><div><span className="eyebrow">Sequence</span><h1>No tracks yet</h1><p>Add tracks to build a listening order.</p></div></section>;
 
   return <section className="sequence-room view-stack">
-    <div className="sequence-room-topline"><button className="back-action" type="button" onClick={onBack}><ArrowLeft size={16} />Project</button><div className="sequence-room-title"><span className="eyebrow">Sequence</span><h1>{project.title}</h1></div><div className="sequence-room-actions"><button className="button button-capsule" type="button" onClick={onCreateCapsule}><ShareNetwork size={14} />Make capsule</button></div></div>
+    <div className="sequence-room-topline"><button className="back-action" type="button" onClick={onBack}><ArrowLeft size={16} />Project</button><div className="sequence-room-title"><span className="eyebrow">Sequence</span><h1>{project.title}</h1></div>{CAPSULES_ENABLED && <div className="sequence-room-actions"><button className="button button-capsule" type="button" onClick={onCreateCapsule}><ShareNetwork size={14} />Make capsule</button></div>}</div>
     <div className="sequence-hero">
       <div className="sequence-artwork-wrap"><img src={project.artwork} alt={`${project.title} artwork`} /></div>
       <div className="sequence-hero-copy"><span className="eyebrow">{status}</span><h2>{current.title}</h2><p>{current.versionName} <span>·</span> {current.duration}</p><div className="sequence-transport"><button type="button" onClick={onPrevious} aria-label="Previous track"><SkipBack size={17} weight="fill" /></button><button className="sequence-play" type="button" onClick={onPlay} aria-label={playbackState === "playing" ? "Pause sequence" : "Play sequence"}>{playbackState === "playing" ? <Pause size={19} weight="fill" /> : <Play size={19} weight="fill" />}</button><button type="button" onClick={onNext} aria-label="Next track"><SkipForward size={17} weight="fill" /></button></div><div className="sequence-progress"><div><span>{formatTime(elapsedMs)}</span><span>{formatTime(durationMs)}</span></div><input aria-label="Sequence playback position" type="range" min="0" max="100" value={progress} onChange={onProgressChange} disabled={!durationMs} /></div></div>
@@ -2466,7 +2717,7 @@ function handleActionMenuKeyDown(event, menuRef, onClose) {
   items[nextIndex]?.focus();
 }
 
-function TrackMenu({ group, index, groupCount, onMove, onRename, onAddVersion, onNotes, onRemove, onClose }) {
+function TrackMenu({ group, index, groupCount, onMove, onRename, onAddVersion, onNotes, onInfo, onRemove, onClose }) {
   const menuRef = useRef(null);
   useEffect(() => {
     function handlePointerDown(event) {
@@ -2481,16 +2732,18 @@ function TrackMenu({ group, index, groupCount, onMove, onRename, onAddVersion, o
 
   return <div ref={menuRef} className="track-menu glass" data-popover role="menu" aria-label={`Actions for ${group.title}`} onKeyDown={(event) => handleActionMenuKeyDown(event, menuRef, onClose)}>
     <span className="eyebrow">Track actions</span>
+    <button type="button" role="menuitem" onClick={onNotes}><NotePencil size={14} />Open notes</button>
+    <button type="button" role="menuitem" onClick={onInfo}><Info size={14} />Track details</button>
+    <span className="project-menu-divider" aria-hidden="true" />
     <button type="button" role="menuitem" onClick={() => onMove(-1)} disabled={index === 0}><CaretLeft size={14} />Move earlier</button>
     <button type="button" role="menuitem" onClick={() => onMove(1)} disabled={index === groupCount - 1}><CaretRight size={14} />Move later</button>
     <button type="button" role="menuitem" onClick={onAddVersion}><Plus size={14} />Add bounce</button>
     <button type="button" role="menuitem" onClick={onRename}><NotePencil size={14} />Rename track</button>
-    <button type="button" role="menuitem" onClick={onNotes}><NotePencil size={14} />Open notes</button>
     <button type="button" className="track-menu-danger" role="menuitem" onClick={onRemove} disabled={group.versions.length <= 1}><Trash size={14} />Remove current version</button>
   </div>;
 }
 
-function VersionMenu({ version, index, versionCount, onMove, onRename, onPromote, onNotes, onRemove, onClose }) {
+function VersionMenu({ version, index, versionCount, onMove, onRename, onPromote, onNotes, onInfo, onRemove, onClose }) {
   const menuRef = useRef(null);
   useEffect(() => {
     function handlePointerDown(event) {
@@ -2504,11 +2757,13 @@ function VersionMenu({ version, index, versionCount, onMove, onRename, onPromote
   }, [onClose]);
   return <div ref={menuRef} className="version-menu glass" data-popover role="menu" aria-label={`Actions for ${version.versionName}`} onKeyDown={(event) => handleActionMenuKeyDown(event, menuRef, onClose)}>
     <span className="eyebrow">Version actions</span>
+    <button type="button" role="menuitem" onClick={onNotes}><NotePencil size={14} />{version.note?.text ? "Edit notes" : "Open notes"}</button>
+    <button type="button" role="menuitem" onClick={onInfo}><Info size={14} />Track details</button>
+    <span className="project-menu-divider" aria-hidden="true" />
     <button type="button" role="menuitem" onClick={() => onMove(-1)} disabled={index === 0}><CaretLeft size={14} />Move earlier</button>
     <button type="button" role="menuitem" onClick={() => onMove(1)} disabled={index === versionCount - 1}><CaretRight size={14} />Move later</button>
     <button type="button" role="menuitem" onClick={onRename}><NotePencil size={14} />Rename version</button>
     <button type="button" role="menuitem" onClick={onPromote} disabled={version.isCurrent}><Check size={14} />{version.isCurrent ? "Current version" : "Make current"}</button>
-    <button type="button" role="menuitem" onClick={onNotes}><NotePencil size={14} />{version.note?.text ? "Edit notes" : "Open notes"}</button>
     <button type="button" className="track-menu-danger" role="menuitem" onClick={onRemove} disabled={versionCount <= 1}><Trash size={14} />Remove version</button>
   </div>;
 }
@@ -2525,7 +2780,7 @@ function MomentList({ project, track, selectedMomentId, onSelectMoment, onJumpMo
   }, [compareMomentId, moments]);
 
   const unresolvedCount = moments.filter((moment) => !moment.isResolved).length;
-  return <section className="moment-section" aria-label="Annotation halo"><div className="moment-section-heading"><div><span className="eyebrow">Annotation halo</span><h3>Moments</h3></div><div className="moment-nav"><button type="button" onClick={() => onJumpUnresolved(-1)} disabled={!unresolvedCount} aria-label="Previous unresolved moment" title="Previous unresolved moment"><CaretLeft size={13} /></button><span>{unresolvedCount ? `${unresolvedCount} open` : "All clear"}</span><button type="button" onClick={() => onJumpUnresolved(1)} disabled={!unresolvedCount} aria-label="Next unresolved moment" title="Next unresolved moment"><CaretRight size={13} /></button></div></div>{moments.length ? <div className="moment-list">{moments.map((moment) => <MomentCard key={moment.id} project={project} track={track} moment={moment} versions={versions} selected={moment.id === selectedMomentId} onSelect={onSelectMoment} onJump={onJumpMoment} onUpdate={onUpdateMoment} onDelete={onDeleteMoment} onCompare={() => setCompareMomentId(compareMomentId === moment.id ? "" : moment.id)} />)}</div> : <div className="moment-empty"><Waveform size={16} /><span>Click the waveform to leave a timestamped decision.</span></div>}{selectedMoment && <MomentCompare project={project} track={track} moment={selectedMoment} versions={versions} onJumpMoment={onJumpMoment} onClose={() => setCompareMomentId("")} />}</section>;
+  return <section className="moment-section" aria-label="Moments"><div className="moment-section-heading"><div><h3>Moments</h3></div><div className="moment-nav"><button type="button" onClick={() => onJumpUnresolved(-1)} disabled={!unresolvedCount} aria-label="Previous unresolved moment" title="Previous unresolved moment"><CaretLeft size={13} /></button><span>{unresolvedCount ? `${unresolvedCount} open` : "All clear"}</span><button type="button" onClick={() => onJumpUnresolved(1)} disabled={!unresolvedCount} aria-label="Next unresolved moment" title="Next unresolved moment"><CaretRight size={13} /></button></div></div>{moments.length ? <div className="moment-list">{moments.map((moment) => <MomentCard key={moment.id} project={project} track={track} moment={moment} versions={versions} selected={moment.id === selectedMomentId} onSelect={onSelectMoment} onJump={onJumpMoment} onUpdate={onUpdateMoment} onDelete={onDeleteMoment} onCompare={() => setCompareMomentId(compareMomentId === moment.id ? "" : moment.id)} />)}</div> : <div className="moment-empty"><Waveform size={16} /><span>Click the waveform to leave a timestamped decision.</span></div>}{selectedMoment && <MomentCompare project={project} track={track} moment={selectedMoment} versions={versions} onJumpMoment={onJumpMoment} onClose={() => setCompareMomentId("")} />}</section>;
 }
 
 function MomentCard({ project, track, moment, versions, selected, onSelect, onJump, onUpdate, onDelete, onCompare }) {
@@ -2840,8 +3095,32 @@ function PlayerMenu({ track, elapsedMs, onCreateMoment, onOpenProject, onShowTra
   return <div ref={menuRef} className="player-menu glass" data-popover role="menu" aria-label={`Actions for ${track.title}`}><span className="eyebrow">Current track</span><button type="button" role="menuitem" aria-keyshortcuts="M" title="Press M to add a moment at the playhead" onClick={() => run(() => onCreateMoment?.(elapsedMs))} disabled={!onCreateMoment || !track.durationMs}><NotePencil size={15} />Add moment here <kbd>M</kbd></button><button type="button" role="menuitem" onClick={() => run(onOpenProject)}><FolderOpen size={15} />Open project</button><button type="button" role="menuitem" onClick={() => run(onShowTrack)}><ListBullets size={15} />Show in project</button><button type="button" role="menuitem" onClick={() => run(onOpenNotes)}><NotePencil size={15} />Open track notes</button><button type="button" role="menuitem" onClick={() => run(onRevealFile)} disabled={!track.managedFilePath} title={track.managedFilePath ? "Reveal the managed audio file" : "The managed audio file is missing"}><ArrowSquareOut size={15} />Reveal managed file</button><button type="button" role="menuitem" onClick={() => run(onShowInfo)}><Info size={15} />Track information</button></div>;
 }
 
-function TrackInfoDialog({ project, track, onClose }) {
-  return <DialogFrame titleId="track-info-title" onClose={onClose} className="info-dialog"><button className="modal-close" type="button" onClick={onClose} aria-label="Close track information"><X size={18} /></button><span className="eyebrow">Track version</span><h2 id="track-info-title">{track.title}</h2><p className="dialog-subtitle">{track.versionName ?? "Original"} · {project.title}</p><dl className="info-list"><div><dt>Source title</dt><dd>{track.sourceTitle || track.title}</dd></div><div><dt>Format</dt><dd>{track.format || "Unknown"}</dd></div><div><dt>Duration</dt><dd>{track.duration}</dd></div><div><dt>Current</dt><dd>{track.isCurrent ? "Yes" : "No"}</dd></div><div><dt>Managed audio</dt><dd>{track.managedFilePath ? "Available" : "Missing"}</dd></div><div><dt>Notes</dt><dd>{track.note?.text ? "Has notes" : "Empty"}</dd></div></dl><button className="button button-primary modal-cta" type="button" onClick={onClose}>Done</button></DialogFrame>;
+function TrackInfoDialog({ project, track, onClose, onAddVersion }) {
+  const facts = [
+    ["Duration", track.duration],
+    ...(track.format ? [["Format", track.format]] : []),
+  ];
+  return <DialogFrame titleId="track-info-title" onClose={onClose} className="info-dialog track-details-dialog">
+    <button className="modal-close" type="button" onClick={onClose} aria-label="Close track information"><X size={18} /></button>
+    <div className="track-details-summary">
+      <img src={project.artwork} alt="" />
+      <span className="eyebrow">{project.title}</span>
+      <h2 id="track-info-title">{track.title}</h2>
+      <p className="dialog-subtitle">{track.versionName ?? "Original"}{track.duration ? ` · ${track.duration}` : ""}</p>
+    </div>
+    <section className="track-details-facts" aria-label="Details">
+      <span className="eyebrow">Version</span>
+      <div className={`track-active-version${track.isCurrent ? " is-current" : ""}`}>
+        <div><strong>{track.versionName ?? "Original"}</strong><span>{track.isCurrent ? "Active version" : "Alternate version"}</span></div>
+        <span className="track-version-mark" aria-hidden="true">{track.isCurrent ? "●" : "○"}</span>
+      </div>
+      <dl className="info-list">
+        {facts.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
+      </dl>
+      <button className="button button-ghost track-add-version" type="button" onClick={onAddVersion}><Plus size={15} />Add new version</button>
+      <button className="button button-primary modal-cta" type="button" onClick={onClose}>Done</button>
+    </section>
+  </DialogFrame>;
 }
 
 function DiagnosticsDialog({ diagnostics, notice, onCopy, onExport, onClose }) {

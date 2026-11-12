@@ -139,6 +139,13 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   gap: 17px;
 }
 
+.topbar-left .search-field {
+  width: 168px;
+  padding: 8px 11px;
+  border-color: rgba(235, 237, 255, .13);
+  background: rgba(238, 240, 255, .055);
+}
+
 .brand-lockup {
   flex: 0 0 auto;
   display: inline-flex;
@@ -222,19 +229,19 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   display: flex;
   align-items: center;
   justify-self: end;
-  gap: 12px;
+  gap: 9px;
 }
 
 .topbar-import {
   display: flex;
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: 1px solid rgba(224, 234, 255, .2);
+  border: 1px solid rgba(235, 237, 255, .16);
   border-radius: 50%;
-  background: rgba(222, 232, 255, .1);
+  background: rgba(238, 240, 255, .075);
   color: var(--ivory);
   cursor: pointer;
   font-size: 0;
@@ -462,6 +469,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   .topbar-actions {
     grid-column: 2;
   }
+  .topbar-sort-control {
+    display: none;
+  }
   .brand-version, .sync-state {
     display: none;
   }
@@ -604,83 +614,15 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   background: rgba(183, 200, 240, .24);
 }
 
-.opal-app[data-view="library"] .topbar {
-  min-height: 64px;
-  padding: 12px 28px 0;
-}
-
-.opal-app[data-view="library"] .topbar-left {
-  gap: 17px;
-}
-
-.opal-app[data-view="library"] .brand-mark {
-  width: 27px;
-  height: 27px;
-}
-
-.opal-app[data-view="library"] .brand-name {
-  color: rgba(245, 246, 255, .88);
-  font-size: 16px;
-  letter-spacing: .17em;
-}
-
-.opal-app[data-view="library"] .search-field {
-  width: 168px;
-  padding: 8px 11px;
-  border-color: rgba(235, 237, 255, .13);
-  border-radius: 18px;
-  background: rgba(238, 240, 255, .055);
-}
-
-.opal-app[data-view="library"] .top-navigation {
-  gap: 2px;
-  padding: 3px;
-  border-color: rgba(235, 237, 255, .12);
-  border-radius: 19px;
-  background: rgba(18, 25, 53, .15);
-}
-
-.opal-app[data-view="library"] .top-navigation button {
-  padding: 7px 13px;
-  border-radius: 15px;
-  color: rgba(237, 239, 255, .58);
-  font-size: 11px;
-}
-
-.opal-app[data-view="library"] .top-navigation button.is-active {
-  background: rgba(230, 231, 255, .12);
-  color: var(--ivory);
-}
-
-.opal-app[data-view="library"] .topbar-actions {
-  gap: 9px;
-}
-
-.opal-app[data-view="library"] .topbar-import {
-  width: 34px;
-  height: 34px;
-  justify-content: center;
-  padding: 0;
-  border-color: rgba(235, 237, 255, .16);
-  border-radius: 50%;
-  background: rgba(238, 240, 255, .075);
-  font-size: 0;
-}
-
-.opal-app[data-view="library"] .topbar-import svg {
-  width: 16px;
-  height: 16px;
-}
-
-.opal-app[data-view="library"] .topbar-sort-control {
+.topbar-sort-control {
   margin-right: 3px;
 }
 
-.opal-app[data-view="library"] .topbar-sort-control span {
+.topbar-sort-control span {
   display: none;
 }
 
-.opal-app[data-view="library"] .topbar-sort-control select {
+.topbar-sort-control select {
   padding: 8px 25px 8px 12px;
   border: 1px solid rgba(235, 237, 255, .12);
   border-radius: 17px;
@@ -688,8 +630,14 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   font-size: 10px;
 }
 
-.opal-app[data-view="library"] .topbar-sort-control svg {
+.topbar-sort-control svg {
   right: 8px;
+}
+
+/* Keep the action group anchored when its library-only sort control is inactive. */
+.topbar-sort-control.is-placeholder {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .opal-app[data-view="library"] .stage {
@@ -700,22 +648,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 }
 
 @media (max-width: 760px) {
-  .opal-app[data-view="library"] .topbar {
-    min-height: 56px;
-    padding: 10px 18px 0;
-  }
-  .opal-app[data-view="library"] .topbar-left .search-field {
-    display: none;
-  }
-  .opal-app[data-view="library"] .top-navigation {
-    margin: 0;
-  }
-  .opal-app[data-view="library"] .topbar-actions {
-    gap: 6px;
-  }
-  .opal-app[data-view="library"] .topbar-sort-control {
-    display: none;
-  }
   .opal-app[data-view="library"] .stage {
     height: auto;
     min-height: calc(100vh - 56px);
@@ -724,20 +656,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 }
 
 @media (max-width: 520px) {
-  .opal-app[data-view="library"] .topbar {
-    justify-content: space-between;
-    padding-inline: 12px;
-  }
-  .opal-app[data-view="library"] .brand-name {
-    display: none;
-  }
-  .opal-app[data-view="library"] .top-navigation button {
-    padding-inline: 9px;
-    font-size: 10px;
-  }
-  .opal-app[data-view="library"] .topbar-import {
-    display: none;
-  }
   .opal-app[data-view="library"] .stage {
     padding-right: 8px;
     padding-left: 8px;
