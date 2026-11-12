@@ -169,7 +169,7 @@ export function ProjectsCarousel({ projects, index, onSelect, onOpen, onPlay, tr
         <button className="projects-carousel-arrow" type="button" aria-label="Next project" onClick={() => step(1)} disabled={index === projects.length - 1}><CaretRight size={17} /></button>
       </div>
       <div className="projects-carousel-actions">
-        <button className="button button-primary" type="button" onClick={() => onPlay(project)} disabled={!tracks.length}><Play size={15} weight="fill" />Play</button>
+        <button className="button button-primary projects-carousel-play" type="button" onClick={() => onPlay(project)} disabled={!tracks.length} style={{ "--play-artwork": `url(${JSON.stringify(project.artwork)})` }}><Play size={15} weight="fill" /><span>Play</span></button>
         <button className="button button-ghost" type="button" onClick={() => onOpen(project.id)}><FolderOpen size={16} />Open</button>
         <button
           className="button button-ghost projects-preview-toggle"
