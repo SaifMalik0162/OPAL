@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, ArrowUpRight, Check, NotePencil } from "@phosphor-icons/react";
+import { ArrowLeft, ArrowRight, ArrowUpRight, Check, FolderOpen, ListBullets, NotePencil, Plus } from "@phosphor-icons/react";
 import "./onboarding.css";
 
 const demoVersions = [
@@ -46,56 +46,93 @@ function VersionDemo() {
   );
 }
 
+const firstProjectSteps = [
+  { Icon: FolderOpen, title: "New project", detail: "Give a song or collection a home." },
+  { Icon: ListBullets, title: "Add tracks", detail: "Import the audio you want to listen back to." },
+  { Icon: Plus, title: "Add bounce", detail: "Use a track’s ··· menu to add another version of that track." },
+];
+
+const welcomePages = [
+  {
+    kicker: "Early access",
+    title: <>Welcome to <em>OPAL.</em></>,
+    description: "A local music library for work in progress. Keep demos, mixes, and alternate takes together so you can pick up where you left off.",
+    action: "Take a quick look",
+  },
+  {
+    kicker: "Try it out",
+    title: <>Listen back with <em>context.</em></>,
+    description: "Switch versions, scrub the waveform, and mark a Moment to find that spot again. Use Notes & Moments in a project to revisit your notes and saved timestamps.",
+    action: "Next",
+  },
+  {
+    kicker: "Getting started",
+    title: <>Start with <em>a project.</em></>,
+    description: "Bring in a rough bounce, a finished mix, or a whole tracklist. OPAL keeps its own local copies, so your original files stay where they are.",
+    action: "Next",
+  },
+  {
+    title: <>Thanks for trying <em>OPAL.</em></>,
+    description: "It means a lot that you’re giving OPAL a try this early. I hope it makes it a little easier to come back to the music you’re working on.",
+  },
+];
+
 export function Onboarding({ onClose, onEnter }) {
-  const [showDemo, setShowDemo] = useState(false);
+  const [pageIndex, setPageIndex] = useState(0);
   const headingRef = useRef(null);
   const navigatedRef = useRef(false);
+  const page = welcomePages[pageIndex];
+  const isFirstPage = pageIndex === 0;
+  const isLastPage = pageIndex === welcomePages.length - 1;
 
   useEffect(() => {
     if (navigatedRef.current) headingRef.current?.focus();
-  }, [showDemo]);
+  }, [pageIndex]);
 
-  function changeScene(demo) {
+  function changePage(index) {
     navigatedRef.current = true;
-    setShowDemo(demo);
+    setPageIndex(index);
   }
 
   return (
     <div className="onboarding">
-      <div className="onboarding-scene" key={Number(showDemo)}>
+      <div className={isLastPage ? "onboarding-scene onboarding-thank-you" : "onboarding-scene"} key={pageIndex}>
         <div className="onboarding-copy">
-          <span className="onboarding-kicker">{showDemo ? "Try it out" : "OPAL · Early access"}</span>
-          <h2 id="welcome-title" ref={headingRef} tabIndex={-1}>
-            {showDemo ? <>Give every take <em>its place.</em></> : <>Welcome to <em>OPAL.</em></>}
-          </h2>
-          {showDemo ? (
-            <p>Flip between versions, scrub the waveform, and mark a moment you’d come back to. The demo stays separate from your library.</p>
-          ) : (
-            <>
-              <p>A listening room for the music you’re making and every version it could become.</p>
-              <div className="onboarding-alpha"><span>Alpha</span><p>You’re early. Some things may change or break, and your feedback will help shape what comes next.</p></div>
-            </>
-          )}
+          {page.kicker && <span className="onboarding-kicker">{page.kicker}</span>}
+          <h2 id="welcome-title" ref={headingRef} tabIndex={-1}>{page.title}</h2>
+          <p>{page.description}</p>
+          {isFirstPage && <div className="onboarding-alpha"><span>Alpha</span><p>OPAL is still in development. Your feedback helps shape what comes next.</p></div>}
+          {pageIndex === 1 && <p className="onboarding-demo-note">This demo doesn’t change your library.</p>}
+          {isLastPage && <p className="onboarding-signature">— <strong>packrunnersaif</strong></p>}
         </div>
         <div className="onboarding-visual">
-          {showDemo ? <VersionDemo /> : (
-            <div className="onboarding-emblem" aria-hidden="true">
-              <img src="/opal-mark.png" alt="" />
-            </div>
+          {(isFirstPage || isLastPage) && <div className="onboarding-emblem" aria-hidden="true"><img src="/opal-mark.png" alt="" /></div>}
+          {pageIndex === 1 && <VersionDemo />}
+          {pageIndex === 2 && (
+            <ol className="onboarding-demo onboarding-project-steps" aria-label="How to start a project">
+              {firstProjectSteps.map(({ Icon, title, detail }) => (
+                <li key={title}>
+                  <span className="onboarding-project-icon" aria-hidden="true"><Icon size={18} /></span>
+                  <div><strong>{title}</strong><p>{detail}</p></div>
+                </li>
+              ))}
+            </ol>
           )}
         </div>
       </div>
       <footer className="onboarding-footer">
-        {showDemo ? (
-          <button type="button" className="button button-ghost" onClick={() => changeScene(false)}><ArrowLeft size={15} /> Back</button>
-        ) : <span className="onboarding-credit">Made by <strong>packrunnersaif</strong></span>}
-        <span className="onboarding-steps" role="img" aria-label={`Step ${showDemo ? 2 : 1} of 2`}>
-          <i className={showDemo ? "" : "is-current"} /><i className={showDemo ? "is-current" : ""} />
+        {isFirstPage ? (
+          <span className="onboarding-credit">Made by <strong>packrunnersaif</strong></span>
+        ) : (
+          <button type="button" className="button button-ghost" onClick={() => changePage(pageIndex - 1)}><ArrowLeft size={15} /> Back</button>
+        )}
+        <span className="onboarding-steps" role="img" aria-label={`Step ${pageIndex + 1} of ${welcomePages.length}`}>
+          {welcomePages.map((_, index) => <i key={index} className={index === pageIndex ? "is-current" : ""} />)}
         </span>
         <div className="onboarding-actions">
-          {!showDemo && <button type="button" className="button button-ghost" onClick={onClose}>Skip</button>}
-          <button type="button" className="button button-primary" onClick={showDemo ? onEnter : () => changeScene(true)}>
-            {showDemo ? <>Enter Library <ArrowUpRight size={15} /></> : <>Take a quick look <ArrowRight size={15} /></>}
+          {isFirstPage && <button type="button" className="button button-ghost" onClick={onClose}>Skip</button>}
+          <button type="button" className="button button-primary" onClick={isLastPage ? onEnter : () => changePage(pageIndex + 1)}>
+            {isLastPage ? <>Enter Library <ArrowUpRight size={15} /></> : <>{page.action} <ArrowRight size={15} /></>}
           </button>
         </div>
       </footer>

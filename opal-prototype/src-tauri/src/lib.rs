@@ -102,6 +102,8 @@ struct TrackDto {
     format: String,
     managed_file_ref: String,
     managed_file_path: Option<String>,
+    group_created_at: i64,
+    group_updated_at: i64,
     note: Option<NoteDto>,
     moments: Vec<MomentDto>,
 }
@@ -1193,6 +1195,8 @@ fn track_from_row(row: &rusqlite::Row<'_>, roots: &StorageRoots) -> rusqlite::Re
         managed_file_path: managed_file_path
             .is_file()
             .then(|| managed_file_path.to_string_lossy().into_owned()),
+        group_created_at: row.get(13)?,
+        group_updated_at: row.get(14)?,
         note: None,
         moments: Vec::new(),
     })
@@ -1333,7 +1337,11 @@ fn load_project(
                 ) AS version_count,
                 t.duration_ms,
                 t.format,
-                t.managed_file_ref
+                t.managed_file_ref,
+                COALESCE(g.created_at, t.created_at) AS group_created_at,
+                (SELECT MAX(sibling.created_at)
+                 FROM tracks sibling
+                 WHERE COALESCE(sibling.group_id, sibling.id) = COALESCE(t.group_id, t.id)) AS group_updated_at
              FROM tracks t
              LEFT JOIN track_groups g ON g.id = t.group_id
              WHERE t.project_id = ?1
@@ -2792,50 +2800,30 @@ fn capsule_deletion_impact(
     connection: &Connection,
     project_id: &str,
     track_id: Option<&str>,
+    whole_track: bool,
 ) -> Result<DeletionImpact, String> {
-    let (capsules, responses): (i64, i64) = if let Some(track_id) = track_id {
-        let capsules = connection
-            .query_row(
-                "SELECT COUNT(*) FROM listening_capsules c
-                 WHERE c.project_id = ?1 AND (
-                   EXISTS (SELECT 1 FROM capsule_tracks ct WHERE ct.capsule_id = c.id AND ct.track_id = ?2)
-                   OR EXISTS (SELECT 1 FROM capsule_responses cr WHERE cr.capsule_id = c.id AND cr.track_id = ?2)
-                 )",
-                params![project_id, track_id],
-                |row| row.get(0),
-            )
-            .map_err(|error| format!("Could not count affected Capsules: {error}"))?;
-        let responses = connection
-            .query_row(
-                "SELECT COUNT(*) FROM capsule_responses cr
-                 JOIN listening_capsules c ON c.id = cr.capsule_id
-                 WHERE c.project_id = ?1 AND c.id IN (
-                   SELECT capsule_id FROM capsule_tracks WHERE track_id = ?2
-                   UNION SELECT capsule_id FROM capsule_responses WHERE track_id = ?2
-                 )",
-                params![project_id, track_id],
-                |row| row.get(0),
-            )
-            .map_err(|error| format!("Could not count affected Capsule responses: {error}"))?;
-        (capsules, responses)
-    } else {
-        let capsules = connection
-            .query_row(
-                "SELECT COUNT(*) FROM listening_capsules WHERE project_id = ?1",
-                params![project_id],
-                |row| row.get(0),
-            )
-            .map_err(|error| format!("Could not count affected Capsules: {error}"))?;
-        let responses = connection
-            .query_row(
-                "SELECT COUNT(*) FROM capsule_responses cr
-                 JOIN listening_capsules c ON c.id = cr.capsule_id WHERE c.project_id = ?1",
-                params![project_id],
-                |row| row.get(0),
-            )
-            .map_err(|error| format!("Could not count affected Capsule responses: {error}"))?;
-        (capsules, responses)
-    };
+    let (capsules, responses): (i64, i64) = connection
+        .query_row(
+            "WITH affected_tracks AS (
+                SELECT id FROM tracks
+                WHERE project_id = ?1 AND (
+                    id = ?2 OR (?3 AND COALESCE(group_id, id) = (
+                        SELECT COALESCE(group_id, id) FROM tracks WHERE id = ?2 AND project_id = ?1
+                    ))
+                )
+             ), affected_capsules AS (
+                SELECT id FROM listening_capsules
+                WHERE project_id = ?1 AND (?2 IS NULL OR id IN (
+                    SELECT capsule_id FROM capsule_tracks WHERE track_id IN affected_tracks
+                    UNION SELECT capsule_id FROM capsule_responses WHERE track_id IN affected_tracks
+                ))
+             )
+             SELECT (SELECT COUNT(*) FROM affected_capsules),
+                    (SELECT COUNT(*) FROM capsule_responses WHERE capsule_id IN affected_capsules)",
+            params![project_id, track_id, whole_track],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(|error| format!("Could not count affected Capsules and responses: {error}"))?;
     Ok(DeletionImpact {
         affected_capsules: capsules as usize,
         affected_responses: responses as usize,
@@ -2863,6 +2851,7 @@ fn get_deletion_impact(
     app: tauri::AppHandle,
     project_id: String,
     track_id: Option<String>,
+    whole_track: Option<bool>,
 ) -> Result<DeletionImpact, String> {
     let _operation = lock_library_operation()?;
     let roots = prepare_storage(&app)?;
@@ -2879,7 +2868,12 @@ fn get_deletion_impact(
             return Err("Track version no longer exists in this project.".to_string());
         }
     }
-    capsule_deletion_impact(&connection, &project_id, track_id.as_deref())
+    capsule_deletion_impact(
+        &connection,
+        &project_id,
+        track_id.as_deref(),
+        whole_track.unwrap_or(false),
+    )
 }
 
 #[tauri::command(rename = "deleteTrackVersion", rename_all = "camelCase")]
@@ -3043,30 +3037,61 @@ fn delete_track(
     app: tauri::AppHandle,
     project_id: String,
     track_id: String,
+    whole_track: Option<bool>,
 ) -> Result<ProjectDto, String> {
     let _operation = lock_library_operation()?;
     let roots = prepare_storage(&app)?;
     let mut connection = open_database(&roots.db_path)?;
-    let managed_file_ref: Option<String> = connection
-        .query_row(
-            "SELECT managed_file_ref FROM tracks WHERE id = ?1 AND project_id = ?2",
-            params![track_id, project_id],
-            |row| row.get(0),
-        )
-        .optional()
-        .map_err(|error| format!("Could not locate track: {error}"))?;
-    let managed_file_ref =
-        managed_file_ref.ok_or_else(|| "Track no longer exists in this project.".to_string())?;
     let transaction = connection
         .transaction()
         .map_err(|error| format!("Could not begin track removal: {error}"))?;
-    delete_capsules_referencing_track(&transaction, &track_id)?;
-    transaction
-        .execute(
-            "DELETE FROM tracks WHERE id = ?1 AND project_id = ?2",
-            params![track_id, project_id],
-        )
-        .map_err(|error| format!("Could not remove track: {error}"))?;
+    let managed_files = {
+        let mut statement = transaction
+            .prepare(
+                "SELECT id, managed_file_ref, group_id FROM tracks
+                 WHERE project_id = ?1 AND (
+                    id = ?2 OR (?3 AND COALESCE(group_id, id) = (
+                        SELECT COALESCE(group_id, id) FROM tracks WHERE id = ?2 AND project_id = ?1
+                    ))
+                 )",
+            )
+            .map_err(|error| format!("Could not prepare track lookup: {error}"))?;
+        let rows = statement
+            .query_map(
+                params![project_id, track_id, whole_track.unwrap_or(false)],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, Option<String>>(2)?,
+                    ))
+                },
+            )
+            .map_err(|error| format!("Could not locate track: {error}"))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("Could not read track versions: {error}"))?
+    };
+    if managed_files.is_empty() {
+        return Err("Track no longer exists in this project.".to_string());
+    }
+    for (id, _, _) in &managed_files {
+        delete_capsules_referencing_track(&transaction, id)?;
+        transaction
+            .execute(
+                "DELETE FROM tracks WHERE id = ?1 AND project_id = ?2",
+                params![id, project_id],
+            )
+            .map_err(|error| format!("Could not remove track: {error}"))?;
+    }
+    if let Some(group_id) = &managed_files[0].2 {
+        transaction
+            .execute(
+                "DELETE FROM track_groups WHERE id = ?1 AND project_id = ?2
+                 AND NOT EXISTS (SELECT 1 FROM tracks WHERE group_id = ?1)",
+                params![group_id, project_id],
+            )
+            .map_err(|error| format!("Could not remove the empty track group: {error}"))?;
+    }
     transaction
         .execute(
             "UPDATE projects SET updated_at = ?1 WHERE id = ?2",
@@ -3078,7 +3103,9 @@ fn delete_track(
         .map_err(|error| format!("Could not commit track removal: {error}"))?;
     // The record deletion is already committed. A cleanup failure must not report a false
     // deletion failure; the helper queues any recoverable filesystem work for startup retry.
-    let _ = remove_managed_file_if_unreferenced(&connection, &roots, &managed_file_ref);
+    for (_, managed_file_ref, _) in managed_files {
+        let _ = remove_managed_file_if_unreferenced(&connection, &roots, &managed_file_ref);
+    }
     load_project(&connection, &roots, &project_id)
 }
 
@@ -3586,6 +3613,8 @@ fn import_audio_files_inner(
             format: extension(&source).to_uppercase(),
             managed_file_ref: managed_file_ref.clone(),
             managed_file_path: Some(managed_path.to_string_lossy().into_owned()),
+            group_created_at: now_ms(),
+            group_updated_at: now_ms(),
             note: None,
             moments: Vec::new(),
         };
@@ -5741,6 +5770,8 @@ mod tests {
                 format: "WAV".to_string(),
                 managed_file_ref: managed_ref,
                 managed_file_path: Some(managed_path.to_string_lossy().into_owned()),
+                group_created_at: 1,
+                group_updated_at: 1,
                 note: None,
                 moments: Vec::new(),
             };
@@ -5816,7 +5847,7 @@ mod tests {
         seed_full_library(&roots);
         let mut connection = open_database(&roots.db_path).expect("database");
         assert_eq!(
-            capsule_deletion_impact(&connection, "p", Some("t1")).expect("version impact"),
+            capsule_deletion_impact(&connection, "p", Some("t1"), false).expect("version impact"),
             DeletionImpact {
                 affected_capsules: 1,
                 affected_responses: 1,
@@ -5857,7 +5888,7 @@ mod tests {
         seed_full_library(&roots);
         let connection = open_database(&roots.db_path).expect("database");
         assert_eq!(
-            capsule_deletion_impact(&connection, "p", None).expect("project impact"),
+            capsule_deletion_impact(&connection, "p", None, false).expect("project impact"),
             DeletionImpact {
                 affected_capsules: 1,
                 affected_responses: 1,

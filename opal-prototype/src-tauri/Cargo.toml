@@ -1,6 +1,6 @@
 [package]
 name = "opal"
-version = "0.1.0-alpha.4.2"
+version = "0.1.0-alpha.5"
 description = "OPAL local-first music library"
 authors = ["OPAL"]
 license = "LicenseRef-OPAL-Proprietary"
