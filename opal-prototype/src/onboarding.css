@@ -200,6 +200,20 @@
 
 .onboarding-demo-footer button { display: inline-flex; align-items: center; gap: 5px; }
 
+.onboarding-copy .onboarding-demo-note { color: #aebfdc; font-size: 11px; }
+.onboarding-copy .onboarding-signature { margin-top: 18px; color: #b1bfdc; font-size: 12px; }
+.onboarding-signature strong { color: #e3e9fc; font-weight: 550; }
+.onboarding-thank-you .onboarding-emblem::before,
+.onboarding-thank-you .onboarding-emblem::after { content: none; }
+.onboarding-thank-you .onboarding-emblem img { animation: none; }
+
+.onboarding-project-steps { margin: 0; list-style: none; }
+.onboarding-project-steps li { display: grid; grid-template-columns: 34px minmax(0, 1fr); align-items: start; gap: 10px; padding: 10px 2px; }
+.onboarding-project-steps li + li { border-top: 1px solid rgba(221, 233, 255, .13); }
+.onboarding-project-icon { display: grid; width: 32px; height: 32px; place-items: center; border: 1px solid rgba(192, 209, 250, .21); border-radius: 9px; color: #d2def9; background: rgba(166, 187, 236, .10); }
+.onboarding-project-steps strong { color: #f0f4ff; font-size: 13px; font-weight: 600; }
+.onboarding-project-steps p { margin: 3px 0 0; color: #b4c4e2; font-size: 11px; line-height: 1.4; }
+
 @keyframes onboarding-enter {
   from { opacity: 0; transform: translateY(12px) scale(.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }

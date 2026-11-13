@@ -1,19 +1,32 @@
 import React from "react";
-import { ArrowUpRight, ArrowsDownUp, Cards, ListBullets, NotePencil } from "@phosphor-icons/react";
+import { ArrowCounterClockwise, ArrowUpRight, ArrowsDownUp, Cards, ListBullets, MusicNote, NotePencil } from "@phosphor-icons/react";
 import "./whats-new.css";
 
 const waveform = [18, 31, 22, 43, 28, 60, 35, 74, 46, 82, 54, 67, 34, 72, 47, 91, 59, 39, 70, 44, 61, 27, 48, 21];
 
 const highlights = [
-  { Icon: Cards, tone: "ice", title: "Cinematic project carousel", detail: "Browse with full-size covers and fluid motion." },
+  { Icon: Cards, tone: "ice", title: "Cinematic project carousel", detail: "Turn a cover over to reveal its tracklist." },
   { Icon: ListBullets, tone: "gold", title: "Drag tracks into place", detail: "Set a manual track order with a quick drag." },
   { Icon: ArrowsDownUp, tone: "pearl", title: "Sort your tracklist", detail: "Sort by title, date added, or last modified." },
   { Icon: NotePencil, tone: "mint", title: "A calmer project view", detail: "Versions, notes, and moments are easier to scan." },
 ];
 
+function previewTracks(project) {
+  const groups = new Map();
+  for (const track of project?.tracks ?? []) {
+    const key = track.groupId ?? track.id;
+    const existing = groups.get(key);
+    if (!existing || track.isCurrent) groups.set(key, track);
+  }
+  return [...groups.values()].sort((left, right) => (left.position ?? 0) - (right.position ?? 0));
+}
+
 export function WhatsNew({ projects, onClose }) {
-  const availableProjects = projects.filter((project) => project.artwork).slice(0, 3);
-  const sleeves = Array.from({ length: 3 }, (_, index) => availableProjects[index] ?? availableProjects[0] ?? null);
+  const availableProjects = projects.filter((project) => project.artwork);
+  const featuredProject = availableProjects.find((project) => project.tracks?.length) ?? availableProjects[0] ?? null;
+  const sideProjects = availableProjects.filter((project) => project.id !== featuredProject?.id).slice(0, 2);
+  const sleeves = [sideProjects[0] ?? featuredProject, featuredProject, sideProjects[1] ?? featuredProject];
+  const libraryTracks = previewTracks(featuredProject);
 
   return (
     <div className="whats-new">
@@ -23,8 +36,43 @@ export function WhatsNew({ projects, onClose }) {
           <div className="whats-new-sleeves">
             {sleeves.map((project, index) => (
               <div className={`whats-new-sleeve whats-new-sleeve-${index}`} key={`${project?.id ?? "opal"}-${index}`}>
-                <img src={project?.artwork ?? "/artwork/opal-default-cover.png"} alt="" />
-                <div><strong>{project?.title ?? "A new collection"}</strong><span>{project ? `${project.tracks?.length ?? 0} tracks` : "Made for what’s next"}</span></div>
+                {index === 1 ? (
+                  <div className="projects-cover-turn whats-new-preview-turn">
+                    <div className="projects-cover-front">
+                      <img src={project?.artwork ?? "/artwork/opal-default-cover.png"} alt="" draggable={false} />
+                    </div>
+                    <div className="projects-track-preview whats-new-preview-back">
+                      <img className="projects-preview-art" src={project?.artwork ?? "/artwork/opal-default-cover.png"} alt="" draggable={false} />
+                      <div className="projects-preview-header">
+                        <div><strong>Tracks</strong><span>{libraryTracks.length}</span></div>
+                        <span className="whats-new-preview-return"><ArrowCounterClockwise size={15} /></span>
+                      </div>
+                      {libraryTracks.length ? <ol className="projects-preview-list">
+                          {libraryTracks.slice(0, 4).map((track, trackIndex) => (
+                            <li key={track.id}>
+                              <button type="button" disabled>
+                                <span className="projects-preview-cue">
+                                  <span className="projects-preview-index">{String(trackIndex + 1).padStart(2, "0")}</span>
+                                </span>
+                                <span className="projects-preview-track-copy">
+                                  <strong>{track.title}</strong>
+                                  {track.versionName && <small>{track.versionName}</small>}
+                                </span>
+                                <span className="projects-preview-duration">{track.duration}</span>
+                              </button>
+                            </li>
+                          ))}
+                        </ol> : <div className="projects-preview-empty">
+                          <MusicNote size={23} weight="light" />
+                          <p>No tracks in this project yet.</p>
+                        </div>}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="projects-cover-front">
+                    <img src={project?.artwork ?? "/artwork/opal-default-cover.png"} alt="" draggable={false} />
+                  </div>
+                )}
               </div>
             ))}
           </div>
