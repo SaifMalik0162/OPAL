@@ -1,9 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
-import { CaretLeft, CaretRight, FolderOpen, ListBullets, Play, X } from "@phosphor-icons/react";
+import { ArrowCounterClockwise, CaretLeft, CaretRight, FolderOpen, ListBullets, MusicNote, Play } from "@phosphor-icons/react";
+
+import { TrackPlaybackIndicator } from "./TrackPlaybackIndicator.jsx";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
-export function ProjectsCarousel({ projects, index, onSelect, onOpen, onPlay, tracks, onPlayTrack }) {
+export function ProjectsCarousel({ projects, index, onSelect, onOpen, onPlay, tracks, onPlayTrack, playingTrackId, isPlaying, progress }) {
   const stageRef = useRef(null);
   const coverRef = useRef(null);
   const previewToggleRef = useRef(null);
@@ -15,6 +17,7 @@ export function ProjectsCarousel({ projects, index, onSelect, onOpen, onPlay, tr
   const [previewProjectId, setPreviewProjectId] = useState(null);
   const project = projects[index];
   const previewOpen = previewProjectId === project.id;
+  const artwork = `url(${JSON.stringify(project.artwork)})`;
   const titleSize = project.title.length > 74 ? "23px" : project.title.length > 56 ? "27px" : project.title.length > 42 ? "31px" : project.title.length > 30 ? "38px" : project.title.length > 20 ? "46px" : "clamp(28px, 4.1vw, 54px)";
 
   function selectProject(nextIndex) {
@@ -118,7 +121,10 @@ export function ProjectsCarousel({ projects, index, onSelect, onOpen, onPlay, tr
 
   const first = Math.max(0, index - 3);
   const covers = projects.slice(first, index + 4);
-  return <div className="projects-carousel" onKeyDown={(event) => {
+  const markerCount = Math.min(7, projects.length);
+  const firstMarker = clamp(index - Math.floor(markerCount / 2), 0, projects.length - markerCount);
+  const markerProjects = projects.slice(firstMarker, firstMarker + markerCount);
+  return <div className="projects-carousel" data-preview-open={previewOpen} style={{ "--selected-artwork": artwork }} onKeyDown={(event) => {
     if (event.key === "Escape" && previewOpen) {
       event.preventDefault();
       event.stopPropagation();
@@ -144,8 +150,11 @@ export function ProjectsCarousel({ projects, index, onSelect, onOpen, onPlay, tr
         suppressClick.current = false;
       }}
     >
-      <div className="projects-carousel-light" key={project.artwork} aria-hidden="true">
-        <img src={project.artwork} alt="" draggable={false} />
+      <div className="projects-carousel-light" key={project.artwork} aria-hidden="true" style={{ "--reflection-x": `${-drag * 54}%` }}>
+        <img className="projects-carousel-ambient" src={project.artwork} alt="" draggable={false} />
+        <span className="projects-carousel-reflection">
+          <img src={project.artwork} alt="" draggable={false} />
+        </span>
       </div>
       {covers.map((item, position) => {
         const itemIndex = first + position;
@@ -164,6 +173,7 @@ export function ProjectsCarousel({ projects, index, onSelect, onOpen, onPlay, tr
           aria-hidden={Math.abs(itemIndex - index) > 2 ? "true" : undefined}
           style={{
             "--cover-x": `${direction * spacing}%`,
+            "--cover-drop": `${Math.min(depth * 12, 25)}px`,
             "--cover-turn": `${direction * Math.min(depth * 38, 64)}deg`,
             "--cover-scale": Math.max(0.48, 1 - Math.min(depth, 1) * 0.16 - Math.max(depth - 1, 0) * 0.22),
             "--cover-opacity": clamp(depth <= 1 ? 1 - depth * 0.06 : 0.94 - (depth - 1) * 0.47, 0, 1),
@@ -194,35 +204,65 @@ export function ProjectsCarousel({ projects, index, onSelect, onOpen, onPlay, tr
               <img className="projects-preview-art" src={project.artwork} alt="" draggable={false} />
               <div className="projects-preview-header">
                 <div><strong>Tracks</strong><span>{tracks.length}</span></div>
-                <button ref={previewCloseRef} type="button" onClick={closePreview} aria-label="Return to cover"><X size={14} /></button>
+                <button ref={previewCloseRef} type="button" onClick={closePreview} aria-label="Return to cover"><ArrowCounterClockwise size={15} /></button>
               </div>
               {tracks.length ? <ol className="projects-preview-list">
-                {tracks.map((track) => <li key={track.id}>
-                  <button type="button" onClick={() => onPlayTrack(project, track)} aria-label={`Play ${track.title}${track.versionName ? `, ${track.versionName}` : ""}`}>
-                    <Play size={12} weight="fill" />
-                    <span className="projects-preview-track-copy">
-                      <strong title={track.title}>{track.title}</strong>
-                      {track.versionName && <small>{track.versionName}</small>}
-                    </span>
-                    <span className="projects-preview-duration">{track.duration}</span>
-                  </button>
-                </li>)}
-              </ol> : <p>No tracks in this project yet.</p>}
+                {tracks.map((track, trackIndex) => {
+                  const current = track.id === playingTrackId;
+                  return <li key={track.id}>
+                    <button
+                      type="button"
+                      onClick={() => onPlayTrack(project, track)}
+                      aria-label={`Play ${track.title}${track.versionName ? `, ${track.versionName}` : ""}`}
+                      aria-current={current ? "true" : undefined}
+                      style={current ? { "--track-progress": `${progress}%` } : undefined}
+                    >
+                      <span className="projects-preview-cue" aria-hidden="true">
+                        {current && isPlaying
+                          ? <TrackPlaybackIndicator />
+                          : <><span className="projects-preview-index">{String(trackIndex + 1).padStart(2, "0")}</span><Play className="projects-preview-cue-play" size={11} weight="fill" /></>}
+                      </span>
+                      <span className="projects-preview-track-copy">
+                        <strong title={track.title}>{track.title}</strong>
+                        {track.versionName && <small>{track.versionName}</small>}
+                      </span>
+                      <span className="projects-preview-duration">{track.duration}</span>
+                    </button>
+                  </li>;
+                })}
+              </ol> : <div className="projects-preview-empty"><MusicNote size={23} weight="light" /><p>No tracks in this project yet.</p></div>}
             </section>}
           </div>
         </div>;
       })}
     </div>
     <div className="projects-carousel-caption">
-      <div className="projects-carousel-selection">
-        <button className="projects-carousel-arrow" type="button" aria-label="Previous project" onClick={() => step(-1)} disabled={index === 0}><CaretLeft size={17} /></button>
-        <div aria-live="polite" aria-atomic="true" className="projects-carousel-title">
-          <div key={project.id} style={{ "--carousel-title-size": titleSize }}><h2>{project.title}</h2><p>{tracks.length} {tracks.length === 1 ? "track" : "tracks"}</p></div>
+      <div className="projects-carousel-navigation" role="group" aria-label="Browse projects" data-single={projects.length === 1}>
+        <button className="projects-carousel-arrow" type="button" aria-label="Previous project" onClick={() => step(-1)} disabled={index === 0}><CaretLeft size={13} weight="light" /></button>
+        <div className="projects-carousel-markers">
+          {markerProjects.map((item, offset) => {
+            const position = firstMarker + offset;
+            return <button
+              key={item.id}
+              className="projects-carousel-marker"
+              type="button"
+              title={item.title}
+              aria-label={`${item.title}, ${position + 1} of ${projects.length}`}
+              aria-current={position === index ? "true" : undefined}
+              onClick={() => selectProject(position)}
+            />;
+          })}
         </div>
-        <button className="projects-carousel-arrow" type="button" aria-label="Next project" onClick={() => step(1)} disabled={index === projects.length - 1}><CaretRight size={17} /></button>
+        <button className="projects-carousel-arrow" type="button" aria-label="Next project" onClick={() => step(1)} disabled={index === projects.length - 1}><CaretRight size={13} weight="light" /></button>
+      </div>
+      <div aria-live="polite" aria-atomic="true" className="projects-carousel-title">
+        <div key={project.id} style={{ "--carousel-title-size": titleSize }}>
+          <h2>{project.title}</h2>
+          <p>{tracks.length} {tracks.length === 1 ? "track" : "tracks"}</p>
+        </div>
       </div>
       <div className="projects-carousel-actions">
-        <button className="button button-primary projects-carousel-play" type="button" onClick={() => onPlay(project)} disabled={!tracks.length} style={{ "--play-artwork": `url(${JSON.stringify(project.artwork)})` }}><Play size={15} weight="fill" /><span>Play</span></button>
+        <button className="button button-primary projects-carousel-play" type="button" onClick={() => onPlay(project)} disabled={!tracks.length}><Play size={15} weight="fill" /><span>Play</span></button>
         <button className="button button-ghost" type="button" onClick={() => onOpen(project.id)}><FolderOpen size={16} />Open</button>
         <button
           ref={previewToggleRef}

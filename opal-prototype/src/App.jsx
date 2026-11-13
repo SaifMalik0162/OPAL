@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { convertFileSrc, invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -11,6 +11,7 @@ import { OnboardingAmbient } from "./OnboardingAmbient.jsx";
 import { WhatsNew } from "./WhatsNew.jsx";
 import { UpdateDialog } from "./UpdateDialog.jsx";
 import { ProjectsCarousel } from "./ProjectsCarousel.jsx";
+import { TrackPlaybackIndicator } from "./TrackPlaybackIndicator.jsx";
 import { isCurrentPlaybackRequest, previousQueueIndex, repeatQueueIndex, shuffleQueue } from "./playback-queue.js";
 import { remainingGapMilliseconds } from "./playback-gap.js";
 import { reconcilePlayingQueue } from "./queue-state.js";
@@ -1548,6 +1549,50 @@ function App() {
     });
   }
 
+  async function removeTrack(project, group) {
+    if (!isTauri()) {
+      setError("Open the native OPAL app to edit the local library.");
+      return;
+    }
+    if (!(await flushNoteSave())) return;
+    const request = { projectId: project.id, trackId: group.current.id, wholeTrack: true };
+    let impact;
+    try {
+      impact = await invoke("getDeletionImpact", request);
+    } catch (impactError) {
+      setError(String(impactError));
+      return;
+    }
+    const versions = group.versions.length;
+    const copies = versions === 1 ? "Its OPAL-managed copy will be deleted." : `All ${versions} versions and their OPAL-managed copies will be deleted.`;
+    setConfirmState({
+      title: "Remove track",
+      message: `Remove “${group.title}” from this project? ${copies}${capsuleDeletionWarning(impact)} Your original files stay untouched.`,
+      confirmLabel: "Remove track",
+      destructive: true,
+      onConfirm: async () => {
+        if (!(await flushNoteSave())) return false;
+        try {
+          const updated = await invoke("deleteTrack", request);
+          const remainingIds = new Set(updated.tracks.map((track) => track.id));
+          const removedTracks = project.tracks.filter((track) => !remainingIds.has(track.id));
+          const removedIds = new Set(removedTracks.map((track) => track.id));
+          const playback = playbackRef.current;
+          if (playback.projectId === project.id && !remainingIds.has(playback.trackId)) stopPlayback();
+          for (const track of removedTracks) noteStoreRef.current.remove(`${project.id}:${track.id}`);
+          setNoteTargetId((current) => removedIds.has(current) ? null : current);
+          setFocusedTrackId((current) => removedIds.has(current) ? "" : current);
+          applyProjectUpdate(updated);
+          setError("");
+          return true;
+        } catch (removeError) {
+          setError(String(removeError));
+          return false;
+        }
+      },
+    });
+  }
+
   async function removeProject(project) {
     if (!isTauri()) {
       setError("Open the native OPAL app to edit the local library.");
@@ -1923,7 +1968,7 @@ function App() {
         <ArrowUpRight size={14} />
       </button>
     )}
-    <main className="stage">{compatibilityMode ? <CompatibilityView onRevealFolder={revealStorageFolder} /> : recoveryMode ? <RecoveryView onRevealFolder={revealStorageFolder} onRestore={restoreLibraryBackup} onRetry={retryStorage} /> : activeView === "project" && selectedProject ? <ProjectView key={selectedProject.id} project={selectedProject} capsules={capsuleSummaries} capsulesLoading={capsuleShelfLoading} onOpenCapsule={requestOpenCapsule} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} focusedTrackId={focusedTrackId} selectedMomentId={selectedMomentId} section={projectSection} onSectionChange={changeProjectSection} noteTargetId={noteTargetId} noteText={noteText} noteStatus={noteStatus} nativeAvailable={isTauri()} backLabel={projectBackView.current === "projects" ? "Projects" : "Library"} onBack={returnFromProject} onTrackInfo={(track) => setTrackInfo({ project: selectedProject, track })} onTrackSelect={(track) => startPlayback(selectedProject, track)} onVersionSelect={switchVersion} onMomentSelect={selectMoment} onMomentJump={jumpToMoment} onMomentUpdate={updateMoment} onMomentDelete={removeMoment} onJumpUnresolved={jumpUnresolved} onPlay={() => currentVersions(selectedProject)[0] && startPlayback(selectedProject, currentVersions(selectedProject)[0], 0)} onOpenSequence={() => openSequenceRoom(selectedProject)} onCreateCapsule={() => openCapsuleBuilder(selectedProject)} onNoteChange={handleNoteChange} onFlushNotes={flushNoteSave} onNoteTargetChange={changeNoteTarget} onImport={() => pickAudioFiles(selectedProject.id)} onAddVersion={(group) => pickAudioFiles(selectedProject.id, group.id)} onEditProject={() => setEditOpen(true)} onEditArtwork={pickArtwork} onRemoveArtwork={removeArtwork} onRemoveProject={() => removeProject(selectedProject)} onRenameTrack={renameTrack} onRenameVersion={renameVersion} onPromoteVersion={promoteVersion} onReorderGroups={reorderTrackGroups} onReorderVersions={reorderTrackVersions} onRemoveVersion={(version, group) => removeVersion(selectedProject, version, group)} /> : activeView === "sequence" && selectedProject ? <SequenceRoom project={selectedProject} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} playbackState={playbackState} elapsedMs={elapsedMs} durationMs={durationMs || displayTrack?.durationMs || 0} onBack={leaveSequenceRoom} onPlayTrack={playSequenceTrack} onAuditionTransition={auditionTransition} onReorderGroups={reorderTrackGroups} onUpdateTransition={updateTransition} onPlay={() => toggleSequencePlayback(selectedProject)} onPrevious={playPrevious} onNext={playNext} onProgressChange={seekPlayback} onCreateCapsule={() => openCapsuleBuilder(selectedProject)} /> : activeView === "capsule" && selectedProject && capsule ? <CapsuleView capsule={capsule} project={selectedProject} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} playbackState={playbackState} elapsedMs={elapsedMs} durationMs={durationMs || displayTrack?.durationMs || 0} onBack={leaveCapsuleView} onPlayTrack={playCapsuleTrack} onPlay={() => toggleCapsulePlayback(capsule)} onPrevious={playPrevious} onNext={playNext} onProgressChange={seekPlayback} onCopyReference={() => copyCapsuleReference(capsule)} onOpenResponse={() => setCapsuleResponseOpen(true)} onAddResponse={addCapsuleResponse} /> : activeView === "projects" ? <ProjectsView loading={loading} projects={filteredProjects} selectedId={selectedId} onPlayTrack={startPlayback} query={query} sortMode={sortMode} onSortChange={setSortMode} onOpenProject={openProject} onPlayProject={(project) => currentVersions(project)[0] && startPlayback(project, currentVersions(project)[0], 0)} onCreateProject={() => setCreateOpen(true)} onClearSearch={() => setQuery("")} /> : <LibraryView loading={loading} projects={filteredProjects} selectedId={visibleSelection} query={query} sortMode={sortMode} trackMatches={trackMatches} onSortChange={setSortMode} onProjectSelect={selectLibraryProject} onOpenProject={openProject} onCreateProject={() => setCreateOpen(true)} onClearSearch={() => setQuery("")} onStep={stepLibrarySelection} />}</main>
+    <main className="stage">{compatibilityMode ? <CompatibilityView onRevealFolder={revealStorageFolder} /> : recoveryMode ? <RecoveryView onRevealFolder={revealStorageFolder} onRestore={restoreLibraryBackup} onRetry={retryStorage} /> : activeView === "project" && selectedProject ? <ProjectView key={selectedProject.id} project={selectedProject} capsules={capsuleSummaries} capsulesLoading={capsuleShelfLoading} onOpenCapsule={requestOpenCapsule} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} isPlaying={playbackState === "playing"} focusedTrackId={focusedTrackId} selectedMomentId={selectedMomentId} section={projectSection} onSectionChange={changeProjectSection} noteTargetId={noteTargetId} noteText={noteText} noteStatus={noteStatus} nativeAvailable={isTauri()} backLabel={projectBackView.current === "projects" ? "Projects" : "Library"} onBack={returnFromProject} onTrackInfo={(track) => setTrackInfo({ project: selectedProject, track })} onTrackSelect={(track) => startPlayback(selectedProject, track)} onVersionSelect={switchVersion} onMomentSelect={selectMoment} onMomentJump={jumpToMoment} onMomentUpdate={updateMoment} onMomentDelete={removeMoment} onJumpUnresolved={jumpUnresolved} onPlay={() => currentVersions(selectedProject)[0] && startPlayback(selectedProject, currentVersions(selectedProject)[0], 0)} onOpenSequence={() => openSequenceRoom(selectedProject)} onCreateCapsule={() => openCapsuleBuilder(selectedProject)} onNoteChange={handleNoteChange} onFlushNotes={flushNoteSave} onNoteTargetChange={changeNoteTarget} onImport={() => pickAudioFiles(selectedProject.id)} onAddVersion={(group) => pickAudioFiles(selectedProject.id, group.id)} onEditProject={() => setEditOpen(true)} onEditArtwork={pickArtwork} onRemoveArtwork={removeArtwork} onRemoveProject={() => removeProject(selectedProject)} onRenameTrack={renameTrack} onRenameVersion={renameVersion} onPromoteVersion={promoteVersion} onReorderGroups={reorderTrackGroups} onReorderVersions={reorderTrackVersions} onRemoveTrack={(group) => removeTrack(selectedProject, group)} onRemoveVersion={(version, group) => removeVersion(selectedProject, version, group)} /> : activeView === "sequence" && selectedProject ? <SequenceRoom project={selectedProject} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} playbackState={playbackState} elapsedMs={elapsedMs} durationMs={durationMs || displayTrack?.durationMs || 0} onBack={leaveSequenceRoom} onPlayTrack={playSequenceTrack} onAuditionTransition={auditionTransition} onReorderGroups={reorderTrackGroups} onUpdateTransition={updateTransition} onPlay={() => toggleSequencePlayback(selectedProject)} onPrevious={playPrevious} onNext={playNext} onProgressChange={seekPlayback} onCreateCapsule={() => openCapsuleBuilder(selectedProject)} /> : activeView === "capsule" && selectedProject && capsule ? <CapsuleView capsule={capsule} project={selectedProject} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} playbackState={playbackState} elapsedMs={elapsedMs} durationMs={durationMs || displayTrack?.durationMs || 0} onBack={leaveCapsuleView} onPlayTrack={playCapsuleTrack} onPlay={() => toggleCapsulePlayback(capsule)} onPrevious={playPrevious} onNext={playNext} onProgressChange={seekPlayback} onCopyReference={() => copyCapsuleReference(capsule)} onOpenResponse={() => setCapsuleResponseOpen(true)} onAddResponse={addCapsuleResponse} /> : activeView === "projects" ? <ProjectsView loading={loading} projects={filteredProjects} selectedId={selectedId} onPlayTrack={startPlayback} playingProjectId={playingProjectId} playingTrackId={playingTrackId} isPlaying={playbackState === "playing"} progress={progressValue} query={query} sortMode={sortMode} onSortChange={setSortMode} onOpenProject={openProject} onPlayProject={(project) => currentVersions(project)[0] && startPlayback(project, currentVersions(project)[0], 0)} onCreateProject={() => setCreateOpen(true)} onClearSearch={() => setQuery("")} /> : <LibraryView loading={loading} projects={filteredProjects} selectedId={visibleSelection} query={query} sortMode={sortMode} trackMatches={trackMatches} onSortChange={setSortMode} onProjectSelect={selectLibraryProject} onOpenProject={openProject} onCreateProject={() => setCreateOpen(true)} onClearSearch={() => setQuery("")} onStep={stepLibrarySelection} />}</main>
     {activeView !== "sequence" && activeView !== "capsule" && displayProject && displayTrack && <Player project={displayProject} track={displayTrack} selectedMomentId={selectedMomentId} status={playbackState} playbackError={playbackError} isPlaying={playbackState === "playing"} progress={progressValue} elapsedMs={elapsedMs} durationMs={durationMs || displayTrack.durationMs} volume={volume} muted={muted} volumeOpen={volumeOpen} queueOpen={queueOpen} menuOpen={playerMenuOpen} shuffleEnabled={shuffleEnabled} repeatMode={repeatMode} onTogglePlay={togglePlayback} onPrevious={playPrevious} onNext={playNext} onProgressChange={seekPlayer} onCreateMoment={(timeMs) => createMoment(displayProject, displayTrack, timeMs)} onSelectMoment={(moment) => selectMoment(displayProject, displayTrack, moment)} onVolumeChange={(event) => { setVolume(Number(event.target.value)); setMuted(false); }} onToggleMute={() => setMuted((value) => !value)} onToggleVolume={() => setVolumeOpen((openState) => !openState)} onToggleQueue={() => setQueueOpen((openState) => !openState)} onToggleMenu={() => setPlayerMenuOpen((openState) => !openState)} onToggleShuffle={toggleShuffle} onToggleRepeat={cycleRepeatMode} onOpenProject={() => openProject(displayProject.id)} onShowTrack={() => openProject(displayProject.id, displayTrack.id)} onOpenNotes={() => openProject(displayProject.id, displayTrack.id, displayTrack.id)} onRevealFile={async () => { try { await invoke("revealManagedFile", { managedFileRef: displayTrack.managedFileRef }); } catch (revealError) { setError(String(revealError)); } }} onShowInfo={() => setTrackInfo({ project: displayProject, track: displayTrack })} />}
     {activeView !== "sequence" && activeView !== "capsule" && queueOpen && displayProject && <QueuePopover project={displayProject} currentIndex={displayQueueIndex} onSelect={(track, index) => { startPlayback(displayProject, track, index); setQueueOpen(false); }} onClose={() => setQueueOpen(false)} />}
     {showWelcome && (
@@ -1955,7 +2000,7 @@ function App() {
   </div>;
 }
 
-function ProjectsView({ loading, projects: visibleProjects, selectedId, query, sortMode, onSortChange, onOpenProject, onPlayProject, onPlayTrack, onCreateProject, onClearSearch }) {
+function ProjectsView({ loading, projects: visibleProjects, selectedId, query, sortMode, onSortChange, onOpenProject, onPlayProject, onPlayTrack, playingProjectId, playingTrackId, isPlaying, progress, onCreateProject, onClearSearch }) {
   const [layout, setLayout] = useState(() => {
     try {
       return window.localStorage.getItem("opal-projects-layout") === "carousel" ? "carousel" : "grid";
@@ -2005,6 +2050,9 @@ function ProjectsView({ loading, projects: visibleProjects, selectedId, query, s
       onPlay={onPlayProject}
       tracks={currentVersions(visibleProjects[focusedIndex])}
       onPlayTrack={onPlayTrack}
+      playingTrackId={playingProjectId === visibleProjects[focusedIndex].id ? playingTrackId : ""}
+      isPlaying={isPlaying}
+      progress={progress}
     /> : <div className="projects-grid">{visibleProjects.map((project) => <article className="project-card" key={project.id}><div className="project-card-art"><button className="project-card-open" type="button" onClick={() => onOpenProject(project.id)} aria-label={`Open ${project.title}`}><img src={project.artwork} alt="" /></button><button className="project-card-play" type="button" onClick={() => onPlayProject(project)} aria-label={`Play ${project.title}`} disabled={!project.count}><Play size={17} weight="fill" /></button></div><div className="project-card-meta"><button className="project-card-title" type="button" onClick={() => onOpenProject(project.id)}>{project.title}</button><div className="project-card-subline"><span>{project.count} {project.count === 1 ? "track" : "tracks"}</span><span>{project.duration}</span></div></div></article>)}<button className="project-create-card" type="button" onClick={onCreateProject}><span><Plus size={20} /></span><strong>New project</strong></button></div>}
   </section>;
 }
@@ -2250,7 +2298,7 @@ function ProjectNotesPanel({ project, projectId, noteContextId, noteLabel, noteT
   </>;
 }
 
-function ProjectView({ project, capsules, capsulesLoading, onOpenCapsule, playingTrackId, focusedTrackId, selectedMomentId, section, onSectionChange, noteTargetId, noteText, noteStatus, nativeAvailable, backLabel, onBack, onTrackInfo, onTrackSelect, onVersionSelect, onMomentSelect, onMomentJump, onMomentUpdate, onMomentDelete, onJumpUnresolved, onPlay, onOpenSequence, onCreateCapsule, onNoteChange, onNoteTargetChange, onFlushNotes, onImport, onAddVersion, onEditProject, onEditArtwork, onRemoveArtwork, onRemoveProject, onRenameTrack, onRenameVersion, onPromoteVersion, onReorderGroups, onReorderVersions, onRemoveVersion }) {
+function ProjectView({ project, capsules, capsulesLoading, onOpenCapsule, playingTrackId, isPlaying, focusedTrackId, selectedMomentId, section, onSectionChange, noteTargetId, noteText, noteStatus, nativeAvailable, backLabel, onBack, onTrackInfo, onTrackSelect, onVersionSelect, onMomentSelect, onMomentJump, onMomentUpdate, onMomentDelete, onJumpUnresolved, onPlay, onOpenSequence, onCreateCapsule, onNoteChange, onNoteTargetChange, onFlushNotes, onImport, onAddVersion, onEditProject, onEditArtwork, onRemoveArtwork, onRemoveProject, onRenameTrack, onRenameVersion, onPromoteVersion, onReorderGroups, onReorderVersions, onRemoveTrack, onRemoveVersion }) {
   const baseGroups = useMemo(() => groupTracks(project), [project]);
   const [trackSortMode, setTrackSortMode] = useState("manual");
   const groups = useMemo(() => {
@@ -2270,6 +2318,7 @@ function ProjectView({ project, capsules, capsulesLoading, onOpenCapsule, playin
   const [activeGroupId, setActiveGroupId] = useState(groups[0]?.id ?? "");
   const [expandedGroupId, setExpandedGroupId] = useState("");
   const [trackMenuId, setTrackMenuId] = useState("");
+  const closeTrackMenu = useCallback(() => setTrackMenuId(""), []);
   const [versionMenuId, setVersionMenuId] = useState("");
   const [projectActionsOpen, setProjectActionsOpen] = useState(false);
   const [projectSortOpen, setProjectSortOpen] = useState(false);
@@ -2314,14 +2363,6 @@ function ProjectView({ project, capsules, capsulesLoading, onOpenCapsule, playin
     const title = editingTitle.trim();
     setEditingGroupId("");
     if (title && title !== group.title) await onRenameTrack(group.current.id, title);
-  }
-
-  function moveGroup(index, direction) {
-    const nextIndex = index + direction;
-    if (nextIndex < 0 || nextIndex >= groups.length) return;
-    const ids = groups.map((group) => group.id);
-    [ids[index], ids[nextIndex]] = [ids[nextIndex], ids[index]];
-    onReorderGroups(ids);
   }
 
   function sortGroups(mode) {
@@ -2444,7 +2485,7 @@ function ProjectView({ project, capsules, capsulesLoading, onOpenCapsule, playin
           <div className="track-list">{displayGroups.map((group, index) => {
             const current = group.current;
             const isFocused = group.versions.some((version) => version.id === focusedTrackId);
-            const isPlaying = group.versions.some((version) => version.id === playingTrackId);
+            const isCurrent = group.versions.some((version) => version.id === playingTrackId);
             const menuOpen = trackMenuId === group.id;
             const ribbonOpen = expandedGroupId === group.id;
             function playTrack() {
@@ -2454,7 +2495,7 @@ function ProjectView({ project, capsules, capsulesLoading, onOpenCapsule, playin
             }
             return <div className="project-track-group" data-track-group={group.id} key={group.id}>
               <div
-                className={`track-row ${isPlaying ? "is-current" : ""} ${isFocused ? "is-search-match" : ""} ${draggedGroupId === group.id ? "is-dragging" : ""}`}
+                className={`track-row ${isCurrent ? "is-current" : ""} ${isFocused ? "is-search-match" : ""} ${draggedGroupId === group.id ? "is-dragging" : ""}`}
                 id={`track-${isFocused ? focusedTrackId : group.id}`}
                 onPointerDown={(event) => !editingGroupId && startTrackReorder(event, group.id)}
                 onPointerMove={moveTrackReorder}
@@ -2467,8 +2508,12 @@ function ProjectView({ project, capsules, capsulesLoading, onOpenCapsule, playin
                     if (event.key === "Enter") event.currentTarget.blur();
                     if (event.key === "Escape") { setEditingGroupId(""); setEditingTitle(group.title); }
                   }} />
-                </div> : <button type="button" className="track-main" onClick={playTrack} aria-label={`Play ${group.title}`}>
-                  <span className="track-number"><span>{index + 1}</span><Play size={13} weight="fill" /></span>
+                </div> : <button type="button" className="track-main" onClick={playTrack} aria-label={`Play ${group.title}`} aria-current={isCurrent ? "true" : undefined}>
+                  <span className="track-number" aria-hidden="true">
+                    {isCurrent && isPlaying
+                      ? <TrackPlaybackIndicator />
+                      : <><span className="track-number-label">{index + 1}</span><Play size={13} weight="fill" /></>}
+                  </span>
                   <span className="track-name"><strong>{group.title}</strong><small>{current?.versionName ?? "Original"}</small></span>
                 </button>}
                 <span className="track-duration">{current?.duration ?? "0:00"}</span>
@@ -2479,14 +2524,13 @@ function ProjectView({ project, capsules, capsulesLoading, onOpenCapsule, playin
                   }}><span>{group.versions.length}</span><CaretDown size={12} /></button>}
                   <span className="track-menu-wrap">
                     <button type="button" className={`track-action track-menu-trigger ${menuOpen ? "is-active" : ""}`} onClick={() => setTrackMenuId(menuOpen ? "" : group.id)} aria-label={`Open actions for ${group.title}`} aria-expanded={menuOpen}><DotsThree size={20} weight="bold" /></button>
-                    {menuOpen && <TrackMenu group={group} index={index} groupCount={groups.length}
-                      onMove={(direction) => { setTrackMenuId(""); moveGroup(index, direction); }}
+                    {menuOpen && <TrackMenu group={group}
                       onRename={() => { setTrackMenuId(""); startEditing(group); }}
                       onAddVersion={() => { setTrackMenuId(""); onAddVersion(group); }}
                       onNotes={() => { setTrackMenuId(""); onNoteTargetChange(current.id); }}
                       onInfo={() => { setTrackMenuId(""); onTrackInfo(current); }}
-                      onRemove={() => { setTrackMenuId(""); onRemoveVersion(current, group); }}
-                      onClose={() => setTrackMenuId("")}
+                      onRemove={() => { setTrackMenuId(""); onRemoveTrack(group); }}
+                      onClose={closeTrackMenu}
                     />}
                   </span>
                 </div>
@@ -2758,29 +2802,60 @@ function handleActionMenuKeyDown(event, menuRef, onClose) {
   items[nextIndex]?.focus();
 }
 
-function TrackMenu({ group, index, groupCount, onMove, onRename, onAddVersion, onNotes, onInfo, onRemove, onClose }) {
+function TrackMenu({ group, onRename, onAddVersion, onNotes, onInfo, onRemove, onClose }) {
   const menuRef = useRef(null);
+  useLayoutEffect(() => {
+    const menu = menuRef.current;
+    const anchor = menu.parentElement;
+    const trackList = menu.closest(".track-list");
+    const panel = menu.closest(".tracklist-panel");
+    const player = document.querySelector(".player-shell");
+    const gap = 12;
+
+    function revealMenu() {
+      const viewportBottom = Math.min(window.innerHeight, player?.getBoundingClientRect().top ?? Infinity);
+      const visibleBottom = viewportBottom - gap;
+      menu.style.setProperty("--track-menu-available-height", `${Math.max(0, visibleBottom - gap)}px`);
+      // Measure from the anchor so the menu's entrance animation doesn't affect the clearance.
+      const menuBottom = anchor.getBoundingClientRect().top + menu.offsetTop + menu.offsetHeight;
+      const overflow = Math.max(0, menuBottom - trackList.getBoundingClientRect().bottom);
+      panel.style.setProperty("--track-menu-clearance", `${Math.ceil(overflow)}px`);
+      if (menuBottom > visibleBottom) {
+        window.scrollBy({ top: Math.ceil(menuBottom - visibleBottom), behavior: "instant" });
+      }
+    }
+
+    revealMenu();
+    window.addEventListener("resize", revealMenu);
+    const observer = player ? new ResizeObserver(revealMenu) : null;
+    observer?.observe(player);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", revealMenu);
+      panel.style.removeProperty("--track-menu-clearance");
+    };
+  }, []);
+
   useEffect(() => {
     function handlePointerDown(event) {
       if (!menuRef.current?.parentElement?.contains(event.target)) onClose();
     }
     document.addEventListener("pointerdown", handlePointerDown);
-    menuRef.current?.querySelector("button")?.focus();
+    menuRef.current?.querySelector("button")?.focus({ preventScroll: true });
     return () => {
       document.removeEventListener("pointerdown", handlePointerDown);
     };
   }, [onClose]);
 
   return <div ref={menuRef} className="track-menu glass" data-popover role="menu" aria-label={`Actions for ${group.title}`} onKeyDown={(event) => handleActionMenuKeyDown(event, menuRef, onClose)}>
-    <span className="eyebrow">Track actions</span>
+    <div className="track-menu-heading" aria-hidden="true">Track actions</div>
     <button type="button" role="menuitem" onClick={onNotes}><NotePencil size={14} />Open notes</button>
     <button type="button" role="menuitem" onClick={onInfo}><Info size={14} />Track details</button>
     <span className="project-menu-divider" aria-hidden="true" />
-    <button type="button" role="menuitem" onClick={() => onMove(-1)} disabled={index === 0}><CaretLeft size={14} />Move earlier</button>
-    <button type="button" role="menuitem" onClick={() => onMove(1)} disabled={index === groupCount - 1}><CaretRight size={14} />Move later</button>
     <button type="button" role="menuitem" onClick={onAddVersion}><Plus size={14} />Add bounce</button>
     <button type="button" role="menuitem" onClick={onRename}><NotePencil size={14} />Rename track</button>
-    <button type="button" className="track-menu-danger" role="menuitem" onClick={onRemove} disabled={group.versions.length <= 1}><Trash size={14} />Remove current version</button>
+    <span className="project-menu-divider" aria-hidden="true" />
+    <button type="button" className="track-menu-danger" role="menuitem" onClick={onRemove}><Trash size={14} />Remove track</button>
   </div>;
 }
 

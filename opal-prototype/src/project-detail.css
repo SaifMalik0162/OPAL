@@ -79,6 +79,7 @@
 .project-section-nav button:hover { color: var(--ivory); }
 
 .project-detail-pane { min-width: 0; animation: project-menu-arrive .18s ease-out both; }
+.project-detail-screen .tracklist-panel { padding-bottom: var(--track-menu-clearance, 0px); }
 .project-detail-screen .project-add-tracks { min-height: 44px; width: 100%; font-size: 13px; }
 .project-track-empty { padding: 14px 2px; color: var(--muted); font-size: 13px; }
 .project-detail-screen .track-list { gap: 0; margin-top: 9px; }
@@ -142,8 +143,8 @@
 .project-detail-screen .track-number svg { opacity: 0; }
 .project-detail-screen .track-main:hover .track-number svg,
 .project-detail-screen .track-main:focus-visible .track-number svg { opacity: 1; }
-.project-detail-screen .track-main:hover .track-number > span,
-.project-detail-screen .track-main:focus-visible .track-number > span { opacity: 0; }
+.project-detail-screen .track-main:hover .track-number-label,
+.project-detail-screen .track-main:focus-visible .track-number-label { opacity: 0; }
 .project-detail-screen .project-main-column .track-name strong { font-size: 15px; font-weight: 550; }
 .project-detail-screen .project-main-column .track-name small { margin-top: 3px; font-size: 11px; letter-spacing: 0; text-transform: none; }
 .project-detail-screen .project-main-column .track-duration { font-size: 12px; }
