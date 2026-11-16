@@ -1,4 +1,16 @@
 /* The project page pairs a sleeve with one workspace at a time. */
+.project-cover-transition {
+  position: fixed;
+  z-index: 4;
+  display: block;
+  pointer-events: none;
+  object-fit: cover;
+  transform-origin: 0 0;
+  box-shadow: 0 16px 36px rgba(5, 10, 25, .28);
+}
+
+.opal-app[data-library-layout="carousel"] .project-cover-transition { z-index: 10; }
+
 .project-detail-screen {
   max-width: 1130px;
   padding-top: clamp(18px, 3.8vh, 42px);
@@ -19,6 +31,7 @@
 
 .project-detail-screen .project-cover-column { position: static; }
 .project-detail-screen .project-sleeve-shell { width: 100%; margin: 0; }
+.project-detail-screen .project-sleeve-shell,
 .project-detail-screen .project-sleeve-trigger,
 .project-detail-screen .project-cover-column .project-sleeve { border-radius: 16px; }
 .project-detail-screen .project-description-inline {

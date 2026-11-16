@@ -9,7 +9,7 @@ import "./player.css";
 import "./overlays.css";
 import "./workflows.css";
 import "./accessibility.css";
-import "./projects-carousel.css";
+import "./carousel-preview.css";
 import "./project-detail.css";
 
 createRoot(document.getElementById("root")).render(
