@@ -2032,7 +2032,7 @@ function LibraryGrid({ projects, selectedId, query, trackMatches, onOpenProject,
         </article>;
       })}
       <button className="project-create-card" type="button" onClick={onCreateProject}>
-        <span className="project-add-glass"><Plus size={20} /></span><strong>New project</strong>
+        <span><Plus size={20} /></span><strong>New project</strong>
       </button>
     </div> : <LibraryEmpty query={query} onCreateProject={onCreateProject} onClearSearch={onClearSearch} />}
   </section>;
