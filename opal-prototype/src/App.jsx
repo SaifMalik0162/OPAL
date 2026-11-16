@@ -71,7 +71,8 @@ import {
 } from "@phosphor-icons/react";
 
 const FALLBACK_ARTWORK = "/artwork/opal-default-cover.png";
-const AUDIO_FILTERS = [{ name: "Audio", extensions: ["wav", "mp3", "flac", "aiff", "aif", "m4a"] }];
+const AUDIO_EXTENSIONS = ["wav", "mp3", "flac", "aiff", "aif", "m4a"];
+const AUDIO_FILTERS = [{ name: "Audio", extensions: AUDIO_EXTENSIONS }];
 const ARTWORK_FILTERS = [{ name: "Artwork", extensions: ["png", "jpg", "jpeg", "webp"] }];
 const PLAYBACK_STORAGE_KEY = "opal-playback-v1";
 const SORT_STORAGE_KEY = "opal-sort-v1";
@@ -81,6 +82,21 @@ const WHATS_NEW_STORAGE_KEY = `opal-whats-new:${WHATS_NEW_RELEASE.version}`;
 const IS_DEVELOPMENT_BUILD = import.meta.env.DEV || import.meta.env.VITE_OPAL_DEVELOPMENT === "1";
 const CAPSULES_ENABLED = false;
 const SEQUENCE_ROOM_ENABLED = false;
+
+function containsAudioFiles(paths) {
+  return paths.some((path) => {
+    const extension = path.match(/\.([^./\\]+)$/)?.[1]?.toLowerCase();
+    return AUDIO_EXTENSIONS.includes(extension);
+  });
+}
+
+function libraryCardAtDropPosition(position) {
+  // Wry 0.55 forwards client pixels on Windows and view coordinates on macOS and Linux.
+  const scale = /Win/i.test(navigator.platform) ? window.devicePixelRatio : 1;
+  const card = document.elementFromPoint(position.x / scale, position.y / scale)?.closest("[data-audio-drop-project]");
+  if (!card) return null;
+  return { projectId: card.dataset.audioDropProject, key: card.dataset.audioDropKey };
+}
 
 function isRecoveryError(value) {
   return String(value).startsWith("RECOVERY_REQUIRED:");
@@ -325,6 +341,7 @@ function App() {
   const [importProgress, setImportProgress] = useState(null);
   const [duplicatePaths, setDuplicatePaths] = useState([]);
   const [importActive, setImportActive] = useState(false);
+  const [libraryDropTarget, setLibraryDropTarget] = useState(null);
   const [capsule, setCapsule] = useState(null);
   const [capsuleSummaries, setCapsuleSummaries] = useState([]);
   const [capsuleShelfLoading, setCapsuleShelfLoading] = useState(false);
@@ -661,12 +678,40 @@ function App() {
     if (!isTauri()) return undefined;
     let unlisten;
     let cancelled = false;
-    getCurrentWindow().onDragDropEvent((event) => {
-      if (event.payload.type === "drop" && activeView === "project" && selectedId && event.payload.paths.length) {
-        setImportTargetId(selectedId);
-        setImportTargetGroupId("");
-        runImport(selectedId, event.payload.paths, false);
+    let draggingAudio = false;
+    setLibraryDropTarget(null);
+
+    getCurrentWindow().onDragDropEvent(({ payload }) => {
+      if (cancelled) return;
+      if (activeView === "project" && payload.type === "drop" && selectedId && payload.paths.length) {
+        void runImport(selectedId, payload.paths, false);
+        return;
       }
+      if (activeView !== "library") return;
+
+      if (payload.type === "drop" || payload.type === "leave") {
+        draggingAudio = false;
+        setLibraryDropTarget(null);
+        if (payload.type === "leave" || !payload.paths.length) return;
+
+        // Resolve the current hit on drop so a drag off a card cannot import to that card.
+        const target = libraryCardAtDropPosition(payload.position);
+        if (!target) return;
+        if (!containsAudioFiles(payload.paths)) {
+          setError("Choose WAV, MP3, FLAC, AIFF, or M4A files to import.");
+          return;
+        }
+        if (importActiveProjectsRef.current.size) {
+          setError("An import is already running. Try again when it finishes.");
+          return;
+        }
+        void runImport(target.projectId, payload.paths, false);
+        return;
+      }
+
+      if (payload.type === "enter") draggingAudio = containsAudioFiles(payload.paths);
+      const target = draggingAudio && !importActiveProjectsRef.current.size ? libraryCardAtDropPosition(payload.position) : null;
+      setLibraryDropTarget((current) => current?.key === target?.key ? current : target);
     }).then((cleanup) => {
       if (cancelled) cleanup();
       else unlisten = cleanup;
@@ -675,7 +720,7 @@ function App() {
       cancelled = true;
       if (unlisten) unlisten();
     };
-  }, [activeView, selectedId]);
+  }, [activeView, libraryLayout, selectedId]);
 
   function applySavedNote(note) {
     setProjects((current) => current.map((project) => {
@@ -1927,6 +1972,9 @@ function App() {
   const gridShowing = libraryShowing && libraryLayout === "grid";
   const carouselShowing = libraryShowing && libraryLayout === "carousel";
   const topbarImportProject = libraryShowing ? null : selectedProject;
+  const dropProject = libraryShowing && libraryDropTarget
+    ? filteredProjects.find((project) => project.id === libraryDropTarget.projectId)
+    : null;
 
   return <div className="opal-app" data-view={activeView} data-library-layout={libraryShowing ? libraryLayout : undefined}>
     <div className="ambient-field" aria-hidden="true" />
@@ -1966,7 +2014,11 @@ function App() {
         <ArrowUpRight size={14} />
       </button>
     )}
-    <main className="stage">{compatibilityMode ? <CompatibilityView onRevealFolder={revealStorageFolder} /> : recoveryMode ? <RecoveryView onRevealFolder={revealStorageFolder} onRestore={restoreLibraryBackup} onRetry={retryStorage} /> : activeView === "project" && selectedProject ? <ProjectView key={selectedProject.id} project={selectedProject} capsules={capsuleSummaries} capsulesLoading={capsuleShelfLoading} onOpenCapsule={requestOpenCapsule} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} isPlaying={playbackState === "playing"} focusedTrackId={focusedTrackId} selectedMomentId={selectedMomentId} section={projectSection} onSectionChange={changeProjectSection} noteTargetId={noteTargetId} noteText={noteText} noteStatus={noteStatus} nativeAvailable={isTauri()} onBack={() => returnToLibrary()} onTrackInfo={(track) => setTrackInfo({ project: selectedProject, track })} onTrackSelect={(track) => startPlayback(selectedProject, track)} onVersionSelect={switchVersion} onMomentSelect={selectMoment} onMomentJump={jumpToMoment} onMomentUpdate={updateMoment} onMomentDelete={removeMoment} onJumpUnresolved={jumpUnresolved} onPlay={() => currentVersions(selectedProject)[0] && startPlayback(selectedProject, currentVersions(selectedProject)[0], 0)} onOpenSequence={() => openSequenceRoom(selectedProject)} onCreateCapsule={() => openCapsuleBuilder(selectedProject)} onNoteChange={handleNoteChange} onFlushNotes={flushNoteSave} onNoteTargetChange={changeNoteTarget} onImport={() => pickAudioFiles(selectedProject.id)} onAddVersion={(group) => pickAudioFiles(selectedProject.id, group.id)} onEditProject={() => setEditOpen(true)} onEditArtwork={pickArtwork} onRemoveArtwork={removeArtwork} onRemoveProject={() => removeProject(selectedProject)} onRenameTrack={renameTrack} onRenameVersion={renameVersion} onPromoteVersion={promoteVersion} onReorderGroups={reorderTrackGroups} onReorderVersions={reorderTrackVersions} onRemoveTrack={(group) => removeTrack(selectedProject, group)} onRemoveVersion={(version, group) => removeVersion(selectedProject, version, group)} /> : activeView === "sequence" && selectedProject ? <SequenceRoom project={selectedProject} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} playbackState={playbackState} elapsedMs={elapsedMs} durationMs={durationMs || displayTrack?.durationMs || 0} onBack={leaveSequenceRoom} onPlayTrack={playSequenceTrack} onAuditionTransition={auditionTransition} onReorderGroups={reorderTrackGroups} onUpdateTransition={updateTransition} onPlay={() => toggleSequencePlayback(selectedProject)} onPrevious={playPrevious} onNext={playNext} onProgressChange={seekPlayback} onCreateCapsule={() => openCapsuleBuilder(selectedProject)} /> : activeView === "capsule" && selectedProject && capsule ? <CapsuleView capsule={capsule} project={selectedProject} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} playbackState={playbackState} elapsedMs={elapsedMs} durationMs={durationMs || displayTrack?.durationMs || 0} onBack={leaveCapsuleView} onPlayTrack={playCapsuleTrack} onPlay={() => toggleCapsulePlayback(capsule)} onPrevious={playPrevious} onNext={playNext} onProgressChange={seekPlayback} onCopyReference={() => copyCapsuleReference(capsule)} onOpenResponse={() => setCapsuleResponseOpen(true)} onAddResponse={addCapsuleResponse} /> : <LibraryView layout={libraryLayout} loading={loading} projects={filteredProjects} selectedId={visibleSelection} query={query} trackMatches={trackMatches} onOpenProject={openProject} onPlayTrack={startPlayback} onAddTracks={pickAudioFiles} playingProjectId={playingProjectId} playingTrackId={playingTrackId} isPlaying={playbackState === "playing"} progress={progressValue} onCreateProject={() => setCreateOpen(true)} onClearSearch={() => setQuery("")} onStep={stepLibrarySelection} />}</main>
+    <main className="stage">
+      <div className="library-drop-status" role="status">
+        {dropProject && <span><Plus size={14} aria-hidden="true" />Add to {dropProject.title}</span>}
+      </div>
+      {compatibilityMode ? <CompatibilityView onRevealFolder={revealStorageFolder} /> : recoveryMode ? <RecoveryView onRevealFolder={revealStorageFolder} onRestore={restoreLibraryBackup} onRetry={retryStorage} /> : activeView === "project" && selectedProject ? <ProjectView key={selectedProject.id} project={selectedProject} capsules={capsuleSummaries} capsulesLoading={capsuleShelfLoading} onOpenCapsule={requestOpenCapsule} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} isPlaying={playbackState === "playing"} focusedTrackId={focusedTrackId} selectedMomentId={selectedMomentId} section={projectSection} onSectionChange={changeProjectSection} noteTargetId={noteTargetId} noteText={noteText} noteStatus={noteStatus} nativeAvailable={isTauri()} onBack={() => returnToLibrary()} onTrackInfo={(track) => setTrackInfo({ project: selectedProject, track })} onTrackSelect={(track) => startPlayback(selectedProject, track)} onVersionSelect={switchVersion} onMomentSelect={selectMoment} onMomentJump={jumpToMoment} onMomentUpdate={updateMoment} onMomentDelete={removeMoment} onJumpUnresolved={jumpUnresolved} onPlay={() => currentVersions(selectedProject)[0] && startPlayback(selectedProject, currentVersions(selectedProject)[0], 0)} onOpenSequence={() => openSequenceRoom(selectedProject)} onCreateCapsule={() => openCapsuleBuilder(selectedProject)} onNoteChange={handleNoteChange} onFlushNotes={flushNoteSave} onNoteTargetChange={changeNoteTarget} onImport={() => pickAudioFiles(selectedProject.id)} onAddVersion={(group) => pickAudioFiles(selectedProject.id, group.id)} onEditProject={() => setEditOpen(true)} onEditArtwork={pickArtwork} onRemoveArtwork={removeArtwork} onRemoveProject={() => removeProject(selectedProject)} onRenameTrack={renameTrack} onRenameVersion={renameVersion} onPromoteVersion={promoteVersion} onReorderGroups={reorderTrackGroups} onReorderVersions={reorderTrackVersions} onRemoveTrack={(group) => removeTrack(selectedProject, group)} onRemoveVersion={(version, group) => removeVersion(selectedProject, version, group)} /> : activeView === "sequence" && selectedProject ? <SequenceRoom project={selectedProject} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} playbackState={playbackState} elapsedMs={elapsedMs} durationMs={durationMs || displayTrack?.durationMs || 0} onBack={leaveSequenceRoom} onPlayTrack={playSequenceTrack} onAuditionTransition={auditionTransition} onReorderGroups={reorderTrackGroups} onUpdateTransition={updateTransition} onPlay={() => toggleSequencePlayback(selectedProject)} onPrevious={playPrevious} onNext={playNext} onProgressChange={seekPlayback} onCreateCapsule={() => openCapsuleBuilder(selectedProject)} /> : activeView === "capsule" && selectedProject && capsule ? <CapsuleView capsule={capsule} project={selectedProject} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} playbackState={playbackState} elapsedMs={elapsedMs} durationMs={durationMs || displayTrack?.durationMs || 0} onBack={leaveCapsuleView} onPlayTrack={playCapsuleTrack} onPlay={() => toggleCapsulePlayback(capsule)} onPrevious={playPrevious} onNext={playNext} onProgressChange={seekPlayback} onCopyReference={() => copyCapsuleReference(capsule)} onOpenResponse={() => setCapsuleResponseOpen(true)} onAddResponse={addCapsuleResponse} /> : <LibraryView layout={libraryLayout} dropTargetKey={dropProject ? libraryDropTarget.key : undefined} loading={loading} projects={filteredProjects} selectedId={visibleSelection} query={query} trackMatches={trackMatches} onOpenProject={openProject} onPlayTrack={startPlayback} onAddTracks={pickAudioFiles} playingProjectId={playingProjectId} playingTrackId={playingTrackId} isPlaying={playbackState === "playing"} progress={progressValue} onCreateProject={() => setCreateOpen(true)} onClearSearch={() => setQuery("")} onStep={stepLibrarySelection} />}</main>
     {activeView !== "sequence" && activeView !== "capsule" && displayProject && displayTrack && <Player project={displayProject} track={displayTrack} selectedMomentId={selectedMomentId} status={playbackState} playbackError={playbackError} isPlaying={playbackState === "playing"} progress={progressValue} elapsedMs={elapsedMs} durationMs={durationMs || displayTrack.durationMs} volume={volume} muted={muted} volumeOpen={volumeOpen} queueOpen={queueOpen} menuOpen={playerMenuOpen} shuffleEnabled={shuffleEnabled} repeatMode={repeatMode} onTogglePlay={togglePlayback} onPrevious={playPrevious} onNext={playNext} onProgressChange={seekPlayer} onCreateMoment={(timeMs) => createMoment(displayProject, displayTrack, timeMs)} onSelectMoment={(moment) => selectMoment(displayProject, displayTrack, moment)} onVolumeChange={(event) => { setVolume(Number(event.target.value)); setMuted(false); }} onToggleMute={() => setMuted((value) => !value)} onToggleVolume={() => setVolumeOpen((openState) => !openState)} onToggleQueue={() => setQueueOpen((openState) => !openState)} onToggleMenu={() => setPlayerMenuOpen((openState) => !openState)} onToggleShuffle={toggleShuffle} onToggleRepeat={cycleRepeatMode} onOpenProject={() => openProject(displayProject.id)} onShowTrack={() => openProject(displayProject.id, displayTrack.id)} onOpenNotes={() => openProject(displayProject.id, displayTrack.id, displayTrack.id)} onRevealFile={async () => { try { await invoke("revealManagedFile", { managedFileRef: displayTrack.managedFileRef }); } catch (revealError) { setError(String(revealError)); } }} onShowInfo={() => setTrackInfo({ project: displayProject, track: displayTrack })} />}
     {activeView !== "sequence" && activeView !== "capsule" && queueOpen && displayProject && <QueuePopover project={displayProject} currentIndex={displayQueueIndex} onSelect={(track, index) => { startPlayback(displayProject, track, index); setQueueOpen(false); }} onClose={() => setQueueOpen(false)} />}
     {showWelcome && (
@@ -2010,7 +2062,7 @@ function LibrarySort({ mode, onChange, hidden }) {
   </label>;
 }
 
-function LibraryGrid({ projects, selectedId, query, trackMatches, onOpenProject, onCreateProject, onClearSearch }) {
+function LibraryGrid({ projects, selectedId, dropTargetKey, query, trackMatches, onOpenProject, onCreateProject, onClearSearch }) {
   return <section className="library-grid-view view-stack" aria-label="OPAL library">
     {projects.length ? <div className="projects-grid">
       {projects.map((project) => {
@@ -2019,7 +2071,11 @@ function LibraryGrid({ projects, selectedId, query, trackMatches, onOpenProject,
         }
 
         return <article className="project-card" key={project.id}>
-          <div className="project-card-art">
+          <div className="project-card-art"
+            data-audio-drop-project={project.id}
+            data-audio-drop-key={`grid:${project.id}`}
+            data-drop-active={dropTargetKey === `grid:${project.id}` || undefined}
+          >
             <button className="project-card-open" type="button" onClick={openProject} aria-label={`Open ${project.title}`} aria-current={project.id === selectedId || undefined}>
               <img src={project.artwork} alt="" />
             </button>
@@ -2050,11 +2106,12 @@ function LibraryEmpty({ query, onCreateProject, onClearSearch }) {
   </div>;
 }
 
-function LibraryView({ layout, loading, projects: visibleProjects, selectedId, query, trackMatches, onOpenProject, onCreateProject, onClearSearch, onStep, onPlayTrack, onAddTracks, playingProjectId, playingTrackId, isPlaying, progress }) {
+function LibraryView({ layout, dropTargetKey, loading, projects: visibleProjects, selectedId, query, trackMatches, onOpenProject, onCreateProject, onClearSearch, onStep, onPlayTrack, onAddTracks, playingProjectId, playingTrackId, isPlaying, progress }) {
   if (loading) return <section className="library-screen view-stack loading-library"><div className="library-loading glass"><CircleNotch size={23} weight="thin" /></div></section>;
   if (layout === "grid") return <LibraryGrid
     projects={visibleProjects}
     selectedId={selectedId}
+    dropTargetKey={dropTargetKey}
     query={query}
     trackMatches={trackMatches}
     onOpenProject={onOpenProject}
@@ -2068,6 +2125,7 @@ function LibraryView({ layout, loading, projects: visibleProjects, selectedId, q
     key={JSON.stringify(visibleProjects.map((project) => project.id))}
     projects={visibleProjects}
     selectedId={selectedId}
+    dropTargetKey={dropTargetKey}
     trackMatches={trackMatches}
     onOpenProject={onOpenProject}
     onStep={onStep}
@@ -2080,7 +2138,7 @@ function LibraryView({ layout, loading, projects: visibleProjects, selectedId, q
   />;
 }
 
-function ProjectCarousel({ projects, selectedId, trackMatches, onOpenProject, onStep, onPlayTrack, onAddTracks, playingProjectId, playingTrackId, isPlaying, progress }) {
+function ProjectCarousel({ projects, selectedId, dropTargetKey, trackMatches, onOpenProject, onStep, onPlayTrack, onAddTracks, playingProjectId, playingTrackId, isPlaying, progress }) {
   const count = projects.length;
   const selectedIndex = Math.max(0, projects.findIndex((project) => project.id === selectedId));
   const selected = projects[selectedIndex];
@@ -2239,12 +2297,16 @@ function ProjectCarousel({ projects, selectedId, trackMatches, onOpenProject, on
             const mirror = count % 2 === 0 && offset === -count / 2;
             const isSelected = offset === 0;
             const flipped = isSelected && previewOpen;
+            const cardKey = `carousel:${slot}:${project.id}`;
             return (
               <div
                 key={slot}
                 className={`sleeve${isSelected ? " is-selected" : ""}${buffered ? " is-buffered" : ""}`}
                 data-offset={offset}
                 data-flipped={flipped}
+                data-audio-drop-project={buffered ? undefined : project.id}
+                data-audio-drop-key={buffered ? undefined : cardKey}
+                data-drop-active={dropTargetKey === cardKey || undefined}
                 aria-hidden={buffered || mirror || undefined}
               >
                 <div className="projects-cover-turn library-sleeve-turn">

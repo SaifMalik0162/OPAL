@@ -178,6 +178,7 @@
 .whats-new-icon { display: grid; width: 36px; height: 36px; place-items: center; border: 1px solid rgba(198, 215, 250, .18); border-radius: 11px; background: rgba(177, 198, 239, .07); transition: transform .22s ease, box-shadow .22s ease; }
 .whats-new-icon[data-tone="ice"] { border-color: rgba(166, 211, 255, .32); color: #bfe1ff; background: linear-gradient(145deg, rgba(111, 178, 237, .23), rgba(89, 129, 198, .1)); box-shadow: inset 0 1px rgba(220, 239, 255, .1), 0 0 16px rgba(92, 166, 237, .08); }
 .whats-new-icon[data-tone="pearl"] { border-color: rgba(221, 231, 255, .27); color: #e0e9ff; background: linear-gradient(145deg, rgba(187, 207, 246, .17), rgba(115, 143, 192, .08)); box-shadow: inset 0 1px rgba(242, 247, 255, .1), 0 0 16px rgba(176, 201, 248, .06); }
+.whats-new-icon[data-tone="gold"] { border-color: rgba(246, 214, 151, .3); color: #f2d69c; background: linear-gradient(145deg, rgba(221, 175, 101, .2), rgba(171, 136, 91, .08)); box-shadow: inset 0 1px rgba(255, 241, 209, .1), 0 0 16px rgba(224, 175, 97, .07); }
 .whats-new-icon[data-tone="mint"] { border-color: rgba(157, 220, 208, .3); color: #a8e4d5; background: linear-gradient(145deg, rgba(103, 194, 173, .19), rgba(81, 145, 150, .08)); box-shadow: inset 0 1px rgba(219, 255, 243, .1), 0 0 16px rgba(103, 194, 173, .07); }
 .whats-new-highlights li:hover .whats-new-icon { transform: translateY(-1px) scale(1.04); }
 .whats-new-highlights li > span:last-child { display: grid; gap: 4px; }

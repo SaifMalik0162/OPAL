@@ -672,6 +672,33 @@
   }
 }
 
+.library-drop-status {
+  position: absolute;
+  z-index: 10;
+  top: 6px;
+  left: 50%;
+  max-width: calc(100% - 36px);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.library-drop-status span {
+  display: block;
+  overflow: hidden;
+  padding: 7px 13px;
+  border: 1px solid rgba(226, 218, 255, .57);
+  border-radius: 999px;
+  background: #2d3658;
+  box-shadow: 0 7px 20px rgba(12, 12, 33, .32), inset 0 1px rgba(246, 239, 255, .16);
+  color: #f6f1ff;
+  font-size: 12px;
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-drop-status svg { margin-right: 6px; vertical-align: middle; }
+
 .library-grid-view {
   max-width: 1120px;
   padding-top: clamp(24px, 5vh, 48px);
@@ -1540,4 +1567,10 @@
   .opal-app[data-view="library"] .sleeve-orbit {
     width: min(100%, max(280px, calc((100dvh - 360px) * 1.48)));
   }
+}
+
+.project-card-art[data-drop-active="true"],
+.opal-app[data-view="library"] .sleeve[data-drop-active="true"] .library-sleeve-face {
+  border-color: #eee5ff;
+  box-shadow: 0 0 0 2px rgba(223, 204, 255, .74), 0 0 26px rgba(181, 153, 253, .52);
 }
