@@ -2231,6 +2231,14 @@ function ProjectCarousel({ projects, selectedId, trackMatches, onOpenProject, on
           onPointerCancel={(event) => finishPointer(event, true)}
           onLostPointerCapture={(event) => finishPointer(event, true)}
         >
+          <div className="library-carousel-light" aria-hidden="true" data-preview-open={previewOpen}>
+            <div className="library-carousel-art-light" key={selected.artwork}>
+              <img className="library-carousel-halo" src={selected.artwork} alt="" draggable="false" />
+              <div className="library-carousel-reflection">
+                <img src={selected.artwork} alt="" draggable="false" />
+              </div>
+            </div>
+          </div>
           {cards.map(({ project, offset, slot }) => {
             const buffered = Math.abs(offset) > visibleRadius;
             const mirror = count % 2 === 0 && offset === -count / 2;
