@@ -9,7 +9,8 @@
         "scope": [
           "$APPDATA/audio/**/*",
           "$APPDATA/artwork/**/*",
-          "$APPDATA/opal-fixtures/**/*"
+          "$APPDATA/opal-fixtures/**/*",
+          "$APPDATA/appearance/backgrounds/**/*"
         ]
       }
     },
