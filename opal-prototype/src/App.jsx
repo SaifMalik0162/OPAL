@@ -2386,7 +2386,7 @@ function ProjectCarousel({ projects, selectedId, dropTargetKey, trackMatches, on
                 data-drop-active={dropTargetKey === cardKey || undefined}
                 aria-hidden={buffered || mirror || undefined}
               >
-                <div className="projects-cover-turn library-sleeve-turn">
+                <div className="library-sleeve-turn">
                   <div className="library-sleeve-face library-sleeve-front" aria-hidden={flipped || undefined} inert={flipped}>
                     <button
                       type="button"
