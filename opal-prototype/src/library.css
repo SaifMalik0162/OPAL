@@ -1175,7 +1175,6 @@
 
 .opal-app[data-view="library"] .sleeve-orbit {
   container-type: inline-size;
-  isolation: isolate;
   width: min(100%, 980px, max(510px, calc((100dvh - 250px) * 2.07)));
   height: auto;
   aspect-ratio: 2.07;
@@ -1185,81 +1184,9 @@
   user-select: none;
   -webkit-user-select: none;
   --sleeve-width: 37.5cqw;
-  --sleeve-inset: clamp(5px, .9cqw, 9px);
-  --sleeve-footer-height: clamp(48px, 10.4cqw, 102px);
   --near-offset: 20.5cqw;
   --far-offset: 34cqw;
   --buffer-offset: 39cqw;
-}
-
-.library-carousel-light,
-.library-carousel-art-light {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
-.library-carousel-light {
-  --sleeve-base: calc(50% + (var(--sleeve-width) + var(--sleeve-footer-height) - var(--sleeve-inset)) / 2);
-}
-
-.library-carousel-light::before {
-  position: absolute;
-  inset: -23% -18% -30%;
-  background: radial-gradient(ellipse at 50% 51%, rgba(5, 9, 23, .66), rgba(7, 13, 31, .37) 43%, transparent 73%);
-  content: "";
-}
-
-.library-carousel-light::after {
-  position: absolute;
-  top: var(--sleeve-base);
-  left: 50%;
-  width: min(94%, calc(var(--sleeve-width) * 2.4));
-  height: clamp(25px, 8cqw, 76px);
-  background: radial-gradient(ellipse at center, rgba(3, 6, 16, .78), transparent 67%);
-  transform: translate(-50%, -50%);
-  content: "";
-}
-
-.library-carousel-halo {
-  position: absolute;
-  top: 42%;
-  left: 50%;
-  width: min(110%, calc(var(--sleeve-width) * 2.55));
-  height: 132%;
-  object-fit: cover;
-  filter: blur(clamp(28px, 6cqw, 64px)) saturate(1.55);
-  opacity: .58;
-  mask-image: radial-gradient(ellipse, #000 10%, rgba(0, 0, 0, .72) 39%, transparent 74%);
-  transform: translate(-50%, -50%);
-}
-
-.library-carousel-reflection {
-  position: absolute;
-  top: var(--sleeve-base);
-  left: 50%;
-  width: var(--sleeve-width);
-  height: clamp(24px, 6cqw, 60px);
-  overflow: hidden;
-  opacity: .42;
-  mask-image: linear-gradient(rgba(0, 0, 0, .72), transparent 88%);
-  transform: translateX(-50%) scaleX(.96);
-  transition: opacity .3s ease;
-}
-
-.library-carousel-reflection img {
-  display: block;
-  width: 100%;
-  height: var(--sleeve-width);
-  object-fit: cover;
-  filter: blur(4px) saturate(.85);
-  transform: scaleY(-1);
-}
-
-.library-carousel-light[data-preview-open="true"] .library-carousel-reflection { opacity: .12; }
-
-@media (prefers-reduced-motion: no-preference) {
-  .library-carousel-art-light { animation: projects-light-in .44s ease both; }
 }
 
 .opal-app[data-view="library"] .sleeve {
@@ -1306,7 +1233,7 @@
   position: relative;
   display: block;
   width: 100%;
-  padding: var(--sleeve-inset) var(--sleeve-inset) 0;
+  padding: clamp(5px, .9cqw, 9px) clamp(5px, .9cqw, 9px) 0;
   border: 1px solid #a0a9c1;
   border-radius: inherit;
   background: linear-gradient(145deg, #78829c, #555f7b);
@@ -1375,8 +1302,7 @@
 
 .opal-app[data-view="library"] .sleeve.is-selected .library-sleeve-face {
   border-color: #c4cbe0;
-  box-shadow: 0 34px 78px rgba(4, 8, 22, .62), 0 10px 26px rgba(4, 8, 22, .34),
-    0 0 0 1px rgba(235, 237, 255, .15), inset 0 1px 0 rgba(255, 255, 255, .34);
+  box-shadow: 0 30px 72px rgba(10, 16, 39, .42), 0 0 0 1px rgba(235, 237, 255, .15), inset 0 1px 0 rgba(255, 255, 255, .34);
 }
 
 .opal-app[data-view="library"] .sleeve-image-wrap {
@@ -1393,7 +1319,7 @@
   --detail-height: 26px;
   --footer-padding: 7px;
   display: grid;
-  min-height: var(--sleeve-footer-height);
+  min-height: clamp(48px, 10.4cqw, 102px);
   align-content: center;
   width: 100%;
   gap: 2px;
@@ -1592,10 +1518,7 @@
   --yaw: -55deg;
 }
 
-.opal-app[data-view="library"] .library-carousel-actions {
-  position: relative;
-  margin-top: 16px;
-}
+.opal-app[data-view="library"] .library-carousel-actions { margin-top: 16px; }
 
 .library-sleeve-back .projects-preview-list button:focus-visible { outline-offset: -2px; }
 
