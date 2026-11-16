@@ -10,6 +10,7 @@ import { Onboarding } from "./Onboarding.jsx";
 import { OnboardingAmbient } from "./OnboardingAmbient.jsx";
 import { WhatsNew } from "./WhatsNew.jsx";
 import { UpdateDialog } from "./UpdateDialog.jsx";
+import { CarouselTrackPreview } from "./CarouselTrackPreview.jsx";
 import { ProjectsCarousel } from "./ProjectsCarousel.jsx";
 import { TrackPlaybackIndicator } from "./TrackPlaybackIndicator.jsx";
 import { isCurrentPlaybackRequest, previousQueueIndex, repeatQueueIndex, shuffleQueue } from "./playback-queue.js";
@@ -764,11 +765,6 @@ function App() {
   async function openProjectsView() {
     if (!(await flushNoteSave())) return;
     setActiveView("projects");
-  }
-
-  async function selectLibraryProject(projectId) {
-    if (!(await flushNoteSave())) return;
-    setSelectedId(projectId);
   }
 
   async function stepLibrarySelection(step) {
@@ -1968,7 +1964,7 @@ function App() {
         <ArrowUpRight size={14} />
       </button>
     )}
-    <main className="stage">{compatibilityMode ? <CompatibilityView onRevealFolder={revealStorageFolder} /> : recoveryMode ? <RecoveryView onRevealFolder={revealStorageFolder} onRestore={restoreLibraryBackup} onRetry={retryStorage} /> : activeView === "project" && selectedProject ? <ProjectView key={selectedProject.id} project={selectedProject} capsules={capsuleSummaries} capsulesLoading={capsuleShelfLoading} onOpenCapsule={requestOpenCapsule} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} isPlaying={playbackState === "playing"} focusedTrackId={focusedTrackId} selectedMomentId={selectedMomentId} section={projectSection} onSectionChange={changeProjectSection} noteTargetId={noteTargetId} noteText={noteText} noteStatus={noteStatus} nativeAvailable={isTauri()} backLabel={projectBackView.current === "projects" ? "Projects" : "Library"} onBack={returnFromProject} onTrackInfo={(track) => setTrackInfo({ project: selectedProject, track })} onTrackSelect={(track) => startPlayback(selectedProject, track)} onVersionSelect={switchVersion} onMomentSelect={selectMoment} onMomentJump={jumpToMoment} onMomentUpdate={updateMoment} onMomentDelete={removeMoment} onJumpUnresolved={jumpUnresolved} onPlay={() => currentVersions(selectedProject)[0] && startPlayback(selectedProject, currentVersions(selectedProject)[0], 0)} onOpenSequence={() => openSequenceRoom(selectedProject)} onCreateCapsule={() => openCapsuleBuilder(selectedProject)} onNoteChange={handleNoteChange} onFlushNotes={flushNoteSave} onNoteTargetChange={changeNoteTarget} onImport={() => pickAudioFiles(selectedProject.id)} onAddVersion={(group) => pickAudioFiles(selectedProject.id, group.id)} onEditProject={() => setEditOpen(true)} onEditArtwork={pickArtwork} onRemoveArtwork={removeArtwork} onRemoveProject={() => removeProject(selectedProject)} onRenameTrack={renameTrack} onRenameVersion={renameVersion} onPromoteVersion={promoteVersion} onReorderGroups={reorderTrackGroups} onReorderVersions={reorderTrackVersions} onRemoveTrack={(group) => removeTrack(selectedProject, group)} onRemoveVersion={(version, group) => removeVersion(selectedProject, version, group)} /> : activeView === "sequence" && selectedProject ? <SequenceRoom project={selectedProject} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} playbackState={playbackState} elapsedMs={elapsedMs} durationMs={durationMs || displayTrack?.durationMs || 0} onBack={leaveSequenceRoom} onPlayTrack={playSequenceTrack} onAuditionTransition={auditionTransition} onReorderGroups={reorderTrackGroups} onUpdateTransition={updateTransition} onPlay={() => toggleSequencePlayback(selectedProject)} onPrevious={playPrevious} onNext={playNext} onProgressChange={seekPlayback} onCreateCapsule={() => openCapsuleBuilder(selectedProject)} /> : activeView === "capsule" && selectedProject && capsule ? <CapsuleView capsule={capsule} project={selectedProject} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} playbackState={playbackState} elapsedMs={elapsedMs} durationMs={durationMs || displayTrack?.durationMs || 0} onBack={leaveCapsuleView} onPlayTrack={playCapsuleTrack} onPlay={() => toggleCapsulePlayback(capsule)} onPrevious={playPrevious} onNext={playNext} onProgressChange={seekPlayback} onCopyReference={() => copyCapsuleReference(capsule)} onOpenResponse={() => setCapsuleResponseOpen(true)} onAddResponse={addCapsuleResponse} /> : activeView === "projects" ? <ProjectsView loading={loading} projects={filteredProjects} selectedId={selectedId} onPlayTrack={startPlayback} playingProjectId={playingProjectId} playingTrackId={playingTrackId} isPlaying={playbackState === "playing"} progress={progressValue} query={query} sortMode={sortMode} onSortChange={setSortMode} onOpenProject={openProject} onPlayProject={(project) => currentVersions(project)[0] && startPlayback(project, currentVersions(project)[0], 0)} onCreateProject={() => setCreateOpen(true)} onClearSearch={() => setQuery("")} /> : <LibraryView loading={loading} projects={filteredProjects} selectedId={visibleSelection} query={query} sortMode={sortMode} trackMatches={trackMatches} onSortChange={setSortMode} onProjectSelect={selectLibraryProject} onOpenProject={openProject} onCreateProject={() => setCreateOpen(true)} onClearSearch={() => setQuery("")} onStep={stepLibrarySelection} />}</main>
+    <main className="stage">{compatibilityMode ? <CompatibilityView onRevealFolder={revealStorageFolder} /> : recoveryMode ? <RecoveryView onRevealFolder={revealStorageFolder} onRestore={restoreLibraryBackup} onRetry={retryStorage} /> : activeView === "project" && selectedProject ? <ProjectView key={selectedProject.id} project={selectedProject} capsules={capsuleSummaries} capsulesLoading={capsuleShelfLoading} onOpenCapsule={requestOpenCapsule} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} isPlaying={playbackState === "playing"} focusedTrackId={focusedTrackId} selectedMomentId={selectedMomentId} section={projectSection} onSectionChange={changeProjectSection} noteTargetId={noteTargetId} noteText={noteText} noteStatus={noteStatus} nativeAvailable={isTauri()} backLabel={projectBackView.current === "projects" ? "Projects" : "Library"} onBack={returnFromProject} onTrackInfo={(track) => setTrackInfo({ project: selectedProject, track })} onTrackSelect={(track) => startPlayback(selectedProject, track)} onVersionSelect={switchVersion} onMomentSelect={selectMoment} onMomentJump={jumpToMoment} onMomentUpdate={updateMoment} onMomentDelete={removeMoment} onJumpUnresolved={jumpUnresolved} onPlay={() => currentVersions(selectedProject)[0] && startPlayback(selectedProject, currentVersions(selectedProject)[0], 0)} onOpenSequence={() => openSequenceRoom(selectedProject)} onCreateCapsule={() => openCapsuleBuilder(selectedProject)} onNoteChange={handleNoteChange} onFlushNotes={flushNoteSave} onNoteTargetChange={changeNoteTarget} onImport={() => pickAudioFiles(selectedProject.id)} onAddVersion={(group) => pickAudioFiles(selectedProject.id, group.id)} onEditProject={() => setEditOpen(true)} onEditArtwork={pickArtwork} onRemoveArtwork={removeArtwork} onRemoveProject={() => removeProject(selectedProject)} onRenameTrack={renameTrack} onRenameVersion={renameVersion} onPromoteVersion={promoteVersion} onReorderGroups={reorderTrackGroups} onReorderVersions={reorderTrackVersions} onRemoveTrack={(group) => removeTrack(selectedProject, group)} onRemoveVersion={(version, group) => removeVersion(selectedProject, version, group)} /> : activeView === "sequence" && selectedProject ? <SequenceRoom project={selectedProject} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} playbackState={playbackState} elapsedMs={elapsedMs} durationMs={durationMs || displayTrack?.durationMs || 0} onBack={leaveSequenceRoom} onPlayTrack={playSequenceTrack} onAuditionTransition={auditionTransition} onReorderGroups={reorderTrackGroups} onUpdateTransition={updateTransition} onPlay={() => toggleSequencePlayback(selectedProject)} onPrevious={playPrevious} onNext={playNext} onProgressChange={seekPlayback} onCreateCapsule={() => openCapsuleBuilder(selectedProject)} /> : activeView === "capsule" && selectedProject && capsule ? <CapsuleView capsule={capsule} project={selectedProject} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} playbackState={playbackState} elapsedMs={elapsedMs} durationMs={durationMs || displayTrack?.durationMs || 0} onBack={leaveCapsuleView} onPlayTrack={playCapsuleTrack} onPlay={() => toggleCapsulePlayback(capsule)} onPrevious={playPrevious} onNext={playNext} onProgressChange={seekPlayback} onCopyReference={() => copyCapsuleReference(capsule)} onOpenResponse={() => setCapsuleResponseOpen(true)} onAddResponse={addCapsuleResponse} /> : activeView === "projects" ? <ProjectsView loading={loading} projects={filteredProjects} selectedId={selectedId} onPlayTrack={startPlayback} onAddTracks={pickAudioFiles} playingProjectId={playingProjectId} playingTrackId={playingTrackId} isPlaying={playbackState === "playing"} progress={progressValue} query={query} sortMode={sortMode} onSortChange={setSortMode} onOpenProject={openProject} onPlayProject={(project) => currentVersions(project)[0] && startPlayback(project, currentVersions(project)[0], 0)} onCreateProject={() => setCreateOpen(true)} onClearSearch={() => setQuery("")} /> : <LibraryView loading={loading} projects={filteredProjects} selectedId={visibleSelection} query={query} trackMatches={trackMatches} onOpenProject={openProject} onPlayTrack={startPlayback} onAddTracks={pickAudioFiles} playingProjectId={playingProjectId} playingTrackId={playingTrackId} isPlaying={playbackState === "playing"} progress={progressValue} onCreateProject={() => setCreateOpen(true)} onClearSearch={() => setQuery("")} onStep={stepLibrarySelection} />}</main>
     {activeView !== "sequence" && activeView !== "capsule" && displayProject && displayTrack && <Player project={displayProject} track={displayTrack} selectedMomentId={selectedMomentId} status={playbackState} playbackError={playbackError} isPlaying={playbackState === "playing"} progress={progressValue} elapsedMs={elapsedMs} durationMs={durationMs || displayTrack.durationMs} volume={volume} muted={muted} volumeOpen={volumeOpen} queueOpen={queueOpen} menuOpen={playerMenuOpen} shuffleEnabled={shuffleEnabled} repeatMode={repeatMode} onTogglePlay={togglePlayback} onPrevious={playPrevious} onNext={playNext} onProgressChange={seekPlayer} onCreateMoment={(timeMs) => createMoment(displayProject, displayTrack, timeMs)} onSelectMoment={(moment) => selectMoment(displayProject, displayTrack, moment)} onVolumeChange={(event) => { setVolume(Number(event.target.value)); setMuted(false); }} onToggleMute={() => setMuted((value) => !value)} onToggleVolume={() => setVolumeOpen((openState) => !openState)} onToggleQueue={() => setQueueOpen((openState) => !openState)} onToggleMenu={() => setPlayerMenuOpen((openState) => !openState)} onToggleShuffle={toggleShuffle} onToggleRepeat={cycleRepeatMode} onOpenProject={() => openProject(displayProject.id)} onShowTrack={() => openProject(displayProject.id, displayTrack.id)} onOpenNotes={() => openProject(displayProject.id, displayTrack.id, displayTrack.id)} onRevealFile={async () => { try { await invoke("revealManagedFile", { managedFileRef: displayTrack.managedFileRef }); } catch (revealError) { setError(String(revealError)); } }} onShowInfo={() => setTrackInfo({ project: displayProject, track: displayTrack })} />}
     {activeView !== "sequence" && activeView !== "capsule" && queueOpen && displayProject && <QueuePopover project={displayProject} currentIndex={displayQueueIndex} onSelect={(track, index) => { startPlayback(displayProject, track, index); setQueueOpen(false); }} onClose={() => setQueueOpen(false)} />}
     {showWelcome && (
@@ -2000,7 +1996,7 @@ function App() {
   </div>;
 }
 
-function ProjectsView({ loading, projects: visibleProjects, selectedId, query, sortMode, onSortChange, onOpenProject, onPlayProject, onPlayTrack, playingProjectId, playingTrackId, isPlaying, progress, onCreateProject, onClearSearch }) {
+function ProjectsView({ loading, projects: visibleProjects, selectedId, query, sortMode, onSortChange, onOpenProject, onPlayProject, onPlayTrack, onAddTracks, playingProjectId, playingTrackId, isPlaying, progress, onCreateProject, onClearSearch }) {
   const [layout, setLayout] = useState(() => {
     try {
       return window.localStorage.getItem("opal-projects-layout") === "carousel" ? "carousel" : "grid";
@@ -2050,6 +2046,7 @@ function ProjectsView({ loading, projects: visibleProjects, selectedId, query, s
       onPlay={onPlayProject}
       tracks={currentVersions(visibleProjects[focusedIndex])}
       onPlayTrack={onPlayTrack}
+      onAddTracks={onAddTracks}
       playingTrackId={playingProjectId === visibleProjects[focusedIndex].id ? playingTrackId : ""}
       isPlaying={isPlaying}
       progress={progress}
@@ -2057,7 +2054,7 @@ function ProjectsView({ loading, projects: visibleProjects, selectedId, query, s
   </section>;
 }
 
-function LibraryView({ loading, projects: visibleProjects, selectedId, query, sortMode, trackMatches, onSortChange, onOpenProject, onCreateProject, onClearSearch, onStep }) {
+function LibraryView({ loading, projects: visibleProjects, selectedId, query, trackMatches, onOpenProject, onCreateProject, onClearSearch, onStep, onPlayTrack, onAddTracks, playingProjectId, playingTrackId, isPlaying, progress }) {
   if (loading) return <section className="library-screen view-stack loading-library"><div className="library-loading glass"><CircleNotch size={23} weight="thin" /></div></section>;
   if (!visibleProjects.length) {
     const hasSearch = Boolean(query.trim());
@@ -2070,14 +2067,25 @@ function LibraryView({ loading, projects: visibleProjects, selectedId, query, so
     trackMatches={trackMatches}
     onOpenProject={onOpenProject}
     onStep={onStep}
+    onPlayTrack={onPlayTrack}
+    onAddTracks={onAddTracks}
+    playingProjectId={playingProjectId}
+    playingTrackId={playingTrackId}
+    isPlaying={isPlaying}
+    progress={progress}
   />;
 }
 
-function ProjectCarousel({ projects, selectedId, trackMatches, onOpenProject, onStep }) {
+function ProjectCarousel({ projects, selectedId, trackMatches, onOpenProject, onStep, onPlayTrack, onAddTracks, playingProjectId, playingTrackId, isPlaying, progress }) {
   const count = projects.length;
   const selectedIndex = Math.max(0, projects.findIndex((project) => project.id === selectedId));
   const selected = projects[selectedIndex];
   const orbitRef = useRef(null);
+  const previewToggleRef = useRef(null);
+  const previewCloseRef = useRef(null);
+  const [previewProjectId, setPreviewProjectId] = useState(null);
+  const previewOpen = previewProjectId === selected.id;
+  const tracks = useMemo(() => currentVersions(selected), [selected]);
   const pointerRef = useRef(null);
   const suppressClickRef = useRef(false);
   const directionRef = useRef(1);
@@ -2090,6 +2098,7 @@ function ProjectCarousel({ projects, selectedId, trackMatches, onOpenProject, on
     if (Math.abs(delta) === count / 2) delta = directionRef.current * Math.abs(delta);
     cursor += delta;
     setPosition({ index: selectedIndex, cursor });
+    setPreviewProjectId(null);
   }
 
   const visibleRadius = count >= 4 ? 2 : count >= 2 ? 1 : 0;
@@ -2105,7 +2114,7 @@ function ProjectCarousel({ projects, selectedId, trackMatches, onOpenProject, on
   useEffect(() => {
     const orbit = orbitRef.current;
     function handleWheel(event) {
-      if (count < 2 || event.ctrlKey || Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
+      if (count < 2 || event.ctrlKey || event.target.closest(".projects-track-preview") || Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
       event.preventDefault();
       const now = performance.now();
       const wheel = wheelRef.current;
@@ -2117,6 +2126,9 @@ function ProjectCarousel({ projects, selectedId, trackMatches, onOpenProject, on
       directionRef.current = Math.sign(wheel.delta);
       wheel.delta = 0;
       wheel.lastStep = now;
+      if (orbit.contains(document.activeElement?.closest(".projects-track-preview"))) {
+        previewToggleRef.current?.focus({ preventScroll: true });
+      }
       onStep(directionRef.current);
     }
 
@@ -2124,8 +2136,20 @@ function ProjectCarousel({ projects, selectedId, trackMatches, onOpenProject, on
     return () => orbit.removeEventListener("wheel", handleWheel);
   }, [count, onStep]);
 
+  useEffect(() => {
+    if (previewOpen) previewCloseRef.current?.focus({ preventScroll: true });
+  }, [previewOpen]);
+
+  function closePreview() {
+    setPreviewProjectId(null);
+    previewToggleRef.current?.focus({ preventScroll: true });
+  }
+
   function step(direction) {
     if (count < 2) return;
+    if (orbitRef.current?.contains(document.activeElement?.closest(".projects-track-preview"))) {
+      previewToggleRef.current?.focus({ preventScroll: true });
+    }
     directionRef.current = direction;
     onStep(direction);
   }
@@ -2133,7 +2157,7 @@ function ProjectCarousel({ projects, selectedId, trackMatches, onOpenProject, on
   function handlePointerDown(event) {
     if (!event.isPrimary || event.button !== 0) return;
     suppressClickRef.current = false;
-    if (count < 2) return;
+    if (count < 2 || event.target.closest(".projects-track-preview")) return;
     pointerRef.current = { id: event.pointerId, x: event.clientX, y: event.clientY, dragging: false };
   }
 
@@ -2170,7 +2194,12 @@ function ProjectCarousel({ projects, selectedId, trackMatches, onOpenProject, on
   }
 
   return (
-    <section className="library-screen view-stack" aria-label="OPAL library">
+    <section className="library-screen view-stack" aria-label="OPAL library" onKeyDown={(event) => {
+      if (event.key !== "Escape" || !previewOpen) return;
+      event.preventDefault();
+      event.stopPropagation();
+      closePreview();
+    }}>
       <h1 className="library-accessible-title">Library</h1>
       <div className="carousel-wrap">
         {count > 1 && <button type="button" className="carousel-control carousel-control-left" onClick={() => step(-1)} aria-label="Previous project"><CaretLeft size={22} /></button>}
@@ -2181,6 +2210,7 @@ function ProjectCarousel({ projects, selectedId, trackMatches, onOpenProject, on
           tabIndex={-1}
           aria-label="Project carousel. Swipe or use the arrow keys to browse."
           onKeyDown={(event) => {
+            if (event.target.closest(".projects-track-preview")) return;
             if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
             event.preventDefault();
             event.currentTarget.focus({ preventScroll: true });
@@ -2196,31 +2226,63 @@ function ProjectCarousel({ projects, selectedId, trackMatches, onOpenProject, on
           {cards.map(({ project, offset, slot }) => {
             const buffered = Math.abs(offset) > visibleRadius;
             const mirror = count % 2 === 0 && offset === -count / 2;
+            const isSelected = offset === 0;
+            const flipped = isSelected && previewOpen;
             return (
-              <button
-                type="button"
+              <div
                 key={slot}
-                className={`sleeve${offset === 0 ? " is-selected" : ""}${buffered ? " is-buffered" : ""}`}
+                className={`sleeve${isSelected ? " is-selected" : ""}${buffered ? " is-buffered" : ""}`}
                 data-offset={offset}
-                aria-current={offset === 0 || undefined}
+                data-flipped={flipped}
                 aria-hidden={buffered || mirror || undefined}
-                tabIndex={buffered || mirror ? -1 : undefined}
-                disabled={buffered}
-                aria-label={`Open ${project.title} project`}
-                onClick={(event) => openCard(project, event)}
               >
-                <span className="sleeve-image-wrap"><img src={project.artwork} alt="" draggable="false" /></span>
-                <span className="sleeve-meta">
-                  <strong>{project.title}</strong>
-                  <small>{(offset === 0 && project.tracks[0]?.title) || `${project.count} ${project.count === 1 ? "track" : "tracks"}`}</small>
-                </span>
-              </button>
+                <div className="projects-cover-turn library-sleeve-turn">
+                  <button
+                    type="button"
+                    className="library-sleeve-front"
+                    aria-current={isSelected || undefined}
+                    tabIndex={buffered || mirror ? -1 : undefined}
+                    disabled={buffered}
+                    aria-hidden={flipped || undefined}
+                    inert={flipped}
+                    aria-label={`Open ${project.title} project`}
+                    onClick={(event) => openCard(project, event)}
+                  >
+                    <span className="sleeve-image-wrap"><img src={project.artwork} alt="" draggable="false" /></span>
+                    <span className="sleeve-meta">
+                      <strong>{project.title}</strong>
+                      <small>{(isSelected && project.tracks[0]?.title) || `${project.count} ${project.count === 1 ? "track" : "tracks"}`}</small>
+                    </span>
+                  </button>
+                  {isSelected && <CarouselTrackPreview
+                    id="library-track-preview"
+                    project={selected}
+                    tracks={tracks}
+                    flipped={flipped}
+                    closeRef={previewCloseRef}
+                    closePreview={closePreview}
+                    onPlayTrack={onPlayTrack}
+                    onAddTracks={onAddTracks}
+                    playingTrackId={playingProjectId === selected.id ? playingTrackId : ""}
+                    isPlaying={isPlaying}
+                    progress={progress}
+                  />}
+                </div>
+              </div>
             );
           })}
         </div>
         {count > 1 && <button type="button" className="carousel-control carousel-control-right" onClick={() => step(1)} aria-label="Next project"><CaretRight size={22} /></button>}
       </div>
-      <div className="carousel-caption">
+      <div className="carousel-caption library-carousel-actions">
+        <button
+          ref={previewToggleRef}
+          className="button button-ghost projects-preview-toggle"
+          type="button"
+          aria-expanded={previewOpen}
+          aria-controls="library-track-preview"
+          onClick={() => previewOpen ? closePreview() : setPreviewProjectId(selected.id)}
+        ><ListBullets size={16} />Tracks</button>
         <button className="caption-open" type="button" aria-label={`Open ${selected.title} project`} onClick={() => onOpenProject(selected.id, trackMatches.get(selected.id)?.id ?? "")}>
           <span>{selected.description?.trim() || `${selected.count} ${selected.count === 1 ? "track" : "tracks"} · ${selected.duration}`}</span>
           <ArrowUpRight size={16} />

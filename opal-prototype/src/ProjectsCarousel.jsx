@@ -1,11 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ArrowCounterClockwise, CaretLeft, CaretRight, FolderOpen, ListBullets, MusicNote, Play } from "@phosphor-icons/react";
+import { CaretLeft, CaretRight, FolderOpen, ListBullets, Play } from "@phosphor-icons/react";
 
-import { TrackPlaybackIndicator } from "./TrackPlaybackIndicator.jsx";
+import { CarouselTrackPreview } from "./CarouselTrackPreview.jsx";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
-export function ProjectsCarousel({ projects, index, onSelect, onOpen, onPlay, tracks, onPlayTrack, playingTrackId, isPlaying, progress }) {
+export function ProjectsCarousel({ projects, index, onSelect, onOpen, onPlay, tracks, onPlayTrack, onAddTracks, playingTrackId, isPlaying, progress }) {
   const stageRef = useRef(null);
   const coverRef = useRef(null);
   const previewToggleRef = useRef(null);
@@ -195,43 +195,19 @@ export function ProjectsCarousel({ projects, index, onSelect, onOpen, onPlay, tr
                 stageRef.current?.focus({ preventScroll: true });
               }}
             ><img src={item.artwork} alt="" draggable={false} /></button>
-            {selected && <section
+            {selected && <CarouselTrackPreview
               id="projects-track-preview"
-              className="projects-track-preview"
-              aria-label={`Tracks in ${project.title}`}
-              inert={!flipped}
-            >
-              <img className="projects-preview-art" src={project.artwork} alt="" draggable={false} />
-              <div className="projects-preview-header">
-                <div><strong>Tracks</strong><span>{tracks.length}</span></div>
-                <button ref={previewCloseRef} type="button" onClick={closePreview} aria-label="Return to cover"><ArrowCounterClockwise size={15} /></button>
-              </div>
-              {tracks.length ? <ol className="projects-preview-list">
-                {tracks.map((track, trackIndex) => {
-                  const current = track.id === playingTrackId;
-                  return <li key={track.id}>
-                    <button
-                      type="button"
-                      onClick={() => onPlayTrack(project, track)}
-                      aria-label={`Play ${track.title}${track.versionName ? `, ${track.versionName}` : ""}`}
-                      aria-current={current ? "true" : undefined}
-                      style={current ? { "--track-progress": `${progress}%` } : undefined}
-                    >
-                      <span className="projects-preview-cue" aria-hidden="true">
-                        {current && isPlaying
-                          ? <TrackPlaybackIndicator />
-                          : <><span className="projects-preview-index">{String(trackIndex + 1).padStart(2, "0")}</span><Play className="projects-preview-cue-play" size={11} weight="fill" /></>}
-                      </span>
-                      <span className="projects-preview-track-copy">
-                        <strong title={track.title}>{track.title}</strong>
-                        {track.versionName && <small>{track.versionName}</small>}
-                      </span>
-                      <span className="projects-preview-duration">{track.duration}</span>
-                    </button>
-                  </li>;
-                })}
-              </ol> : <div className="projects-preview-empty"><MusicNote size={23} weight="light" /><p>No tracks in this project yet.</p></div>}
-            </section>}
+              project={project}
+              tracks={tracks}
+              flipped={flipped}
+              closeRef={previewCloseRef}
+              closePreview={closePreview}
+              onPlayTrack={onPlayTrack}
+              onAddTracks={onAddTracks}
+              playingTrackId={playingTrackId}
+              isPlaying={isPlaying}
+              progress={progress}
+            />}
           </div>
         </div>;
       })}
