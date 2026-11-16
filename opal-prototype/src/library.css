@@ -1196,14 +1196,19 @@
   display: block;
   width: 100%;
   padding: clamp(5px, .9cqw, 9px) clamp(5px, .9cqw, 9px) 0;
-  border: 1px solid #a0a9c1;
+  border: 1px solid rgba(205, 216, 239, .82);
   border-radius: inherit;
-  background: linear-gradient(145deg, #78829c, #555f7b);
-  box-shadow: 0 24px 56px rgba(10, 16, 39, .27), inset 0 1px rgba(255, 255, 255, .24);
+  background: linear-gradient(145deg, rgba(193, 207, 237, .68), rgba(107, 124, 166, .74));
+  -webkit-backdrop-filter: blur(22px) saturate(1.3);
+  backdrop-filter: blur(22px) saturate(1.3);
+  box-shadow:
+    0 24px 56px rgba(10, 16, 39, .3),
+    inset 0 1px 0 rgba(255, 255, 255, .48),
+    inset 0 0 0 1px rgba(237, 243, 255, .13);
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
   text-align: center;
-  transition: border-color .32s ease, box-shadow .32s ease;
+  transition: background .32s ease, border-color .32s ease, box-shadow .32s ease;
 }
 
 .opal-app[data-view="library"] .library-sleeve-face.library-sleeve-back {
@@ -1247,8 +1252,11 @@
 }
 
 .opal-app[data-view="library"] .library-sleeve-front:hover {
-  border-color: #b9c2d8;
-  box-shadow: 0 30px 64px rgba(10, 16, 39, .38), inset 0 1px 0 rgba(255, 255, 255, .3);
+  border-color: rgba(229, 237, 255, .94);
+  box-shadow:
+    0 30px 64px rgba(10, 16, 39, .38),
+    inset 0 1px 0 rgba(255, 255, 255, .56),
+    inset 0 0 0 1px rgba(246, 248, 255, .2);
 }
 
 .opal-app[data-view="library"] .sleeve:focus-within {
@@ -1263,8 +1271,12 @@
 }
 
 .opal-app[data-view="library"] .sleeve.is-selected .library-sleeve-face {
-  border-color: #c4cbe0;
-  box-shadow: 0 30px 72px rgba(10, 16, 39, .42), 0 0 0 1px rgba(235, 237, 255, .15), inset 0 1px 0 rgba(255, 255, 255, .34);
+  border-color: rgba(226, 234, 252, .92);
+  box-shadow:
+    0 30px 72px rgba(10, 16, 39, .42),
+    0 0 0 1px rgba(235, 237, 255, .15),
+    inset 0 1px 0 rgba(255, 255, 255, .52),
+    inset 0 0 0 1px rgba(242, 246, 255, .16);
 }
 
 .opal-app[data-view="library"] .sleeve-image-wrap {
@@ -1286,7 +1298,13 @@
   width: 100%;
   gap: 2px;
   padding: 5px 9px var(--footer-padding);
-  background: transparent;
+  border-radius: 0 0 calc(clamp(17px, 3.5cqw, 34px) - clamp(5px, .9cqw, 9px)) calc(clamp(17px, 3.5cqw, 34px) - clamp(5px, .9cqw, 9px));
+  background:
+    linear-gradient(180deg, rgba(248, 250, 255, .11), rgba(248, 250, 255, 0) 30%),
+    linear-gradient(145deg, rgba(219, 229, 250, .1), rgba(39, 55, 91, .12));
+  -webkit-backdrop-filter: blur(16px) saturate(1.22);
+  backdrop-filter: blur(16px) saturate(1.22);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .19);
 }
 
 .opal-app[data-view="library"] .sleeve.is-selected .sleeve-meta {
