@@ -1939,13 +1939,13 @@ function App() {
       </div>
       <div className="topbar-actions">
         <LibrarySort mode={sortMode} onChange={setSortMode} hidden={!libraryShowing} />
-        {(!gridShowing || importActive) && <button
+        <button
           type="button"
-          className={`topbar-import${importActive ? " is-busy" : ""}`}
+          className={`topbar-import${libraryShowing ? " project-add-glass" : ""}${importActive ? " is-busy" : ""}`}
           title={libraryShowing && !importActive ? "New project" : undefined}
           aria-label={importActive ? "Show import progress" : topbarImportProject ? `Import audio into ${topbarImportProject.title}` : "Create a new project"}
           onClick={() => importActive ? setImportOpen(true) : (topbarImportProject ? pickAudioFiles(topbarImportProject.id) : setCreateOpen(true))}
-        ><Plus size={14} />{importActive ? "Importing…" : topbarImportProject ? "Import audio" : "New project"}</button>}
+        ><Plus size={14} />{importActive ? "Importing…" : topbarImportProject ? "Import audio" : "New project"}</button>
         <button type="button" className="profile-button" onClick={openProfile} aria-label="Open OPAL settings" aria-expanded={profileOpen} title="Settings"><GearSix size={17} aria-hidden="true" /></button>
         {profileOpen && <ProfilePopover nativeAvailable={isTauri()} storageInfo={storageInfo} storageError={storageError} importProgress={importProgress} updateStatus={updateStatus} updateAvailable={Boolean(availableUpdate)} onCheckUpdates={checkForUpdates} onOpenUpdates={openUpdates} onPreviewUpdateBanner={IS_DEVELOPMENT_BUILD ? () => {
         setProfileOpen(false);
@@ -2011,10 +2011,9 @@ function LibrarySort({ mode, onChange, hidden }) {
   </label>;
 }
 
-function LibraryGrid({ projects, selectedId, query, trackMatches, onOpenProject, onPlayTrack, onCreateProject, onClearSearch }) {
+function LibraryGrid({ projects, selectedId, query, trackMatches, onOpenProject, onCreateProject, onClearSearch }) {
   return <section className="library-grid-view view-stack" aria-label="OPAL library">
     {projects.length ? <div className="projects-grid">
-      <button className="project-create-card" type="button" onClick={onCreateProject}><span><Plus size={20} /></span><strong>New project</strong></button>
       {projects.map((project) => {
         function openProject() {
           onOpenProject(project.id, trackMatches.get(project.id)?.id ?? "");
@@ -2025,10 +2024,6 @@ function LibraryGrid({ projects, selectedId, query, trackMatches, onOpenProject,
             <button className="project-card-open" type="button" onClick={openProject} aria-label={`Open ${project.title}`} aria-current={project.id === selectedId || undefined}>
               <img src={project.artwork} alt="" />
             </button>
-            <button className="project-card-play" type="button" onClick={() => {
-              const [firstTrack] = currentVersions(project);
-              if (firstTrack) onPlayTrack(project, firstTrack, 0);
-            }} aria-label={`Play ${project.title}`} disabled={!project.count}><Play size={17} weight="fill" /></button>
           </div>
           <div className="project-card-meta">
             <button className="project-card-title" type="button" onClick={openProject}>{project.title}</button>
@@ -2036,6 +2031,9 @@ function LibraryGrid({ projects, selectedId, query, trackMatches, onOpenProject,
           </div>
         </article>;
       })}
+      <button className="project-create-card" type="button" onClick={onCreateProject}>
+        <span className="project-add-glass"><Plus size={20} /></span><strong>New project</strong>
+      </button>
     </div> : <LibraryEmpty query={query} onCreateProject={onCreateProject} onClearSearch={onClearSearch} />}
   </section>;
 }
@@ -2061,7 +2059,6 @@ function LibraryView({ layout, loading, projects: visibleProjects, selectedId, q
     query={query}
     trackMatches={trackMatches}
     onOpenProject={onOpenProject}
-    onPlayTrack={onPlayTrack}
     onCreateProject={onCreateProject}
     onClearSearch={onClearSearch}
   />;
