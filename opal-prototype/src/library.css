@@ -1325,6 +1325,15 @@
   background: transparent;
 }
 
+.opal-app[data-view="library"] .sleeve.is-selected .sleeve-meta {
+  grid-template-rows: auto 1fr;
+  align-content: stretch;
+  gap: 0;
+  padding-block: clamp(5px, calc(3.5cqw - 13px), 22px) 0;
+}
+
+.sleeve.is-selected .library-sleeve-detail { align-self: center; }
+
 .opal-app[data-view="library"] .sleeve-meta strong {
   color: rgba(249, 249, 255, .96);
   font-family: inherit;
