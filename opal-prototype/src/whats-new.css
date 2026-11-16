@@ -55,21 +55,6 @@
 
 .whats-new-art-brand img { width: 18px; height: 18px; object-fit: contain; opacity: .9; }
 
-.whats-new-layout-preview {
-  display: flex;
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid rgba(218, 232, 255, .2);
-  border-radius: 999px;
-  background: rgba(15, 25, 48, .28);
-  color: #b6c4df;
-  font-size: 9px;
-}
-
-.whats-new-layout-preview span { padding: 4px 8px; border-radius: inherit; }
-
-.whats-new-layout-preview span:first-child { background: rgba(224, 233, 255, .16); color: #f2f5ff; }
-
 .whats-new-sleeves {
   position: relative;
   display: grid;

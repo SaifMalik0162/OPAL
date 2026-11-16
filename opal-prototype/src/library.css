@@ -1232,7 +1232,7 @@
 
 .opal-app[data-view="library"] .sleeve-orbit.is-dragging .library-sleeve-open { cursor: grabbing; }
 
-.library-sleeve-back .sleeve-image-wrap { position: relative; }
+.library-sleeve-face .sleeve-image-wrap { position: relative; }
 
 .opal-app[data-view="library"] .library-sleeve-back .projects-track-preview {
   border: 0;

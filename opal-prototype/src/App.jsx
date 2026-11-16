@@ -11,6 +11,7 @@ import { OnboardingAmbient } from "./OnboardingAmbient.jsx";
 import { WhatsNew, WHATS_NEW_RELEASE } from "./WhatsNew.jsx";
 import { UpdateDialog } from "./UpdateDialog.jsx";
 import { CarouselTrackPreview } from "./CarouselTrackPreview.jsx";
+import { animateCover, measureCover } from "./cover-transition.js";
 import { TrackPlaybackIndicator } from "./TrackPlaybackIndicator.jsx";
 import { isCurrentPlaybackRequest, previousQueueIndex, repeatQueueIndex, shuffleQueue } from "./playback-queue.js";
 import { remainingGapMilliseconds } from "./playback-gap.js";
@@ -266,6 +267,7 @@ function App() {
   const [activeView, setActiveView] = useState("library");
   const [libraryLayout, setLibraryLayout] = useState("carousel");
   const libraryPositionRef = useRef(null);
+  const coverTransitionRef = useRef(null);
   const stageRef = useRef(null);
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -774,16 +776,35 @@ function App() {
     }
   }
 
-  async function openProject(projectId = selectedId, trackId = "", noteTrackId = null) {
+  function findLibraryCover(layout, projectId, offset = 0) {
+    const id = CSS.escape(projectId);
+    const selector = layout === "grid"
+      ? `[data-grid-project="${id}"]`
+      : `.sleeve[data-offset="${offset}"][data-audio-drop-project="${id}"][data-flipped="false"] .sleeve-image-wrap`;
+    return stageRef.current?.querySelector(selector);
+  }
+
+  function prepareCoverTransition(cover, projectId, view, offset) {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || !cover?.animate) return;
+    const source = measureCover(cover);
+    if (source) coverTransitionRef.current = { source, projectId, view, offset };
+  }
+
+  async function openProject(projectId = selectedId, trackId = "", noteTrackId = null, coverOffset = 0) {
     if (!projectId || !projects.some((project) => project.id === projectId)) return;
     const libraryPosition = activeView === "library" ? {
       layout: libraryLayout,
       projectId: libraryLayout === "grid" ? projectId : visibleSelection,
+      openedProjectId: projectId,
+      coverOffset,
       scrollTop: window.scrollY,
     } : null;
     if (!(await flushNoteSave())) return;
     if (libraryPosition) {
       libraryPositionRef.current = libraryPosition;
+      if (!trackId && !noteTrackId) {
+        prepareCoverTransition(findLibraryCover(libraryLayout, projectId, coverOffset), projectId, "project");
+      }
     }
     setSelectedId(projectId);
     setFocusedTrackId(trackId);
@@ -800,6 +821,10 @@ function App() {
         libraryPositionRef.current = null;
       } else if (layout === "carousel" && projects.some((project) => project.id === position.projectId)) {
         setSelectedId(position.projectId);
+      }
+      if (activeView === "project" && position?.layout === layout && position.openedProjectId === selectedId) {
+        const artwork = stageRef.current?.querySelector(".project-detail-screen .project-sleeve-shell");
+        prepareCoverTransition(artwork, selectedId, "library", position.coverOffset);
       }
     }
     setLibraryLayout(layout);
@@ -2005,6 +2030,23 @@ function App() {
     }
     window.scrollTo({ top: scrollTop, behavior: "instant" });
   }, [activeView, libraryLayout]);
+
+  useLayoutEffect(() => {
+    const transition = coverTransitionRef.current;
+    coverTransitionRef.current = null;
+    const stage = stageRef.current;
+    if (!stage || transition?.view !== activeView) return;
+
+    // Grid has already restored its scroll position in the layout effect above.
+    const opening = activeView === "project";
+    if (opening && transition.projectId !== selectedId) return;
+    const cover = opening
+      ? stage.querySelector(".project-detail-screen .project-sleeve-shell")
+      : findLibraryCover(libraryLayout, transition.projectId, transition.offset);
+    const details = opening ? stage.querySelector(".project-main-column") : null;
+    const carousel = !opening && libraryLayout === "carousel" ? stage.querySelector(".library-screen") : null;
+    return animateCover(stage, transition.source, cover, { details, carousel });
+  }, [activeView, libraryLayout, selectedId]);
   const topbarImportProject = libraryShowing ? null : selectedProject;
   const dropProject = libraryShowing && libraryDropTarget
     ? filteredProjects.find((project) => project.id === libraryDropTarget.projectId)
@@ -2292,9 +2334,9 @@ function ProjectCarousel({ projects, selectedId, dropTargetKey, trackMatches, on
     if (!cancelled && Math.abs(x) >= 48) step(x < 0 ? 1 : -1);
   }
 
-  function openCard(project, event) {
+  function openCard(project, offset, event) {
     if (event.detail > 0 && suppressClickRef.current) return;
-    onOpenProject(project.id, trackMatches.get(project.id)?.id ?? "");
+    onOpenProject(project.id, trackMatches.get(project.id)?.id ?? "", null, offset);
   }
 
   return (
@@ -2353,7 +2395,7 @@ function ProjectCarousel({ projects, selectedId, dropTargetKey, trackMatches, on
                       tabIndex={buffered || mirror ? -1 : undefined}
                       disabled={buffered}
                       aria-label={`Open ${project.title} project`}
-                      onClick={(event) => openCard(project, event)}
+                      onClick={(event) => openCard(project, offset, event)}
                     ><span className="sleeve-image-wrap"><img src={project.artwork} alt="" draggable="false" /></span></button>
                     <div className="sleeve-meta">
                       <strong>{project.title}</strong>

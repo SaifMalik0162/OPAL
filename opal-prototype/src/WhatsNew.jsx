@@ -1,5 +1,5 @@
 import React from "react";
-import { ArrowCounterClockwise, ArrowUpRight, Cards, FileAudio, ListBullets, MusicNote } from "@phosphor-icons/react";
+import { ArrowCounterClockwise, ArrowUpRight, ArrowsOutSimple, Cards, FileAudio, ListBullets, MusicNote } from "@phosphor-icons/react";
 import "./whats-new.css";
 
 export const WHATS_NEW_RELEASE = {
@@ -13,6 +13,7 @@ const highlights = [
   { Icon: Cards, tone: "ice", title: "One Library, two layouts", detail: "Switch between Carousel and Grid with the same projects, search, and sort." },
   { Icon: ListBullets, tone: "pearl", title: "Play tracks from a cover", detail: "Flip to Tracks to play, pause, or resume. The current track stays in view as you scroll." },
   { Icon: FileAudio, tone: "gold", title: "Drop audio onto a project", detail: "Drag a bounce onto a cover in Carousel or Grid to import it." },
+  { Icon: ArrowsOutSimple, tone: "mint", title: "Covers glide into projects", detail: "Open a cover in Carousel or Grid. When you go back, it glides into the same spot." },
 ];
 
 function previewTracks(project) {
@@ -51,7 +52,6 @@ export function WhatsNew({ projects, onClose }) {
         <div className="whats-new-art-panel" aria-hidden="true">
           <div className="whats-new-art-heading">
             <span className="whats-new-art-brand"><img src="/opal-mark.png" alt="" />OPAL</span>
-            <div className="whats-new-layout-preview"><span>Carousel</span><span>Grid</span></div>
           </div>
           <div className="whats-new-sleeves">
             {sleeves.map((project, index) => (
