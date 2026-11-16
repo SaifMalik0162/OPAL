@@ -2259,15 +2259,15 @@ function ProjectCarousel({ projects, selectedId, trackMatches, onOpenProject, on
                       <strong>{project.title}</strong>
                       <div className="library-sleeve-detail">
                         <small>{(isSelected && project.tracks[0]?.title) || `${project.count} ${project.count === 1 ? "track" : "tracks"}`}</small>
-                        {isSelected && <button
-                          ref={previewToggleRef}
-                          className="library-sleeve-track-toggle"
-                          type="button"
-                          aria-expanded={previewOpen}
-                          aria-controls="library-track-preview"
-                          onClick={() => setPreviewProjectId(selected.id)}
-                        ><ListBullets size={14} />Tracks</button>}
                       </div>
+                      {isSelected && <button
+                        ref={previewToggleRef}
+                        className="library-sleeve-track-toggle"
+                        type="button"
+                        aria-expanded={previewOpen}
+                        aria-controls="library-track-preview"
+                        onClick={() => setPreviewProjectId(selected.id)}
+                      ><ListBullets size={14} />Tracks</button>}
                     </div>
                   </div>
                   {isSelected && <div className="library-sleeve-face library-sleeve-back" aria-hidden={!flipped} inert={!flipped}>
@@ -2286,17 +2286,15 @@ function ProjectCarousel({ projects, selectedId, trackMatches, onOpenProject, on
                     </div>
                     <div className="sleeve-meta">
                       <strong>{project.title}</strong>
-                      <div className="library-sleeve-detail">
-                        <button
-                          ref={previewCloseRef}
-                          className="library-sleeve-track-toggle"
-                          type="button"
-                          aria-label="Return to cover"
-                          aria-expanded={flipped}
-                          aria-controls="library-track-preview"
-                          onClick={(event) => closePreview(event.detail === 0)}
-                        ><ArrowCounterClockwise size={14} />Cover</button>
-                      </div>
+                      <button
+                        ref={previewCloseRef}
+                        className="library-sleeve-track-toggle"
+                        type="button"
+                        aria-label="Return to cover"
+                        aria-expanded={flipped}
+                        aria-controls="library-track-preview"
+                        onClick={(event) => closePreview(event.detail === 0)}
+                      ><ArrowCounterClockwise size={14} />Cover</button>
                     </div>
                   </div>}
                 </div>
