@@ -17,8 +17,8 @@
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(ellipse at 50% 50%, rgba(14, 22, 44, .42), transparent 75%),
-    rgba(20, 28, 49, .16);
+    radial-gradient(ellipse at 50% 50%, color-mix(in srgb, var(--surface-inset-ink) 42%, transparent), transparent 75%),
+    color-mix(in srgb, var(--surface-inset-ink) 16%, transparent);
   content: "";
 }
 
@@ -31,6 +31,14 @@
   height: 120%;
   object-fit: cover;
   opacity: .64;
+}
+
+[data-appearance-theme]:not([data-appearance-theme="opal"]) .onboarding-ambient {
+  background: var(--background-gradient);
+}
+
+[data-appearance-scheme="light"] .onboarding-ambient-tide {
+  opacity: .16;
 }
 
 @media (prefers-reduced-motion: no-preference) {

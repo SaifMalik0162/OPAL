@@ -39,15 +39,15 @@
 }
 
 .player-controls button:hover, .queue-button:hover, .player-more:hover, .player-action-button:hover {
-  background: rgba(230,238,255,.14);
+  background: color-mix(in srgb, var(--text-overlay-ink) 14%, transparent);
 }
 
 .player-controls .play-button {
   width: 44px;
   height: 44px;
   background: var(--lavender);
-  color: var(--night);
-  box-shadow: 0 8px 19px rgba(5,2,23,.28);
+  color: var(--accent-foreground, var(--night));
+  box-shadow: 0 8px 19px color-mix(in srgb, var(--surface-inset-ink) 28%, transparent);
 }
 
 .player-track {
@@ -56,9 +56,9 @@
   align-items: center;
   gap: 9px;
   padding: 7px 8px;
-  border: 1px solid rgba(230,238,255,.13);
+  border: 1px solid color-mix(in srgb, var(--text-overlay-ink) 13%, transparent);
   border-radius: 15px;
-  background: rgba(14,26,49,.33);
+  background: color-mix(in srgb, var(--surface-inset-ink) 33%, transparent);
 }
 
 .player-track img {
@@ -146,11 +146,11 @@
 }
 
 .queue-button {
-  border: 1px solid rgba(230,238,255,.19);
+  border: 1px solid color-mix(in srgb, var(--text-overlay-ink) 19%, transparent);
 }
 
 .queue-button.is-active {
-  background: rgba(183,200,240,.2);
+  background: color-mix(in srgb, var(--lavender) 20%, transparent);
   color: var(--lavender-bright);
 }
 
@@ -314,10 +314,10 @@
   align-items: center;
   justify-content: space-between;
   padding: 17px 0 12px;
-  border: 1px solid rgba(230,238,255,.2);
+  border: 1px solid color-mix(in srgb, var(--text-overlay-ink) 20%, transparent);
   border-radius: 28px;
   background: rgba(34, 51, 84, .96);
-  box-shadow: 0 18px 38px rgba(5,2,23,.4);
+  box-shadow: 0 18px 38px color-mix(in srgb, var(--surface-inset-ink) 40%, transparent);
 }
 
 .volume-popover input {
@@ -354,7 +354,7 @@
 }
 
 .volume-mute:hover {
-  background: rgba(230, 238, 255, .14);
+  background: color-mix(in srgb, var(--text-overlay-ink) 14%, transparent);
 }
 
 .player-progress input:disabled {
@@ -386,16 +386,16 @@
   height: 14px;
   margin-top: -5px;
   appearance: none;
-  border: 1px solid rgba(230, 238, 255, .45);
+  border: 1px solid color-mix(in srgb, var(--text-overlay-ink) 45%, transparent);
   border-radius: 50%;
   background: var(--opal-accent-bright);
-  box-shadow: 0 4px 12px rgba(5, 2, 23, .3);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--surface-inset-ink) 30%, transparent);
 }
 
 .volume-popover input::-moz-range-track {
   width: 4px;
   border-radius: 99px;
-  background: rgba(230, 238, 255, .18);
+  background: color-mix(in srgb, var(--text-overlay-ink) 18%, transparent);
 }
 
 .volume-popover input::-moz-range-progress {
@@ -407,7 +407,7 @@
 .volume-popover input::-moz-range-thumb {
   width: 14px;
   height: 14px;
-  border: 1px solid rgba(230, 238, 255, .45);
+  border: 1px solid color-mix(in srgb, var(--text-overlay-ink) 45%, transparent);
   border-radius: 50%;
   background: var(--opal-accent-bright);
 }
@@ -436,7 +436,7 @@
   gap: 2px;
   padding: 9px;
   border-radius: 15px;
-  background: rgba(24, 39, 68, .97);
+  background: color-mix(in srgb, var(--surface-inset-ink) 97%, transparent);
   box-shadow: var(--shadow);
 }
 
@@ -466,7 +466,7 @@
 .player-menu button kbd {
   margin-left: auto;
   padding: 2px 5px;
-  border: 1px solid rgba(221, 232, 255, .18);
+  border: 1px solid color-mix(in srgb, var(--text-overlay-ink) 18%, transparent);
   border-radius: 5px;
   color: var(--muted);
   font: inherit;
@@ -475,7 +475,7 @@
 }
 
 .player-menu button:hover, .player-menu button:focus-visible {
-  background: rgba(230, 238, 255, .11);
+  background: color-mix(in srgb, var(--text-overlay-ink) 11%, transparent);
 }
 
 .player-menu button:disabled {
@@ -501,9 +501,9 @@
   min-height: 96px;
   padding: 12px 18px;
   border-radius: 48px;
-  border-color: rgba(221, 232, 255, .24);
-  background: linear-gradient(110deg, rgba(24, 39, 68, .9), rgba(64, 82, 122, .76));
-  box-shadow: 0 26px 64px rgba(5, 2, 23, .46), inset 0 1px 0 rgba(230, 238, 255, .1);
+  border-color: color-mix(in srgb, var(--text-overlay-ink) 24%, transparent);
+  background: linear-gradient(110deg, color-mix(in srgb, var(--surface-inset-ink) 90%, transparent), rgba(64, 82, 122, .76));
+  box-shadow: 0 26px 64px color-mix(in srgb, var(--surface-inset-ink) 46%, transparent), inset 0 1px 0 color-mix(in srgb, var(--text-overlay-ink) 10%, transparent);
 }
 
 .player-controls {
@@ -521,24 +521,24 @@
   height: 50px;
   border-radius: 50%;
   background: linear-gradient(145deg, var(--lavender-bright), var(--lavender));
-  color: var(--night);
-  box-shadow: 0 10px 26px rgba(12, 5, 38, .42);
+  color: var(--accent-foreground, var(--night));
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--surface-inset-ink) 42%, transparent);
 }
 
 .player-controls button:hover {
-  background: rgba(221, 232, 255, .16);
+  background: color-mix(in srgb, var(--text-overlay-ink) 16%, transparent);
 }
 
 .player-controls .play-button:hover {
-  background: linear-gradient(145deg, #f0eaff, var(--lavender-bright));
+  background: linear-gradient(145deg, var(--lavender-bright), var(--lavender));
 }
 
 .player-track {
   min-height: 64px;
   padding: 9px 10px;
   border-radius: 22px;
-  border-color: rgba(221, 232, 255, .17);
-  background: rgba(14, 26, 49, .42);
+  border-color: color-mix(in srgb, var(--text-overlay-ink) 17%, transparent);
+  background: color-mix(in srgb, var(--surface-inset-ink) 42%, transparent);
 }
 
 .player-track img {
@@ -600,7 +600,7 @@
 }
 
 .waveform-layer-muted span {
-  background: linear-gradient(180deg, rgba(230, 238, 255, .5), rgba(169, 148, 205, .27));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--text-overlay-ink) 50%, transparent), color-mix(in srgb, var(--text-overlay-ink) 27%, transparent));
 }
 
 .waveform-layer-active {
@@ -609,7 +609,7 @@
 
 .waveform-layer-active span {
   background: linear-gradient(180deg, var(--lavender-bright) 0%, var(--lavender) 52%, var(--plum-light) 100%);
-  box-shadow: 0 0 7px rgba(183, 200, 240, .22);
+  box-shadow: 0 0 7px color-mix(in srgb, var(--lavender) 22%, transparent);
 }
 
 .waveform-analysis {
@@ -617,10 +617,10 @@
   z-index: 1;
   top: 50%;
   left: 50%;
-  color: rgba(239, 233, 255, .68);
+  color: color-mix(in srgb, var(--text-overlay-ink) 68%, transparent);
   font-size: 9px;
   letter-spacing: .025em;
-  text-shadow: 0 1px 8px rgba(13, 10, 31, .65);
+  text-shadow: 0 1px 8px color-mix(in srgb, var(--surface-inset-ink) 65%, transparent);
   transform: translate(-50%, -50%);
   pointer-events: none;
   white-space: nowrap;
@@ -644,7 +644,7 @@
   width: 3px;
   border-radius: 99px;
   background: linear-gradient(180deg, #f0eaff, var(--lavender), var(--plum-light));
-  box-shadow: 0 0 13px rgba(221, 232, 255, .68);
+  box-shadow: 0 0 13px color-mix(in srgb, var(--text-overlay-ink) 68%, transparent);
   transform: translateX(-50%);
   pointer-events: none;
 }
@@ -677,13 +677,13 @@
 }
 
 .player-action-button.is-active, .queue-button.is-active {
-  background: rgba(183, 200, 240, .19);
-  color: #f0eaff;
-  box-shadow: inset 0 0 0 1px rgba(221, 232, 255, .14);
+  background: color-mix(in srgb, var(--lavender) 19%, transparent);
+  color: var(--ivory);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-overlay-ink) 14%, transparent);
 }
 
 .player-action-button:hover, .queue-button:hover {
-  background: rgba(183, 200, 240, .16);
+  background: color-mix(in srgb, var(--lavender) 16%, transparent);
 }
 
 .volume-control {
@@ -707,9 +707,9 @@
   height: 184px;
   padding: 17px 0 12px;
   border-radius: 36px;
-  border-color: rgba(221, 232, 255, .27);
-  background: rgba(32, 49, 82, .97);
-  box-shadow: 0 22px 46px rgba(5, 2, 23, .5), inset 0 1px 0 rgba(230, 238, 255, .1);
+  border-color: color-mix(in srgb, var(--text-overlay-ink) 27%, transparent);
+  background: var(--glass-strong);
+  box-shadow: 0 22px 46px color-mix(in srgb, var(--surface-inset-ink) 50%, transparent), inset 0 1px 0 color-mix(in srgb, var(--text-overlay-ink) 10%, transparent);
 }
 
 .volume-slider {
@@ -730,14 +730,14 @@
 
 .volume-slider-rail {
   top: 0;
-  background: rgba(230, 238, 255, .13);
-  box-shadow: inset 0 0 0 1px rgba(230, 238, 255, .05);
+  background: color-mix(in srgb, var(--text-overlay-ink) 13%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-overlay-ink) 5%, transparent);
 }
 
 .volume-slider-fill {
   height: var(--volume-level);
   background: linear-gradient(180deg, var(--lavender-bright) 0%, var(--lavender) 52%, var(--plum-light) 100%);
-  box-shadow: 0 0 11px rgba(183, 200, 240, .45);
+  box-shadow: 0 0 11px color-mix(in srgb, var(--lavender) 45%, transparent);
   transition: none;
 }
 
@@ -748,10 +748,10 @@
   bottom: calc(var(--volume-level) - 9px);
   width: 18px;
   height: 18px;
-  border: 1px solid rgba(230, 238, 255, .72);
+  border: 1px solid color-mix(in srgb, var(--text-overlay-ink) 72%, transparent);
   border-radius: 50%;
   background: radial-gradient(circle at 34% 30%, #fff 0 18%, var(--lavender-bright) 20%, var(--lavender) 58%, var(--plum-light) 100%);
-  box-shadow: 0 3px 12px rgba(5, 2, 23, .42), 0 0 12px rgba(221, 232, 255, .28);
+  box-shadow: 0 3px 12px color-mix(in srgb, var(--surface-inset-ink) 42%, transparent), 0 0 12px color-mix(in srgb, var(--text-overlay-ink) 28%, transparent);
   transform: translateX(-50%);
   transition: none;
   pointer-events: none;
@@ -779,13 +779,13 @@
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: rgba(230, 238, 255, .08);
+  background: color-mix(in srgb, var(--text-overlay-ink) 8%, transparent);
   color: var(--ivory);
   cursor: pointer;
 }
 
 .volume-mute:hover {
-  background: rgba(183, 200, 240, .17);
+  background: color-mix(in srgb, var(--lavender) 17%, transparent);
   color: var(--lavender-bright);
 }
 
@@ -885,10 +885,10 @@
   gap: 8px;
   min-height: 96px;
   padding: 10px clamp(10px, 2vw, 23px);
-  border: 1px solid rgba(232, 236, 255, .26);
+  border: 1px solid color-mix(in srgb, var(--text-overlay-ink) 26%, transparent);
   border-radius: 999px;
-  background: linear-gradient(110deg, rgba(105, 130, 179, .40), rgba(178, 191, 228, .28));
-  box-shadow: 0 18px 44px rgba(8, 14, 37, .34), inset 0 1px rgba(247, 249, 255, .16);
+  background: var(--player-surface);
+  box-shadow: 0 18px 44px color-mix(in srgb, var(--surface-inset-ink) 34%, transparent), inset 0 1px color-mix(in srgb, var(--text-overlay-ink) 16%, transparent);
   backdrop-filter: blur(28px) saturate(1.2);
   -webkit-backdrop-filter: blur(28px) saturate(1.2);
 }
@@ -902,19 +902,19 @@
 .player-controls button, .player-action-button, .queue-button {
   width: 36px;
   height: 36px;
-  color: rgba(246, 247, 255, .92);
+  color: color-mix(in srgb, var(--text-overlay-ink) 92%, transparent);
 }
 
 .player-controls .play-button {
   width: 42px;
   height: 42px;
-  color: #fff;
-  background: rgba(239, 241, 255, .19);
-  box-shadow: inset 0 0 0 1px rgba(245, 247, 255, .19);
+  color: var(--ivory);
+  background: color-mix(in srgb, var(--text-overlay-ink) 19%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-overlay-ink) 19%, transparent);
 }
 
 .player-controls .play-button:hover {
-  background: rgba(239, 241, 255, .31);
+  background: color-mix(in srgb, var(--text-overlay-ink) 31%, transparent);
 }
 
 .player-actions {
@@ -931,10 +931,10 @@
   position: relative;
   isolation: isolate;
   min-width: 0;
-  border: 1px solid rgba(226, 232, 255, .16);
+  border: 1px solid color-mix(in srgb, var(--text-overlay-ink) 16%, transparent);
   border-radius: 19px;
-  background: #141e39;
-  box-shadow: inset 0 1px rgba(247, 249, 255, .07);
+  background: var(--surface-deep);
+  box-shadow: inset 0 1px color-mix(in srgb, var(--text-overlay-ink) 7%, transparent);
 }
 
 .player-cover-wash {
@@ -977,8 +977,8 @@
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(180deg, transparent 40%, rgba(12, 19, 38, .28)),
-    linear-gradient(105deg, rgba(12, 19, 38, .68), rgba(12, 19, 38, .53) 65%, rgba(12, 19, 38, .59));
+    linear-gradient(180deg, transparent 40%, color-mix(in srgb, var(--surface-inset-ink) 28%, transparent)),
+    linear-gradient(105deg, color-mix(in srgb, var(--surface-inset-ink) 68%, transparent), color-mix(in srgb, var(--surface-inset-ink) 53%, transparent) 65%, color-mix(in srgb, var(--surface-inset-ink) 59%, transparent));
   content: "";
 }
 
@@ -1022,7 +1022,7 @@
 
 .player-track > img { width: 38px; height: 38px; border-radius: 11px; }
 .player-track strong { font-family: inherit; font-size: 13px; font-weight: 550; }
-.player-track small { margin-top: 2px; font-size: 11px; color: rgba(238, 242, 255, .78); }
+.player-track small { margin-top: 2px; font-size: 11px; color: color-mix(in srgb, var(--text-overlay-ink) 78%, transparent); }
 .player-waveform-action {
   display: grid;
   flex: 0 0 auto;
@@ -1036,11 +1036,11 @@
   color: var(--ivory);
   cursor: pointer;
 }
-.player-waveform-action:hover { background: rgba(245, 247, 255, .14); }
+.player-waveform-action:hover { background: color-mix(in srgb, var(--text-overlay-ink) 14%, transparent); }
 .player-waveform-action[aria-pressed="true"] {
-  background: rgba(198, 216, 255, .19);
-  color: #ecf3ff;
-  box-shadow: inset 0 0 0 1px rgba(208, 224, 255, .25);
+  background: color-mix(in srgb, var(--lavender) 19%, transparent);
+  color: var(--ivory);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-overlay-ink) 25%, transparent);
 }
 
 .player-progress {
@@ -1054,7 +1054,7 @@
 }
 
 .player-time {
-  color: rgba(235, 241, 255, .79);
+  color: color-mix(in srgb, var(--text-overlay-ink) 79%, transparent);
   font-size: 9px;
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -1071,7 +1071,7 @@
   inset: calc(50% - 2px) 0 auto;
   height: 4px;
   border-radius: 99px;
-  background: linear-gradient(to right, #e8edff var(--waveform-progress), rgba(222, 233, 255, .28) var(--waveform-progress));
+  background: linear-gradient(to right, var(--opal-accent-bright) var(--waveform-progress), color-mix(in srgb, var(--text-overlay-ink) 28%, transparent) var(--waveform-progress));
   content: "";
 }
 .player-progress .waveform-layer { gap: 1px; }
@@ -1079,8 +1079,8 @@
 .player-progress .waveform-analysis {
   padding: 2px 5px;
   border-radius: 5px;
-  background: #19243e;
-  color: #e1eaff;
+  background: var(--surface-inset-ink);
+  color: var(--ivory);
 }
 .player-progress .is-waveform .waveform-cursor {
   width: 2px;
@@ -1091,8 +1091,8 @@
   bottom: auto;
   width: 8px;
   height: 8px;
-  background: #f7f9ff;
-  box-shadow: 0 0 9px rgba(229, 238, 255, .55);
+  background: var(--opal-accent-bright);
+  box-shadow: 0 0 9px color-mix(in srgb, var(--text-overlay-ink) 55%, transparent);
   transform: translate(-50%, -50%);
 }
 .opal-app .player-progress .moment-marker {

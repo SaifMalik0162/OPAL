@@ -41,7 +41,7 @@ button {
   align-items: center;
   gap: 2px;
   height: 12px;
-  color: #d9e7ff;
+  color: var(--opal-accent);
 }
 
 .track-playback-indicator i {
@@ -86,7 +86,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   position: fixed;
   z-index: -1;
   inset: 0;
-  background: linear-gradient(120deg, rgba(10, 19, 39, .22), rgba(22, 37, 67, .04) 48%, rgba(26, 31, 58, .18));
+  background: var(--app-overlay, linear-gradient(120deg, color-mix(in srgb, var(--surface-inset-ink) 22%, transparent), color-mix(in srgb, var(--surface-inset-ink) 4%, transparent) 48%, color-mix(in srgb, var(--surface-inset-ink) 18%, transparent)));
   pointer-events: none;
 }
 
@@ -97,9 +97,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   overflow: hidden;
   pointer-events: none;
   opacity: 1;
-  background: radial-gradient(ellipse 58% 72% at 6% 100%, rgba(17, 28, 61, .68), transparent 76%),
-    radial-gradient(ellipse 55% 65% at 94% 4%, rgba(134, 153, 194, .28), transparent 74%),
-    linear-gradient(112deg, #243353 0%, #3b496f 52%, #596687 100%);
+  background: var(--background-gradient);
 }
 
 .ambient-field::before, .ambient-field::after {
@@ -116,7 +114,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   height: 65vh;
   filter: blur(76px);
   opacity: .32;
-  background: radial-gradient(ellipse at center, rgba(182, 197, 231, .3), transparent 70%);
+  background: radial-gradient(ellipse at center, var(--background-glow-top), transparent 70%);
 }
 
 .ambient-field::after {
@@ -126,7 +124,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   height: 75vh;
   filter: blur(86px);
   opacity: .22;
-  background: radial-gradient(ellipse at center, rgba(148, 165, 206, .4), transparent 67%);
+  background: radial-gradient(ellipse at center, var(--background-glow-bottom), transparent 67%);
 }
 
 .glass {
@@ -173,8 +171,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 .topbar-left .search-field {
   width: 168px;
   padding: 8px 11px;
-  border-color: rgba(235, 237, 255, .13);
-  background: rgba(238, 240, 255, .055);
+  border-color: color-mix(in srgb, var(--text-overlay-ink) 13%, transparent);
+  background: color-mix(in srgb, var(--text-overlay-ink) 5.5%, transparent);
 }
 
 .brand-lockup {
@@ -195,18 +193,18 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   height: 27px;
   flex: 0 0 auto;
   object-fit: contain;
-  filter: drop-shadow(0 2px 8px rgba(174, 195, 241, .28));
+  filter: drop-shadow(0 2px 8px color-mix(in srgb, var(--lavender) 28%, transparent));
 }
 
 .brand-name {
   font-family: Georgia,serif;
-  color: rgba(245, 247, 255, .94);
+  color: color-mix(in srgb, var(--text-overlay-ink) 94%, transparent);
   font-size: 16px;
   letter-spacing: .19em;
 }
 
 .brand-version {
-  color: rgba(222,231,252,.5);
+  color: color-mix(in srgb, var(--text-overlay-ink) 50%, transparent);
   font-size: 9px;
   letter-spacing: .12em;
   text-transform: uppercase;
@@ -214,7 +212,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 
 .development-badge {
   flex: 0 0 auto;
-  border: 1px solid rgba(183, 200, 240, .34);
+  border: 1px solid color-mix(in srgb, var(--lavender) 34%, transparent);
   border-radius: 999px;
   padding: 4px 7px;
   color: var(--lavender-bright);
@@ -230,10 +228,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   align-items: center;
   gap: 2px;
   padding: 3px;
-  border: 1px solid rgba(224, 234, 255, .16);
+  border: 1px solid color-mix(in srgb, var(--text-overlay-ink) 16%, transparent);
   border-radius: 19px;
-  background: rgba(20, 32, 59, .2);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05);
+  background: color-mix(in srgb, var(--surface-inset-ink) 20%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-overlay-ink) 5%, transparent);
 }
 
 .top-navigation button {
@@ -241,14 +239,14 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   border: 0;
   border-radius: 15px;
   background: transparent;
-  color: rgba(227, 235, 255, .65);
+  color: color-mix(in srgb, var(--text-overlay-ink) 65%, transparent);
   cursor: pointer;
   font-size: 11px;
   transition: background .18s ease, color .18s ease;
 }
 
 .top-navigation button:hover, .top-navigation button.is-active {
-  background: rgba(230,238,255,.14);
+  background: color-mix(in srgb, var(--text-overlay-ink) 14%, transparent);
   color: var(--ivory);
 }
 
@@ -270,9 +268,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: 1px solid rgba(235, 237, 255, .16);
+  border: 1px solid color-mix(in srgb, var(--text-overlay-ink) 16%, transparent);
   border-radius: 50%;
-  background: rgba(238, 240, 255, .075);
+  background: color-mix(in srgb, var(--text-overlay-ink) 7.5%, transparent);
   color: var(--ivory);
   cursor: pointer;
   font-size: 0;
@@ -280,7 +278,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 }
 
 .topbar-import:hover {
-  background: rgba(222, 232, 255, .18);
+  background: color-mix(in srgb, var(--text-overlay-ink) 18%, transparent);
   transform: translateY(-1px);
 }
 
@@ -316,9 +314,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   gap: 8px;
   width: 190px;
   padding: 9px 12px;
-  border: 1px solid rgba(230,238,255,.18);
+  border: 1px solid color-mix(in srgb, var(--text-overlay-ink) 18%, transparent);
   border-radius: 18px;
-  background: rgba(230, 238, 255, .075);
+  background: color-mix(in srgb, var(--text-overlay-ink) 7.5%, transparent);
   color: var(--muted);
   transition: border-color .18s ease, background .18s ease, box-shadow .18s ease;
 }
@@ -334,19 +332,19 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 }
 
 .search-field:focus-within {
-  border-color: rgba(215, 229, 255, .34);
-  background: rgba(230, 238, 255, .11);
-  box-shadow: 0 0 0 3px rgba(167, 190, 235, .08);
+  border-color: color-mix(in srgb, var(--text-overlay-ink) 34%, transparent);
+  background: color-mix(in srgb, var(--text-overlay-ink) 11%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--lavender) 8%, transparent);
 }
 
 .search-field:focus-within {
-  border-color: rgba(215, 229, 255, .34);
-  background: rgba(230, 238, 255, .11);
-  box-shadow: 0 0 0 3px rgba(167, 190, 235, .08);
+  border-color: color-mix(in srgb, var(--text-overlay-ink) 34%, transparent);
+  background: color-mix(in srgb, var(--text-overlay-ink) 11%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--lavender) 8%, transparent);
 }
 
 .search-field input::placeholder {
-  color: rgba(222,231,252,.52);
+  color: color-mix(in srgb, var(--text-overlay-ink) 52%, transparent);
 }
 
 .clear-search {
@@ -377,7 +375,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   margin-top: 12px;
   padding: 0 0 5px;
   border: 0;
-  border-bottom: 1px solid rgba(230,238,255,.45);
+  border-bottom: 1px solid color-mix(in srgb, var(--text-overlay-ink) 45%, transparent);
   background: transparent;
   color: var(--ivory);
   cursor: pointer;
@@ -416,7 +414,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   align-items: center;
   gap: 7px;
   padding: 10px 14px;
-  border: 1px solid rgba(230,238,255,.22);
+  border: 1px solid color-mix(in srgb, var(--text-overlay-ink) 22%, transparent);
   border-radius: 12px;
   cursor: pointer;
   font-size: 10px;
@@ -428,15 +426,15 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 }
 
 .button-ghost {
-  background: rgba(230,238,255,.08);
+  background: color-mix(in srgb, var(--text-overlay-ink) 8%, transparent);
   color: var(--ivory);
 }
 
 .button-primary {
   border-color: transparent;
   background: var(--lavender);
-  color: var(--night);
-  box-shadow: 0 12px 28px rgba(7,3,28,.28);
+  color: var(--accent-foreground, var(--night));
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--surface-inset-ink) 28%, transparent);
 }
 
 .button-primary:hover {
@@ -537,7 +535,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 .button-danger {
   border-color: rgba(241, 172, 188, .26);
   background: rgba(241, 172, 188, .1);
-  color: #f6c8d3;
+  color: var(--danger-text, #f6c8d3);
 }
 
 .button-danger:hover {
@@ -559,7 +557,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 }
 
 .topbar-import:focus-visible, .profile-button:focus-visible, .carousel-control:focus-visible {
-  outline: 2px solid rgba(248, 248, 255, .92);
+  outline: 2px solid color-mix(in srgb, var(--text-overlay-ink) 92%, transparent);
   outline-offset: 3px;
 }
 
@@ -611,7 +609,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 }
 
 .section-count {
-  color: rgba(222, 231, 252, .76);
+  color: color-mix(in srgb, var(--text-overlay-ink) 76%, transparent);
 }
 
 @media (max-width: 760px) {
@@ -624,25 +622,25 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 }
 
 .button-sequence {
-  border-color: rgba(183, 200, 240, .34);
-  background: rgba(183, 200, 240, .12);
+  border-color: color-mix(in srgb, var(--lavender) 34%, transparent);
+  background: color-mix(in srgb, var(--lavender) 12%, transparent);
   color: var(--lavender-bright);
 }
 
 .button-sequence:hover, .button-sequence:focus-visible {
-  border-color: rgba(221, 232, 255, .58);
-  background: rgba(183, 200, 240, .2);
+  border-color: color-mix(in srgb, var(--text-overlay-ink) 58%, transparent);
+  background: color-mix(in srgb, var(--lavender) 20%, transparent);
 }
 
 .button-capsule {
-  border-color: rgba(183, 200, 240, .4);
-  background: rgba(183, 200, 240, .14);
+  border-color: color-mix(in srgb, var(--lavender) 40%, transparent);
+  background: color-mix(in srgb, var(--lavender) 14%, transparent);
   color: var(--lavender-bright);
 }
 
 .button-capsule:hover, .button-capsule:focus-visible {
-  border-color: rgba(221, 232, 255, .7);
-  background: rgba(183, 200, 240, .24);
+  border-color: color-mix(in srgb, var(--text-overlay-ink) 70%, transparent);
+  background: color-mix(in srgb, var(--lavender) 24%, transparent);
 }
 
 .topbar-sort-control {
@@ -655,9 +653,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 
 .topbar-sort-control select {
   padding: 8px 25px 8px 12px;
-  border: 1px solid rgba(235, 237, 255, .12);
+  border: 1px solid color-mix(in srgb, var(--text-overlay-ink) 12%, transparent);
   border-radius: 17px;
-  background: rgba(238, 240, 255, .06);
+  background: color-mix(in srgb, var(--text-overlay-ink) 6%, transparent);
   font-size: 10px;
 }
 

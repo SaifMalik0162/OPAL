@@ -25,6 +25,7 @@ use tauri::{Emitter, Manager};
 use tauri_plugin_log::RotationStrategy;
 use uuid::Uuid;
 
+mod appearance;
 #[cfg(debug_assertions)]
 mod dev_fixtures;
 #[cfg(debug_assertions)]
@@ -4682,6 +4683,10 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            appearance::import_appearance_background,
+            appearance::resolve_appearance_background,
+            appearance::remove_appearance_background,
+            appearance::reconcile_appearance_backgrounds,
             list_projects,
             create_project,
             update_project,

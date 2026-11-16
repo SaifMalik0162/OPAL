@@ -6,7 +6,7 @@
   pointer-events: none;
   object-fit: cover;
   transform-origin: 0 0;
-  box-shadow: 0 16px 36px rgba(5, 10, 25, .28);
+  box-shadow: 0 16px 36px color-mix(in srgb, var(--surface-inset-ink) 28%, transparent);
 }
 
 .opal-app[data-library-layout="carousel"] .project-cover-transition { z-index: 10; }
@@ -67,7 +67,7 @@
   flex-wrap: wrap;
   gap: 4px 18px;
   margin: 18px 0 14px;
-  border-bottom: 1px solid rgba(227, 237, 255, .16);
+  border-bottom: 1px solid color-mix(in srgb, var(--text-overlay-ink) 16%, transparent);
 }
 
 .project-section-nav button {
@@ -98,7 +98,7 @@
 .project-detail-screen .track-list { gap: 0; margin-top: 9px; }
 
 .project-detail-screen .project-track-group + .project-track-group {
-  border-top: 1px solid rgba(227, 237, 255, .11);
+  border-top: 1px solid color-mix(in srgb, var(--text-overlay-ink) 11%, transparent);
 }
 
 .project-detail-screen .project-main-column .track-row {
@@ -117,19 +117,19 @@
 .project-detail-screen .project-main-column .track-row.is-current,
 .project-detail-screen .project-main-column .track-row.is-search-match {
   transform: none;
-  background: rgba(217, 231, 255, .10);
+  background: color-mix(in srgb, var(--text-overlay-ink) 10%, transparent);
 }
 
 .project-detail-screen .project-main-column .track-row.is-current,
 .project-detail-screen .project-main-column .track-row.is-search-match {
-  border-color: rgba(217, 231, 255, .23);
+  border-color: color-mix(in srgb, var(--text-overlay-ink) 23%, transparent);
 }
 
 .project-detail-screen .track-row { touch-action: pan-y; }
 .project-detail-screen .track-row.is-dragging {
-  border-color: rgba(183, 200, 240, .55);
-  background: rgba(183, 200, 240, .16);
-  box-shadow: 0 8px 22px rgba(8, 16, 34, .2);
+  border-color: color-mix(in srgb, var(--lavender) 55%, transparent);
+  background: color-mix(in srgb, var(--lavender) 16%, transparent);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--surface-inset-ink) 20%, transparent);
   opacity: .92;
 }
 .project-detail-screen .project-track-group { transition: transform .16s ease; }
@@ -199,17 +199,22 @@
   padding: 8px 10px;
   border: 1px solid var(--line);
   border-radius: 9px;
-  background: #293b5c;
+  background: var(--glass-strong);
+  color: var(--ivory);
+}
+
+.project-note-picker select :is(option, optgroup) {
+  background: var(--surface-deep);
   color: var(--ivory);
 }
 
 .project-detail-screen .notes-panel { width: 100%; padding: 18px; }
 .project-detail-screen .notes-panel {
   padding: 22px;
-  border-color: rgba(222, 233, 255, .16);
+  border-color: color-mix(in srgb, var(--text-overlay-ink) 16%, transparent);
   border-radius: 20px;
-  background: linear-gradient(145deg, rgba(203, 218, 247, .105), rgba(25, 39, 70, .32));
-  box-shadow: 0 18px 48px rgba(8, 16, 34, .14), inset 0 1px 0 rgba(255, 255, 255, .055);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--lavender) 10.5%, transparent), color-mix(in srgb, var(--surface-inset-ink) 32%, transparent));
+  box-shadow: 0 18px 48px color-mix(in srgb, var(--surface-inset-ink) 14%, transparent), inset 0 1px 0 color-mix(in srgb, var(--text-overlay-ink) 5.5%, transparent);
 }
 
 .project-detail-screen .notes-heading {
@@ -229,18 +234,18 @@
   align-items: center;
   min-height: 21px;
   padding: 3px 8px;
-  border: 1px solid rgba(224, 234, 255, .1);
+  border: 1px solid color-mix(in srgb, var(--text-overlay-ink) 10%, transparent);
   border-radius: 999px;
-  background: rgba(16, 29, 53, .28);
+  background: color-mix(in srgb, var(--surface-inset-ink) 28%, transparent);
   font-size: 10px;
   letter-spacing: .02em;
 }
 
 .project-detail-screen .notes-state {
   padding: 5px 8px;
-  border: 1px solid rgba(224, 234, 255, .1);
+  border: 1px solid color-mix(in srgb, var(--text-overlay-ink) 10%, transparent);
   border-radius: 999px;
-  background: rgba(16, 29, 53, .24);
+  background: color-mix(in srgb, var(--surface-inset-ink) 24%, transparent);
   font-size: 9px;
 }
 
@@ -249,9 +254,9 @@
   max-height: 360px;
   margin-top: 0;
   padding: 16px 17px;
-  border: 1px solid rgba(224, 234, 255, .12);
+  border: 1px solid color-mix(in srgb, var(--text-overlay-ink) 12%, transparent);
   border-radius: 14px;
-  background: rgba(11, 24, 47, .2);
+  background: color-mix(in srgb, var(--surface-inset-ink) 20%, transparent);
   color: var(--ivory);
   font-size: 15px;
   line-height: 1.7;
@@ -259,14 +264,14 @@
 }
 
 .project-detail-screen .notes-preview-input::placeholder {
-  color: rgba(220, 230, 250, .46);
+  color: color-mix(in srgb, var(--text-overlay-ink) 46%, transparent);
   font-family: Georgia, serif;
   font-style: italic;
 }
 
 .project-detail-screen .notes-preview-input:focus {
-  border-color: rgba(183, 200, 240, .38);
-  background: rgba(11, 24, 47, .3);
+  border-color: color-mix(in srgb, var(--lavender) 38%, transparent);
+  background: color-mix(in srgb, var(--surface-inset-ink) 30%, transparent);
 }
 
 @media (max-width: 760px) {
@@ -356,7 +361,7 @@
   gap: 12px;
   margin-top: 8px;
   padding: 11px 2px;
-  border-bottom: 1px solid rgba(224, 234, 255, .13);
+  border-bottom: 1px solid color-mix(in srgb, var(--text-overlay-ink) 13%, transparent);
 }
 
 .track-active-version > div { display: grid; gap: 4px; min-width: 0; }

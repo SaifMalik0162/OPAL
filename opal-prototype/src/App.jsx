@@ -11,6 +11,10 @@ import { OnboardingAmbient } from "./OnboardingAmbient.jsx";
 import { WhatsNew, WHATS_NEW_RELEASE } from "./WhatsNew.jsx";
 import { UpdateDialog } from "./UpdateDialog.jsx";
 import { CarouselTrackPreview } from "./CarouselTrackPreview.jsx";
+import { AppearanceDialog } from "./appearance/AppearanceDialog.jsx";
+import { applyAppearanceToDocument } from "./appearance/themes.js";
+import { DEFAULT_APPEARANCE, writeAppearancePreference } from "./appearance/preferences.js";
+import { waitForImage } from "./appearance/image.js";
 import { animateCover, measureCover } from "./cover-transition.js";
 import { TrackPlaybackIndicator } from "./TrackPlaybackIndicator.jsx";
 import { isCurrentPlaybackRequest, previousQueueIndex, repeatQueueIndex, shuffleQueue } from "./playback-queue.js";
@@ -257,7 +261,7 @@ function playbackTracks(project, preferredTrackId = "") {
   return tracks;
 }
 
-function App() {
+function App({ initialAppearance = DEFAULT_APPEARANCE, canReconcileAppearanceAssets = true }) {
   const savedPlayback = useMemo(readPlaybackSnapshot, []);
   useEffect(() => {
     const platform = navigator.platform || navigator.userAgent;
@@ -314,6 +318,14 @@ function App() {
   const [shuffleEnabled, setShuffleEnabled] = useState(false);
   const [repeatMode, setRepeatMode] = useState("off");
   const [profileOpen, setProfileOpen] = useState(false);
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const [appearance, setAppearance] = useState(initialAppearance);
+  const [appearancePreview, setAppearancePreview] = useState(null);
+  const [appearanceAssetUrl, setAppearanceAssetUrl] = useState(null);
+  const [appearanceAssetLoading, setAppearanceAssetLoading] = useState(Boolean(initialAppearance.custom?.assetId));
+  const [appearanceAssetMissing, setAppearanceAssetMissing] = useState(false);
+  const [appearanceAssetsReady, setAppearanceAssetsReady] = useState(!isTauri() || !canReconcileAppearanceAssets);
+  const appearanceMaintenanceRef = useRef(false);
   const [storageInfo, setStorageInfo] = useState(null);
   const [storageError, setStorageError] = useState("");
   const [updateOpen, setUpdateOpen] = useState(false);
@@ -371,6 +383,59 @@ function App() {
   const capsulePasswordRef = useRef("");
 
   if (!noteStoreRef.current) noteStoreRef.current = createNoteStore(window.localStorage);
+
+  useEffect(() => {
+    if (!isTauri() || !canReconcileAppearanceAssets || appearanceMaintenanceRef.current) return;
+    appearanceMaintenanceRef.current = true;
+    const protectedAssetIds = initialAppearance.custom?.assetId ? [initialAppearance.custom.assetId] : [];
+    void invoke("reconcileAppearanceBackgrounds", { protectedAssetIds })
+      .catch((reconcileError) => {
+        console.warn("OPAL could not clean unused appearance images", reconcileError);
+      })
+      .finally(() => setAppearanceAssetsReady(true));
+  }, [canReconcileAppearanceAssets, initialAppearance]);
+
+  useEffect(() => {
+    const assetId = appearance.custom?.assetId;
+    if (!isTauri() || !assetId) {
+      setAppearanceAssetUrl(null);
+      setAppearanceAssetLoading(false);
+      setAppearanceAssetMissing(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setAppearanceAssetLoading(true);
+    setAppearanceAssetMissing(false);
+    void invoke("resolveAppearanceBackground", { assetId })
+      .then(async (path) => {
+        if (!path) throw new Error("Saved background image is unavailable.");
+        const url = convertFileSrc(path);
+        await waitForImage(url);
+        if (!cancelled) setAppearanceAssetUrl(url);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAppearanceAssetUrl(null);
+          setAppearanceAssetMissing(true);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setAppearanceAssetLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [appearance.custom?.assetId]);
+
+  const visibleAppearance = appearancePreview?.appearance ?? appearance;
+  const visibleBackgroundUrl = appearancePreview?.backgroundUrl ??
+    (visibleAppearance.custom?.assetId === appearance.custom?.assetId ? appearanceAssetUrl : null);
+
+  useLayoutEffect(() => {
+    applyAppearanceToDocument(visibleAppearance, {
+      backgroundUrl: visibleBackgroundUrl,
+      allowIncomplete: visibleAppearance.themeId === "custom" && appearanceAssetLoading,
+    });
+  }, [visibleAppearance, visibleBackgroundUrl, appearanceAssetLoading]);
 
   useEffect(() => {
     if (!isTauri() || import.meta.env.DEV || import.meta.env.VITE_OPAL_DEVELOPMENT === "1") return;
@@ -1749,6 +1814,35 @@ function App() {
     if (shouldOpen) void refreshStorageInfo();
   }
 
+  function openAppearance() {
+    setProfileOpen(false);
+    setAppearancePreview(null);
+    setAppearanceOpen(true);
+  }
+
+  function closeAppearance() {
+    setAppearancePreview(null);
+    setAppearanceOpen(false);
+  }
+
+  async function applyAppearanceDraft(nextAppearance, backgroundUrl) {
+    const result = writeAppearancePreference(nextAppearance);
+    if (!result.ok) return { ok: false, error: "OPAL could not save this appearance. Check browser storage and try again." };
+
+    const previousAssetId = appearance.custom?.assetId;
+    const savedAppearance = result.appearance;
+    setAppearance(savedAppearance);
+    setAppearanceAssetUrl(backgroundUrl);
+    setAppearanceAssetLoading(false);
+    setAppearanceAssetMissing(Boolean(savedAppearance.custom?.assetId && !backgroundUrl && appearanceAssetMissing));
+    if (previousAssetId && previousAssetId !== savedAppearance.custom?.assetId && isTauri()) {
+      void invoke("removeAppearanceBackground", { assetId: previousAssetId }).catch((cleanupError) => {
+        console.warn("OPAL could not remove an unused appearance image", cleanupError);
+      });
+    }
+    return { ok: true, appearance: savedAppearance };
+  }
+
   async function checkForUpdates() {
     if (!isTauri() || import.meta.env.DEV || import.meta.env.VITE_OPAL_DEVELOPMENT === "1") {
       setUpdateError("Updates are available in the installed OPAL alpha builds.");
@@ -2052,8 +2146,10 @@ function App() {
     ? filteredProjects.find((project) => project.id === libraryDropTarget.projectId)
     : null;
 
-  return <div className="opal-app" data-view={activeView} data-library-layout={libraryShowing ? libraryLayout : undefined}>
-    <div className="ambient-field" aria-hidden="true" />
+  return <div className={`opal-app${visibleAppearance.themeId === "custom" && visibleBackgroundUrl ? " has-custom-background" : ""}`} data-view={activeView} data-library-layout={libraryShowing ? libraryLayout : undefined}>
+    <div className={`ambient-field${visibleAppearance.themeId === "custom" && visibleBackgroundUrl ? " has-custom-image" : ""}`} aria-hidden="true">
+      {visibleAppearance.themeId === "custom" && visibleBackgroundUrl && <img className="appearance-background-image" src={visibleBackgroundUrl} alt="" />}
+    </div>
     <header className="topbar" data-tauri-drag-region="deep" onMouseDown={handleWindowMouseDown}>
       <div className="topbar-left"><button className="brand-lockup" type="button" onClick={() => returnToLibrary()} aria-label="Open OPAL library"><img className="brand-mark" src="/opal-mark.png" alt="" /><span className="brand-name">OPAL</span></button>{(import.meta.env.DEV || import.meta.env.VITE_OPAL_DEVELOPMENT === "1") && <span className="development-badge">Development</span>}<label className="search-field"><MagnifyingGlass size={14} weight="regular" /><input ref={searchInputRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search" />{query && <button type="button" className="clear-search" onClick={() => setQuery("")} aria-label="Clear search"><X size={13} /></button>}</label></div>
       <div className="top-navigation" role="group" aria-label="Library layout">
@@ -2070,11 +2166,23 @@ function App() {
           onClick={() => importActive ? setImportOpen(true) : (topbarImportProject ? pickAudioFiles(topbarImportProject.id) : setCreateOpen(true))}
         ><Plus size={14} />{importActive ? "Importing…" : topbarImportProject ? "Import audio" : "New project"}</button>
         <button type="button" className="profile-button" onClick={openProfile} aria-label="Open OPAL settings" aria-expanded={profileOpen} title="Settings"><GearSix size={17} aria-hidden="true" /></button>
-        {profileOpen && <ProfilePopover nativeAvailable={isTauri()} storageInfo={storageInfo} storageError={storageError} importProgress={importProgress} updateStatus={updateStatus} updateAvailable={Boolean(availableUpdate)} onCheckUpdates={checkForUpdates} onOpenUpdates={openUpdates} onPreviewUpdateBanner={IS_DEVELOPMENT_BUILD ? () => {
+        {profileOpen && <ProfilePopover nativeAvailable={isTauri()} storageInfo={storageInfo} storageError={storageError} importProgress={importProgress} updateStatus={updateStatus} updateAvailable={Boolean(availableUpdate)} onCheckUpdates={checkForUpdates} onOpenUpdates={openUpdates} onAppearance={openAppearance} onPreviewUpdateBanner={IS_DEVELOPMENT_BUILD ? () => {
         setProfileOpen(false);
         setUpdateBannerPreview((current) => current + 1);
       } : undefined} onPreviewWhatsNew={IS_DEVELOPMENT_BUILD ? previewWhatsNew : undefined} onRevealFolder={revealStorageFolder} onExportBackup={exportLibraryBackup} onRestoreBackup={restoreLibraryBackup} onRetryStorage={refreshStorageInfo} onDiagnostics={openDiagnostics} onReplayWelcome={() => { setProfileOpen(false); setWelcomeOpen(true); }} onClose={() => setProfileOpen(false)} />}</div>
     </header>
+    {appearanceOpen && <AppearanceDialog
+      appliedAppearance={appearance}
+      backgroundUrl={appearanceAssetUrl}
+      assetMissing={appearanceAssetMissing}
+      nativeAvailable={isTauri()}
+      assetStorageReady={appearanceAssetsReady}
+      onPreview={(previewAppearance, previewUrl) => {
+        setAppearancePreview({ appearance: previewAppearance, backgroundUrl: previewUrl ?? null });
+      }}
+      onApply={applyAppearanceDraft}
+      onClose={closeAppearance}
+    />}
     {error && <div className="error-banner" role="alert"><span>{error}</span><button type="button" onClick={() => setError("")} aria-label="Dismiss message"><X size={14} /></button></div>}
     {notice && <div className="notice-banner" role="status"><span>{notice}</span><button type="button" onClick={() => setNotice("")} aria-label="Dismiss message"><X size={14} /></button></div>}
     {!updateOpen && (availableUpdate || showUpdateBannerPreview) && (
@@ -3344,7 +3452,7 @@ function DialogFrame({ titleId, onClose, children, className = "", backdrop, dis
   );
 }
 
-function ProfilePopover({ nativeAvailable, storageInfo, storageError, importProgress, updateStatus, updateAvailable, onCheckUpdates, onOpenUpdates, onPreviewUpdateBanner, onPreviewWhatsNew, onRevealFolder, onExportBackup, onRestoreBackup, onRetryStorage, onDiagnostics, onReplayWelcome, onClose }) {
+function ProfilePopover({ nativeAvailable, storageInfo, storageError, importProgress, updateStatus, updateAvailable, onCheckUpdates, onOpenUpdates, onAppearance, onPreviewUpdateBanner, onPreviewWhatsNew, onRevealFolder, onExportBackup, onRestoreBackup, onRetryStorage, onDiagnostics, onReplayWelcome, onClose }) {
   const popoverRef = useRef(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -3382,7 +3490,46 @@ function ProfilePopover({ nativeAvailable, storageInfo, storageError, importProg
     };
   }, []);
   const nativeHint = "Available in the native OPAL app.";
-  return <div ref={popoverRef} className="profile-popover glass" data-popover role="dialog" aria-label="Settings"><div className="profile-heading"><h2>Settings</h2><button type="button" className="popover-close" onClick={onClose} aria-label="Close settings"><X size={15} /></button></div><div className="storage-card"><div className="storage-card-heading"><Database size={16} /><span>Library storage</span><strong>{storageInfo ? formatBytes(storageInfo.totalBytes) : "—"}</strong></div>{storageError ? <div className="popover-error" role="alert"><span>Couldn’t load storage details.</span><button type="button" onClick={onRetryStorage}>Retry</button></div> : <><p>{storageInfo ? `${storageInfo.projectCount} projects · ${storageInfo.trackCount} tracks` : nativeAvailable ? "Loading storage details…" : "Storage details unavailable in preview."}</p>{storageInfo?.folderPath && <code>{storageInfo.folderPath}</code>}</>}</div><div className="popover-actions"><button type="button" className="settings-update-action" onClick={updateAvailable ? onOpenUpdates : onCheckUpdates} disabled={!nativeAvailable || updateStatus === "checking"}><CloudCheck size={15} />{updateStatus === "checking" ? "Checking for updates…" : updateAvailable ? "Update available" : "Check for updates"}</button>{onPreviewWhatsNew && <button type="button" onClick={onPreviewWhatsNew}><Sparkle size={15} />Preview {WHATS_NEW_RELEASE.label} card</button>}{onPreviewUpdateBanner && <button type="button" onClick={onPreviewUpdateBanner}><CloudCheck size={15} />Preview update banner</button>}<button type="button" onClick={onRevealFolder} disabled={!nativeAvailable} title={nativeAvailable ? "Reveal the OPAL library folder" : nativeHint}><FolderOpen size={15} />Reveal library folder</button><button type="button" onClick={onExportBackup} disabled={!nativeAvailable} title={nativeAvailable ? "Export a complete OPAL backup" : nativeHint}><Export size={15} />Export library backup</button><button type="button" onClick={onRestoreBackup} disabled={!nativeAvailable} title={nativeAvailable ? "Restore an OPAL backup" : nativeHint}><ArrowSquareOut size={15} />Restore backup</button><button type="button" onClick={onReplayWelcome}><Play size={15} />Replay welcome</button></div>{importProgress?.status === "processing" && <div className="profile-import-status"><CircleNotch size={14} className="spin" />Importing {importProgress.current ?? 0}/{importProgress.total ?? 0}</div>}<div className="popover-footer"><span>{APP_VERSION}</span><button type="button" onClick={onDiagnostics} disabled={!nativeAvailable} title={nativeAvailable ? "Open diagnostics" : nativeHint}><Info size={14} />Diagnostics</button></div></div>;
+  return (
+    <div ref={popoverRef} className="profile-popover glass" data-popover role="dialog" aria-label="Settings">
+      <div className="profile-heading">
+        <h2>Settings</h2>
+        <button type="button" className="popover-close" onClick={onClose} aria-label="Close settings"><X size={15} /></button>
+      </div>
+      <div className="popover-actions">
+        <button type="button" className="settings-appearance-action" onClick={onAppearance}>
+          <ImageSquare size={15} />Appearance<span>Theme and background</span>
+        </button>
+      </div>
+      <div className="storage-card">
+        <div className="storage-card-heading"><Database size={16} /><span>Library storage</span><strong>{storageInfo ? formatBytes(storageInfo.totalBytes) : "—"}</strong></div>
+        {storageError ? (
+          <div className="popover-error" role="alert"><span>Couldn’t load storage details.</span><button type="button" onClick={onRetryStorage}>Retry</button></div>
+        ) : (
+          <>
+            <p>{storageInfo ? `${storageInfo.projectCount} projects · ${storageInfo.trackCount} tracks` : nativeAvailable ? "Loading storage details…" : "Storage details unavailable in preview."}</p>
+            {storageInfo?.folderPath && <code>{storageInfo.folderPath}</code>}
+          </>
+        )}
+      </div>
+      <div className="popover-actions">
+        <button type="button" className="settings-update-action" onClick={updateAvailable ? onOpenUpdates : onCheckUpdates} disabled={!nativeAvailable || updateStatus === "checking"}>
+          <CloudCheck size={15} />{updateStatus === "checking" ? "Checking for updates…" : updateAvailable ? "Update available" : "Check for updates"}
+        </button>
+        {onPreviewWhatsNew && <button type="button" onClick={onPreviewWhatsNew}><Sparkle size={15} />Preview {WHATS_NEW_RELEASE.label} card</button>}
+        {onPreviewUpdateBanner && <button type="button" onClick={onPreviewUpdateBanner}><CloudCheck size={15} />Preview update banner</button>}
+        <button type="button" onClick={onRevealFolder} disabled={!nativeAvailable} title={nativeAvailable ? "Reveal the OPAL library folder" : nativeHint}><FolderOpen size={15} />Reveal library folder</button>
+        <button type="button" onClick={onExportBackup} disabled={!nativeAvailable} title={nativeAvailable ? "Export a complete OPAL backup" : nativeHint}><Export size={15} />Export library backup</button>
+        <button type="button" onClick={onRestoreBackup} disabled={!nativeAvailable} title={nativeAvailable ? "Restore a complete OPAL backup" : nativeHint}><ArrowSquareOut size={15} />Restore backup</button>
+        <button type="button" onClick={onReplayWelcome}><Play size={15} />Replay welcome</button>
+      </div>
+      {importProgress?.status === "processing" && <div className="profile-import-status"><CircleNotch size={14} className="spin" />Importing {importProgress.current ?? 0}/{importProgress.total ?? 0}</div>}
+      <div className="popover-footer">
+        <span>{APP_VERSION}</span>
+        <button type="button" onClick={onDiagnostics} disabled={!nativeAvailable} title={nativeAvailable ? "Open diagnostics" : nativeHint}><Info size={14} />Diagnostics</button>
+      </div>
+    </div>
+  );
 }
 
 function RecoveryView({ onRevealFolder, onRestore, onRetry }) {
