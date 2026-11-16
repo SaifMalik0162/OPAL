@@ -1156,6 +1156,7 @@
   --yaw: 0deg;
   --scale: 1;
   --depth: 6;
+  /* Give the incoming cover its final depth before it starts moving. */
   z-index: var(--depth);
   top: 50%;
   left: 50%;
@@ -1164,6 +1165,7 @@
   border: 0;
   background: none;
   box-shadow: none;
+  filter: none;
   overflow: visible;
   cursor: default;
   border-radius: clamp(17px, 3.5cqw, 34px);
@@ -1174,8 +1176,7 @@
     perspective(90cqw) rotateY(var(--yaw)) scale(var(--scale));
   transition:
     transform .56s cubic-bezier(.22, .79, .22, 1),
-    z-index .56s cubic-bezier(.22, .79, .22, 1),
-    opacity .32s ease, filter .32s ease;
+    opacity .32s ease;
 }
 
 .opal-app[data-view="library"] .sleeve-orbit.is-dragging .sleeve {
@@ -1185,31 +1186,60 @@
 .opal-app[data-view="library"] .library-sleeve-turn {
   position: relative;
   border-radius: inherit;
-}
-
-.opal-app[data-view="library"] .sleeve[data-flipped="true"] .library-sleeve-turn {
-  transform: perspective(900px) rotateY(180deg);
+  transform-style: preserve-3d;
 }
 
 .opal-app[data-view="library"] .library-sleeve-face {
+  --rim-light: .48;
   position: relative;
   display: block;
   width: 100%;
   padding: clamp(5px, .9cqw, 9px) clamp(5px, .9cqw, 9px) 0;
-  border: 1px solid #a0a9c1;
+  border: 1px solid rgba(205, 216, 239, .38);
   border-radius: inherit;
-  background: linear-gradient(145deg, #78829c, #555f7b);
-  box-shadow: 0 24px 56px rgba(10, 16, 39, .27), inset 0 1px rgba(255, 255, 255, .24);
+  background: linear-gradient(168deg, #777f96, #606880 70%, #5b637d);
+  box-shadow: 0 24px 56px rgba(10, 16, 39, .27), inset 0 -1px rgba(11, 19, 42, .24);
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
   text-align: center;
-  transition: border-color .32s ease, box-shadow .32s ease;
+  /* Rotate each face so its backdrop can sample the carousel outside the card. */
+  transform: perspective(900px) rotateY(0deg);
+  transition: transform 540ms cubic-bezier(.32, .75, .24, 1), border-color .32s ease, box-shadow .32s ease;
+}
+
+/* Keep the bevel highlight within the outer edge of the glass. */
+.opal-app[data-view="library"] .library-sleeve-face::after {
+  position: absolute;
+  inset: -1px;
+  padding: 1px;
+  border-radius: inherit;
+  background: linear-gradient(152deg,
+    rgba(251, 248, 255, .9),
+    rgba(238, 241, 255, .42) 24%,
+    transparent 54%,
+    rgba(226, 234, 255, .18) 77%,
+    rgba(232, 233, 255, .64));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  opacity: var(--rim-light);
+  pointer-events: none;
+  content: "";
 }
 
 .opal-app[data-view="library"] .library-sleeve-face.library-sleeve-back {
   position: absolute;
   inset: 0;
-  transform: rotateY(180deg);
+  transform: perspective(900px) rotateY(-180deg);
+}
+
+.opal-app[data-view="library"] .sleeve[data-flipped="true"] .library-sleeve-front {
+  transform: perspective(900px) rotateY(180deg);
+}
+
+.opal-app[data-view="library"] .sleeve[data-flipped="true"] .library-sleeve-back {
+  transform: perspective(900px) rotateY(0deg);
 }
 
 .library-sleeve-open {
@@ -1247,12 +1277,8 @@
 }
 
 .opal-app[data-view="library"] .library-sleeve-front:hover {
-  border-color: #b9c2d8;
-  box-shadow: 0 30px 64px rgba(10, 16, 39, .38), inset 0 1px 0 rgba(255, 255, 255, .3);
-}
-
-.opal-app[data-view="library"] .sleeve:focus-within {
-  z-index: 8;
+  border-color: #abb4ca;
+  box-shadow: 0 30px 64px rgba(10, 16, 39, .38), inset 0 1px rgba(255, 255, 255, .3);
 }
 
 .library-sleeve-open:focus-visible { outline: none; }
@@ -1263,8 +1289,33 @@
 }
 
 .opal-app[data-view="library"] .sleeve.is-selected .library-sleeve-face {
-  border-color: #c4cbe0;
-  box-shadow: 0 30px 72px rgba(10, 16, 39, .42), 0 0 0 1px rgba(235, 237, 255, .15), inset 0 1px 0 rgba(255, 255, 255, .34);
+  --rim-light: .87;
+  border-color: rgba(219, 227, 247, .62);
+  background:
+    radial-gradient(ellipse 12% 52% at 0% 39%, rgba(246, 240, 245, .43), transparent 100%),
+    radial-gradient(ellipse 12% 46% at 100% 42%, rgba(232, 243, 245, .2), transparent 100%),
+    radial-gradient(ellipse 42% 19% at 3% 78%, rgba(244, 242, 249, .33), transparent 100%),
+    radial-gradient(ellipse 42% 20% at 99% 81%, rgba(238, 241, 248, .24), transparent 100%),
+    linear-gradient(180deg, #7983a2, #657092 78%, #626c8e);
+  box-shadow: 0 30px 72px rgba(10, 16, 39, .42), 0 0 0 1px rgba(235, 237, 255, .15), inset 0 1px rgba(255, 255, 255, .34);
+}
+
+.opal-app[data-view="library"] .sleeve.is-selected .library-sleeve-front:hover {
+  --rim-light: 1;
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .opal-app[data-view="library"] .sleeve .library-sleeve-face {
+    background: linear-gradient(145deg, rgba(194, 199, 220, .36), rgba(156, 166, 195, .24));
+    -webkit-backdrop-filter: blur(24px) saturate(1.12);
+    backdrop-filter: blur(24px) saturate(1.12);
+  }
+
+  .opal-app[data-view="library"] .sleeve.is-selected .library-sleeve-face {
+    background:
+      radial-gradient(ellipse at 12% 0%, rgba(247, 241, 255, .12), transparent 58%),
+      linear-gradient(145deg, rgba(225, 229, 250, .37), rgba(191, 199, 227, .25));
+  }
 }
 
 .opal-app[data-view="library"] .sleeve-image-wrap {
@@ -1433,14 +1484,19 @@
 .opal-app[data-view="library"] .sleeve[data-offset="1"] {
   --scale: .875;
   --depth: 4;
-  filter: brightness(.91) saturate(.82);
+  --sleeve-content-filter: brightness(.91) saturate(.82);
 }
 
 .opal-app[data-view="library"] .sleeve[data-offset="-2"],
 .opal-app[data-view="library"] .sleeve[data-offset="2"] {
   --scale: .76;
   --depth: 2;
-  filter: brightness(.83) saturate(.75);
+  --sleeve-content-filter: brightness(.83) saturate(.75);
+}
+
+/* Filtering the whole side card would stop its glass from sampling its neighbors. */
+.opal-app[data-view="library"] .sleeve :is(.sleeve-image-wrap, .sleeve-meta) {
+  filter: var(--sleeve-content-filter, none);
 }
 
 .opal-app[data-view="library"] .sleeve[data-offset="-1"] {

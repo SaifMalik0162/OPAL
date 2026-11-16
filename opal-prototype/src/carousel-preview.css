@@ -134,7 +134,7 @@
 .projects-preview-track-copy small { font-size: 10px; color: rgba(238, 244, 255, .74); }
 
 @media (prefers-reduced-motion: reduce) {
-  .library-sleeve-turn { transition: none !important; }
+  .library-sleeve-face { transition: none !important; }
 }
 
-.opal-reduced-motion .library-sleeve-turn { transition: none !important; }
+.opal-reduced-motion .library-sleeve-face { transition: none !important; }
