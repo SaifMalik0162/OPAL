@@ -265,6 +265,8 @@ function App() {
   }, []);
   const [activeView, setActiveView] = useState("library");
   const [libraryLayout, setLibraryLayout] = useState("carousel");
+  const libraryPositionRef = useRef(null);
+  const stageRef = useRef(null);
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -573,10 +575,6 @@ function App() {
   }, [sortMode]);
 
   useEffect(() => {
-    window.scrollTo(0, 0);
-  }, [activeView]);
-
-  useEffect(() => {
     if (!selectedProject) {
       noteTextRef.current = "";
       setNoteText("");
@@ -778,7 +776,15 @@ function App() {
 
   async function openProject(projectId = selectedId, trackId = "", noteTrackId = null) {
     if (!projectId || !projects.some((project) => project.id === projectId)) return;
+    const libraryPosition = activeView === "library" ? {
+      layout: libraryLayout,
+      projectId: libraryLayout === "grid" ? projectId : visibleSelection,
+      scrollTop: window.scrollY,
+    } : null;
     if (!(await flushNoteSave())) return;
+    if (libraryPosition) {
+      libraryPositionRef.current = libraryPosition;
+    }
     setSelectedId(projectId);
     setFocusedTrackId(trackId);
     setNoteTargetId(noteTrackId);
@@ -789,7 +795,12 @@ function App() {
   async function returnToLibrary(layout = libraryLayout) {
     if (!(await flushNoteSave())) return;
     if (activeView !== "library" || layout !== libraryLayout) {
-      window.scrollTo({ top: 0, behavior: "instant" });
+      const position = libraryPositionRef.current;
+      if (position?.layout !== layout) {
+        libraryPositionRef.current = null;
+      } else if (layout === "carousel" && projects.some((project) => project.id === position.projectId)) {
+        setSelectedId(position.projectId);
+      }
     }
     setLibraryLayout(layout);
     setActiveView("library");
@@ -1980,6 +1991,20 @@ function App() {
   const libraryShowing = activeView === "library";
   const gridShowing = libraryShowing && libraryLayout === "grid";
   const carouselShowing = libraryShowing && libraryLayout === "carousel";
+
+  useLayoutEffect(() => {
+    const position = libraryPositionRef.current;
+    let scrollTop = 0;
+    if (activeView === "library") {
+      libraryPositionRef.current = null;
+      if (libraryLayout === "grid" && position?.layout === "grid") {
+        const card = stageRef.current?.querySelector(`[data-grid-project="${CSS.escape(position.projectId)}"]`);
+        card?.focus({ preventScroll: true });
+        scrollTop = position.scrollTop;
+      }
+    }
+    window.scrollTo({ top: scrollTop, behavior: "instant" });
+  }, [activeView, libraryLayout]);
   const topbarImportProject = libraryShowing ? null : selectedProject;
   const dropProject = libraryShowing && libraryDropTarget
     ? filteredProjects.find((project) => project.id === libraryDropTarget.projectId)
@@ -2023,7 +2048,7 @@ function App() {
         <ArrowUpRight size={14} />
       </button>
     )}
-    <main className="stage">
+    <main ref={stageRef} className="stage">
       <div className="library-drop-status" role="status">
         {dropProject && <span><Plus size={14} aria-hidden="true" />Add to {dropProject.title}</span>}
       </div>
@@ -2085,7 +2110,7 @@ function LibraryGrid({ projects, selectedId, dropTargetKey, query, trackMatches,
             data-audio-drop-key={`grid:${project.id}`}
             data-drop-active={dropTargetKey === `grid:${project.id}` || undefined}
           >
-            <button className="project-card-open" type="button" onClick={openProject} aria-label={`Open ${project.title}`} aria-current={project.id === selectedId || undefined}>
+            <button className="project-card-open" type="button" onClick={openProject} data-grid-project={project.id} aria-label={`Open ${project.title}`} aria-current={project.id === selectedId || undefined}>
               <img src={project.artwork} alt="" />
             </button>
           </div>
