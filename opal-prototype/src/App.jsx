@@ -2106,6 +2106,11 @@ function App({ initialAppearance = DEFAULT_APPEARANCE, canReconcileAppearanceAss
     setWhatsNewOpen(true);
   }
 
+  function tryThemeFromWhatsNew() {
+    dismissWhatsNew();
+    openAppearance();
+  }
+
   const visibleSelection = filteredProjects.find((project) => project.id === selectedId)?.id ?? filteredProjects[0]?.id ?? "";
   const libraryShowing = activeView === "library";
   const gridShowing = libraryShowing && libraryLayout === "grid";
@@ -2169,7 +2174,7 @@ function App({ initialAppearance = DEFAULT_APPEARANCE, canReconcileAppearanceAss
         {profileOpen && <ProfilePopover nativeAvailable={isTauri()} storageInfo={storageInfo} storageError={storageError} importProgress={importProgress} updateStatus={updateStatus} updateAvailable={Boolean(availableUpdate)} onCheckUpdates={checkForUpdates} onOpenUpdates={openUpdates} onAppearance={openAppearance} onPreviewUpdateBanner={IS_DEVELOPMENT_BUILD ? () => {
         setProfileOpen(false);
         setUpdateBannerPreview((current) => current + 1);
-      } : undefined} onPreviewWhatsNew={IS_DEVELOPMENT_BUILD ? previewWhatsNew : undefined} onRevealFolder={revealStorageFolder} onExportBackup={exportLibraryBackup} onRestoreBackup={restoreLibraryBackup} onRetryStorage={refreshStorageInfo} onDiagnostics={openDiagnostics} onReplayWelcome={() => { setProfileOpen(false); setWelcomeOpen(true); }} onClose={() => setProfileOpen(false)} />}</div>
+      } : undefined} onPreviewWhatsNew={IS_DEVELOPMENT_BUILD || APP_VERSION === WHATS_NEW_RELEASE.version ? previewWhatsNew : undefined} onRevealFolder={revealStorageFolder} onExportBackup={exportLibraryBackup} onRestoreBackup={restoreLibraryBackup} onRetryStorage={refreshStorageInfo} onDiagnostics={openDiagnostics} onReplayWelcome={() => { setProfileOpen(false); setWelcomeOpen(true); }} onClose={() => setProfileOpen(false)} />}</div>
     </header>
     {appearanceOpen && <AppearanceDialog
       appliedAppearance={appearance}
@@ -2218,7 +2223,7 @@ function App({ initialAppearance = DEFAULT_APPEARANCE, canReconcileAppearanceAss
     )}
     {showWhatsNew && (
       <DialogFrame titleId="whats-new-title" onClose={dismissWhatsNew} className="whats-new-dialog" backdrop={<OnboardingAmbient />}>
-        <WhatsNew projects={projects} onClose={dismissWhatsNew} />
+        <WhatsNew appearance={appearance} backgroundUrl={appearanceAssetUrl} onClose={dismissWhatsNew} onTryTheme={tryThemeFromWhatsNew} />
       </DialogFrame>
     )}
     {updateOpen && <UpdateDialog update={availableUpdate} appVersion={APP_VERSION} status={updateStatus} progress={updateProgress} error={updateError} busy={Boolean(importActive || libraryOperation)} onCheck={checkForUpdates} onInstall={installAvailableUpdate} onClose={() => setUpdateOpen(false)} />}
@@ -3516,7 +3521,7 @@ function ProfilePopover({ nativeAvailable, storageInfo, storageError, importProg
         <button type="button" className="settings-update-action" onClick={updateAvailable ? onOpenUpdates : onCheckUpdates} disabled={!nativeAvailable || updateStatus === "checking"}>
           <CloudCheck size={15} />{updateStatus === "checking" ? "Checking for updates…" : updateAvailable ? "Update available" : "Check for updates"}
         </button>
-        {onPreviewWhatsNew && <button type="button" onClick={onPreviewWhatsNew}><Sparkle size={15} />Preview {WHATS_NEW_RELEASE.label} card</button>}
+        {onPreviewWhatsNew && <button type="button" onClick={onPreviewWhatsNew}><Sparkle size={15} />{IS_DEVELOPMENT_BUILD ? `Preview ${WHATS_NEW_RELEASE.label} card` : `What’s new in ${WHATS_NEW_RELEASE.label}`}</button>}
         {onPreviewUpdateBanner && <button type="button" onClick={onPreviewUpdateBanner}><CloudCheck size={15} />Preview update banner</button>}
         <button type="button" onClick={onRevealFolder} disabled={!nativeAvailable} title={nativeAvailable ? "Reveal the OPAL library folder" : nativeHint}><FolderOpen size={15} />Reveal library folder</button>
         <button type="button" onClick={onExportBackup} disabled={!nativeAvailable} title={nativeAvailable ? "Export a complete OPAL backup" : nativeHint}><Export size={15} />Export library backup</button>

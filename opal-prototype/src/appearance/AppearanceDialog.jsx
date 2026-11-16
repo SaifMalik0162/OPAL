@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { convertFileSrc, invoke, isTauri } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { Check, CircleNotch, ImageSquare, Play, SlidersHorizontal, Trash, X } from "@phosphor-icons/react";
+import { Check, CircleNotch, ImageSquare, SlidersHorizontal, Trash, X } from "@phosphor-icons/react";
 import { DialogFrame } from "../DialogFrame.jsx";
 import { appearanceHasChanges, DEFAULT_APPEARANCE } from "./preferences.js";
 import { waitForImage } from "./image.js";
-import { customPlayerPalette, THEMES } from "./themes.js";
+import { ThemeSwatch, themeSwatchStyle } from "./ThemeSwatch.jsx";
+import { THEMES } from "./themes.js";
 
 const DEFAULT_CUSTOM = Object.freeze({
   assetId: null,
@@ -29,31 +30,15 @@ function customSettings(value) {
 }
 
 function ThemeTile({ label, colors, customAccent, imageUrl, selected, onSelect }) {
-  const customPalette = colors ? null : customPlayerPalette(customAccent);
-  const previewStyle = {
-    "--swatch-background": colors?.background ?? customPalette["--custom-player-solid"],
-    "--swatch-player": colors?.glassStrong ?? customPalette["--custom-player-glass"],
-    "--swatch-player-tint": colors?.canvas ?? customPalette["--custom-player-center"],
-    "--swatch-accent": colors?.accent ?? customPalette["--custom-player-highlight"],
-    "--swatch-control-ink": colors?.accentForeground ?? customPalette["--custom-player-ink"],
-  };
-
   return (
     <button
       type="button"
       className={`appearance-theme-tile${selected ? " is-selected" : ""}`}
-      style={previewStyle}
+      style={themeSwatchStyle(colors, customAccent)}
       aria-pressed={selected}
       onClick={onSelect}
     >
-      <span className="appearance-theme-swatch" aria-hidden="true">
-        {imageUrl && <img src={imageUrl} alt="" />}
-        <span className="appearance-theme-mini-library"><i /><i /><i /></span>
-        <span className="appearance-theme-mini-player">
-          <span className="appearance-theme-mini-play"><Play size={6} weight="fill" /></span>
-          <span className="appearance-theme-mini-progress" />
-        </span>
-      </span>
+      <ThemeSwatch imageUrl={imageUrl} />
       <span className="appearance-theme-tile-footer">
         <span className="appearance-theme-label">{label}</span>
         {selected && <span className="appearance-theme-check" aria-hidden="true"><Check size={8} weight="bold" /></span>}
