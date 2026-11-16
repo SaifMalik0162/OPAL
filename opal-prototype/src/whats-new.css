@@ -43,9 +43,32 @@
   gap: 9px;
 }
 
-.whats-new-art-heading { justify-content: flex-start; color: #d9e4fc; font-size: 9px; font-weight: 650; letter-spacing: .15em; }
-.whats-new-art-heading img { width: 18px; height: 18px; object-fit: contain; opacity: .9; }
-.whats-new-art-heading i { margin: 0 3px; color: #8799ba; font-style: normal; }
+.whats-new-art-brand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #d9e4fc;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: .15em;
+}
+
+.whats-new-art-brand img { width: 18px; height: 18px; object-fit: contain; opacity: .9; }
+
+.whats-new-layout-preview {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid rgba(218, 232, 255, .2);
+  border-radius: 999px;
+  background: rgba(15, 25, 48, .28);
+  color: #b6c4df;
+  font-size: 9px;
+}
+
+.whats-new-layout-preview span { padding: 4px 8px; border-radius: inherit; }
+
+.whats-new-layout-preview span:first-child { background: rgba(224, 233, 255, .16); color: #f2f5ff; }
 
 .whats-new-sleeves {
   position: relative;
@@ -59,26 +82,74 @@
 .whats-new-sleeve {
   position: absolute;
   width: min(62%, 220px);
-  aspect-ratio: 1;
+  aspect-ratio: 1 / 1.2;
 }
 
 .whats-new-sleeve-0 { z-index: 1; transform: translateX(-69%) rotateY(38deg) scale(.84); opacity: .78; }
 .whats-new-sleeve-1 { z-index: 2; }
 .whats-new-sleeve-2 { z-index: 1; transform: translateX(69%) rotateY(-38deg) scale(.84); opacity: .78; }
 
-.whats-new-sleeve .projects-cover-front,
-.whats-new-sleeve .projects-track-preview {
-  border-width: 1px;
+.whats-new-cover-face {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) 40px;
+  padding: 5px 5px 0;
+  border: 1px solid #a0a9c1;
   border-radius: clamp(11px, 1.4vw, 15px);
-  pointer-events: none;
+  background: linear-gradient(145deg, #78829c, #555f7b);
+  box-shadow: 0 16px 25px rgba(6, 12, 31, .4), inset 0 1px rgba(252, 253, 255, .25);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.whats-new-cover-back { transform: rotateY(180deg); }
+
+.whats-new-cover-art { position: relative; overflow: hidden; border-radius: 9px; }
+
+.whats-new-cover-art > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.whats-new-cover-footer {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 2px;
+  min-width: 0;
+  color: #f5f7ff;
+  text-align: center;
+}
+
+.whats-new-cover-footer strong {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.whats-new-cover-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border: 1px solid rgba(224, 232, 253, .55);
+  border-radius: 999px;
+  background: linear-gradient(#53607d, #313d5b);
+  font-size: 8px;
 }
 
 .whats-new-preview-turn { animation: whats-new-card-flip 8s linear infinite; }
+.whats-new-cover-art .whats-new-preview-back { padding: 10px; border: 0; border-radius: inherit; box-shadow: none; transform: none; }
 .whats-new-preview-back .projects-preview-header { padding-bottom: 8px; }
 .whats-new-preview-back .projects-preview-header strong { font-size: 20px; }
 .whats-new-preview-back .projects-preview-list { overflow: hidden; }
 .whats-new-preview-back .projects-preview-list button:disabled { opacity: 1; }
-.whats-new-preview-return { display: grid; width: 27px; height: 27px; flex: 0 0 auto; place-items: center; border: 1px solid rgba(232, 240, 255, .18); border-radius: 50%; color: inherit; background: rgba(232, 240, 255, .08); }
 .whats-new-preview-back .projects-preview-empty { min-height: 0; }
 
 .whats-new-art-footer { align-items: flex-end; padding: 0 8px; }
@@ -107,7 +178,6 @@
 .whats-new-icon { display: grid; width: 36px; height: 36px; place-items: center; border: 1px solid rgba(198, 215, 250, .18); border-radius: 11px; background: rgba(177, 198, 239, .07); transition: transform .22s ease, box-shadow .22s ease; }
 .whats-new-icon[data-tone="ice"] { border-color: rgba(166, 211, 255, .32); color: #bfe1ff; background: linear-gradient(145deg, rgba(111, 178, 237, .23), rgba(89, 129, 198, .1)); box-shadow: inset 0 1px rgba(220, 239, 255, .1), 0 0 16px rgba(92, 166, 237, .08); }
 .whats-new-icon[data-tone="pearl"] { border-color: rgba(221, 231, 255, .27); color: #e0e9ff; background: linear-gradient(145deg, rgba(187, 207, 246, .17), rgba(115, 143, 192, .08)); box-shadow: inset 0 1px rgba(242, 247, 255, .1), 0 0 16px rgba(176, 201, 248, .06); }
-.whats-new-icon[data-tone="gold"] { border-color: rgba(246, 214, 151, .3); color: #f2d69c; background: linear-gradient(145deg, rgba(221, 175, 101, .2), rgba(171, 136, 91, .08)); box-shadow: inset 0 1px rgba(255, 241, 209, .1), 0 0 16px rgba(224, 175, 97, .07); }
 .whats-new-icon[data-tone="mint"] { border-color: rgba(157, 220, 208, .3); color: #a8e4d5; background: linear-gradient(145deg, rgba(103, 194, 173, .19), rgba(81, 145, 150, .08)); box-shadow: inset 0 1px rgba(219, 255, 243, .1), 0 0 16px rgba(103, 194, 173, .07); }
 .whats-new-highlights li:hover .whats-new-icon { transform: translateY(-1px) scale(1.04); }
 .whats-new-highlights li > span:last-child { display: grid; gap: 4px; }
@@ -142,9 +212,9 @@
   .import-prompt.whats-new-dialog { width: min(100%, 480px); max-height: calc(100dvh - 40px); border-radius: 22px; }
   .whats-new-layout { grid-template-columns: 1fr; }
   .whats-new-art-panel { min-height: 250px; padding: 17px 19px 14px; border-right: 0; border-bottom: 1px solid rgba(221, 233, 255, .13); }
-  .whats-new-sleeves { min-height: 177px; }
+  .whats-new-sleeves { min-height: 196px; }
   .whats-new-sleeve { width: min(46%, 155px); }
-  .whats-new-sleeve .projects-track-preview { padding: 8px; }
+  .whats-new-cover-art .whats-new-preview-back { padding: 8px; }
   .whats-new-preview-back .projects-preview-header strong { font-size: 16px; }
   .whats-new-preview-back .projects-preview-list button { min-height: 27px; padding-block: 2px; grid-template-columns: 14px minmax(0, 1fr) auto; }
   .whats-new-preview-back .projects-preview-track-copy strong { font-size: 10px; }

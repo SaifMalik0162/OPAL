@@ -8,7 +8,7 @@ import { exit, relaunch } from "@tauri-apps/plugin-process";
 import packageMetadata from "../package.json";
 import { Onboarding } from "./Onboarding.jsx";
 import { OnboardingAmbient } from "./OnboardingAmbient.jsx";
-import { WhatsNew } from "./WhatsNew.jsx";
+import { WhatsNew, WHATS_NEW_RELEASE } from "./WhatsNew.jsx";
 import { UpdateDialog } from "./UpdateDialog.jsx";
 import { CarouselTrackPreview } from "./CarouselTrackPreview.jsx";
 import { TrackPlaybackIndicator } from "./TrackPlaybackIndicator.jsx";
@@ -77,8 +77,7 @@ const PLAYBACK_STORAGE_KEY = "opal-playback-v1";
 const SORT_STORAGE_KEY = "opal-sort-v1";
 const WELCOME_STORAGE_KEY = "opal-welcome-v1";
 const APP_VERSION = packageMetadata.version;
-const WHATS_NEW_VERSION = "0.1.0-alpha.5";
-const WHATS_NEW_STORAGE_KEY = `opal-whats-new:${WHATS_NEW_VERSION}`;
+const WHATS_NEW_STORAGE_KEY = `opal-whats-new:${WHATS_NEW_RELEASE.version}`;
 const IS_DEVELOPMENT_BUILD = import.meta.env.DEV || import.meta.env.VITE_OPAL_DEVELOPMENT === "1";
 const CAPSULES_ENABLED = false;
 const SEQUENCE_ROOM_ENABLED = false;
@@ -270,7 +269,7 @@ function App() {
   const showWhatsNew = whatsNewOpen && !loading && !recoveryMode && !compatibilityMode;
 
   useEffect(() => {
-    if (IS_DEVELOPMENT_BUILD || !isTauri() || APP_VERSION !== WHATS_NEW_VERSION || loading || recoveryMode || compatibilityMode || showWelcome) return;
+    if (IS_DEVELOPMENT_BUILD || !isTauri() || APP_VERSION !== WHATS_NEW_RELEASE.version || loading || recoveryMode || compatibilityMode || showWelcome) return;
     try {
       if (localStorage.getItem(WHATS_NEW_STORAGE_KEY) === "seen") return;
     } catch {
@@ -3244,7 +3243,7 @@ function ProfilePopover({ nativeAvailable, storageInfo, storageError, importProg
     };
   }, []);
   const nativeHint = "Available in the native OPAL app.";
-  return <div ref={popoverRef} className="profile-popover glass" data-popover role="dialog" aria-label="Settings"><div className="profile-heading"><h2>Settings</h2><button type="button" className="popover-close" onClick={onClose} aria-label="Close settings"><X size={15} /></button></div><div className="storage-card"><div className="storage-card-heading"><Database size={16} /><span>Library storage</span><strong>{storageInfo ? formatBytes(storageInfo.totalBytes) : "—"}</strong></div>{storageError ? <div className="popover-error" role="alert"><span>Couldn’t load storage details.</span><button type="button" onClick={onRetryStorage}>Retry</button></div> : <><p>{storageInfo ? `${storageInfo.projectCount} projects · ${storageInfo.trackCount} tracks` : nativeAvailable ? "Loading storage details…" : "Storage details unavailable in preview."}</p>{storageInfo?.folderPath && <code>{storageInfo.folderPath}</code>}</>}</div><div className="popover-actions"><button type="button" className="settings-update-action" onClick={updateAvailable ? onOpenUpdates : onCheckUpdates} disabled={!nativeAvailable || updateStatus === "checking"}><CloudCheck size={15} />{updateStatus === "checking" ? "Checking for updates…" : updateAvailable ? "Update available" : "Check for updates"}</button>{onPreviewWhatsNew && <button type="button" onClick={onPreviewWhatsNew}><Sparkle size={15} />Preview Alpha 5 card</button>}{onPreviewUpdateBanner && <button type="button" onClick={onPreviewUpdateBanner}><CloudCheck size={15} />Preview update banner</button>}<button type="button" onClick={onRevealFolder} disabled={!nativeAvailable} title={nativeAvailable ? "Reveal the OPAL library folder" : nativeHint}><FolderOpen size={15} />Reveal library folder</button><button type="button" onClick={onExportBackup} disabled={!nativeAvailable} title={nativeAvailable ? "Export a complete OPAL backup" : nativeHint}><Export size={15} />Export library backup</button><button type="button" onClick={onRestoreBackup} disabled={!nativeAvailable} title={nativeAvailable ? "Restore an OPAL backup" : nativeHint}><ArrowSquareOut size={15} />Restore backup</button><button type="button" onClick={onReplayWelcome}><Play size={15} />Replay welcome</button></div>{importProgress?.status === "processing" && <div className="profile-import-status"><CircleNotch size={14} className="spin" />Importing {importProgress.current ?? 0}/{importProgress.total ?? 0}</div>}<div className="popover-footer"><span>{APP_VERSION}</span><button type="button" onClick={onDiagnostics} disabled={!nativeAvailable} title={nativeAvailable ? "Open diagnostics" : nativeHint}><Info size={14} />Diagnostics</button></div></div>;
+  return <div ref={popoverRef} className="profile-popover glass" data-popover role="dialog" aria-label="Settings"><div className="profile-heading"><h2>Settings</h2><button type="button" className="popover-close" onClick={onClose} aria-label="Close settings"><X size={15} /></button></div><div className="storage-card"><div className="storage-card-heading"><Database size={16} /><span>Library storage</span><strong>{storageInfo ? formatBytes(storageInfo.totalBytes) : "—"}</strong></div>{storageError ? <div className="popover-error" role="alert"><span>Couldn’t load storage details.</span><button type="button" onClick={onRetryStorage}>Retry</button></div> : <><p>{storageInfo ? `${storageInfo.projectCount} projects · ${storageInfo.trackCount} tracks` : nativeAvailable ? "Loading storage details…" : "Storage details unavailable in preview."}</p>{storageInfo?.folderPath && <code>{storageInfo.folderPath}</code>}</>}</div><div className="popover-actions"><button type="button" className="settings-update-action" onClick={updateAvailable ? onOpenUpdates : onCheckUpdates} disabled={!nativeAvailable || updateStatus === "checking"}><CloudCheck size={15} />{updateStatus === "checking" ? "Checking for updates…" : updateAvailable ? "Update available" : "Check for updates"}</button>{onPreviewWhatsNew && <button type="button" onClick={onPreviewWhatsNew}><Sparkle size={15} />Preview {WHATS_NEW_RELEASE.label} card</button>}{onPreviewUpdateBanner && <button type="button" onClick={onPreviewUpdateBanner}><CloudCheck size={15} />Preview update banner</button>}<button type="button" onClick={onRevealFolder} disabled={!nativeAvailable} title={nativeAvailable ? "Reveal the OPAL library folder" : nativeHint}><FolderOpen size={15} />Reveal library folder</button><button type="button" onClick={onExportBackup} disabled={!nativeAvailable} title={nativeAvailable ? "Export a complete OPAL backup" : nativeHint}><Export size={15} />Export library backup</button><button type="button" onClick={onRestoreBackup} disabled={!nativeAvailable} title={nativeAvailable ? "Restore an OPAL backup" : nativeHint}><ArrowSquareOut size={15} />Restore backup</button><button type="button" onClick={onReplayWelcome}><Play size={15} />Replay welcome</button></div>{importProgress?.status === "processing" && <div className="profile-import-status"><CircleNotch size={14} className="spin" />Importing {importProgress.current ?? 0}/{importProgress.total ?? 0}</div>}<div className="popover-footer"><span>{APP_VERSION}</span><button type="button" onClick={onDiagnostics} disabled={!nativeAvailable} title={nativeAvailable ? "Open diagnostics" : nativeHint}><Info size={14} />Diagnostics</button></div></div>;
 }
 
 function RecoveryView({ onRevealFolder, onRestore, onRetry }) {

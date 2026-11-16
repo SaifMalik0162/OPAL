@@ -6,7 +6,6 @@
   transform: perspective(900px) translate3d(0, 0, 0) scale(1) rotateY(0deg);
   transition: transform 540ms cubic-bezier(.32, .75, .24, 1);
 }
-.projects-cover-front,
 .projects-track-preview {
   position: absolute;
   inset: 0;
@@ -17,22 +16,6 @@
   -webkit-backface-visibility: hidden;
   box-shadow: 0 22px 31px rgba(4, 2, 14, .52), inset 0 1px rgba(255, 255, 255, .7), inset 0 0 0 1px rgba(235, 242, 255, .18);
 }
-.projects-cover-front {
-  width: 100%;
-  height: 100%;
-  padding: 0;
-  background: var(--night, #17122f);
-}
-.projects-cover-front::after {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  box-shadow: inset 0 1px 1px rgba(255, 246, 232, .3), inset 0 -10px 25px rgba(10, 5, 19, .13);
-  pointer-events: none;
-  content: "";
-}
-.projects-cover-front img { display: block; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
-
 .projects-track-preview {
   display: flex;
   flex-direction: column;
