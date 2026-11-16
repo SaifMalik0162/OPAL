@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { convertFileSrc, invoke, isTauri } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { Check, CircleNotch, ImageSquare, SlidersHorizontal, Trash, X } from "@phosphor-icons/react";
+import { Check, CircleNotch, ImageSquare, Play, SlidersHorizontal, Trash, X } from "@phosphor-icons/react";
 import { DialogFrame } from "../DialogFrame.jsx";
 import { appearanceHasChanges, DEFAULT_APPEARANCE } from "./preferences.js";
 import { waitForImage } from "./image.js";
@@ -28,22 +28,36 @@ function customSettings(value) {
   return { ...DEFAULT_CUSTOM, ...(value ?? {}) };
 }
 
-function ThemeTile({ theme, selected, onSelect }) {
+function ThemeTile({ label, colors, customAccent, imageUrl, selected, onSelect }) {
+  const customPalette = colors ? null : customPlayerPalette(customAccent);
+  const previewStyle = {
+    "--swatch-background": colors?.background ?? customPalette["--custom-player-solid"],
+    "--swatch-player": colors?.glassStrong ?? customPalette["--custom-player-glass"],
+    "--swatch-player-tint": colors?.canvas ?? customPalette["--custom-player-center"],
+    "--swatch-accent": colors?.accent ?? customPalette["--custom-player-highlight"],
+    "--swatch-control-ink": colors?.accentForeground ?? customPalette["--custom-player-ink"],
+  };
+
   return (
     <button
       type="button"
       className={`appearance-theme-tile${selected ? " is-selected" : ""}`}
+      style={previewStyle}
       aria-pressed={selected}
       onClick={onSelect}
     >
-      <span className="appearance-theme-swatch" style={{ background: theme.colors.background }} aria-hidden="true">
-        <span className="appearance-theme-mini-player" style={{ background: theme.colors.glassStrong, borderColor: theme.colors.line }}>
-          <span className="appearance-theme-mini-play" style={{ background: theme.colors.accent, color: theme.colors.accentForeground }}>▶</span>
-          <span className="appearance-theme-mini-progress" style={{ background: theme.colors.accent }} />
+      <span className="appearance-theme-swatch" aria-hidden="true">
+        {imageUrl && <img src={imageUrl} alt="" />}
+        <span className="appearance-theme-mini-library"><i /><i /><i /></span>
+        <span className="appearance-theme-mini-player">
+          <span className="appearance-theme-mini-play"><Play size={6} weight="fill" /></span>
+          <span className="appearance-theme-mini-progress" />
         </span>
       </span>
-      <span className="appearance-theme-label">{theme.label}</span>
-      {selected && <Check className="appearance-theme-check" size={15} weight="bold" aria-hidden="true" />}
+      <span className="appearance-theme-tile-footer">
+        <span className="appearance-theme-label">{label}</span>
+        {selected && <span className="appearance-theme-check" aria-hidden="true"><Check size={8} weight="bold" /></span>}
+      </span>
     </button>
   );
 }
@@ -279,21 +293,9 @@ export function AppearanceDialog({
           <legend>Theme</legend>
           <div className="appearance-theme-grid">
             {THEMES.map((theme) => (
-              <ThemeTile key={theme.id} theme={theme} selected={draft.themeId === theme.id} onSelect={() => selectTheme(theme.id)} />
+              <ThemeTile key={theme.id} label={theme.label} colors={theme.colors} selected={draft.themeId === theme.id} onSelect={() => selectTheme(theme.id)} />
             ))}
-            <button
-              type="button"
-              className={`appearance-theme-tile${draft.themeId === "custom" ? " is-selected" : ""}`}
-              aria-pressed={draft.themeId === "custom"}
-              onClick={() => selectTheme("custom")}
-            >
-              <span className="appearance-theme-swatch appearance-custom-swatch" style={customPlayerPalette(accent)} aria-hidden="true">
-                {draftBackgroundUrl && <img src={draftBackgroundUrl} alt="" />}
-                <span className="appearance-theme-mini-player"><span className="appearance-theme-mini-play">▶</span><span className="appearance-theme-mini-progress" /></span>
-              </span>
-              <span className="appearance-theme-label">Custom</span>
-              {draft.themeId === "custom" && <Check className="appearance-theme-check" size={15} weight="bold" aria-hidden="true" />}
-            </button>
+            <ThemeTile label="Custom" imageUrl={draftBackgroundUrl} customAccent={accent} selected={draft.themeId === "custom"} onSelect={() => selectTheme("custom")} />
           </div>
         </fieldset>
 
