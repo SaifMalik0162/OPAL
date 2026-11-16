@@ -1,9 +1,9 @@
 import React from "react";
-import { MusicNote, Play, Plus } from "@phosphor-icons/react";
+import { MusicNote, Pause, Play, Plus } from "@phosphor-icons/react";
 
 import { TrackPlaybackIndicator } from "./TrackPlaybackIndicator.jsx";
 
-export function CarouselTrackPreview({ id, project, tracks, flipped, onPlayTrack, onAddTracks, playingTrackId, isPlaying, progress }) {
+export function CarouselTrackPreview({ id, project, tracks, flipped, onPlayTrack, onAddTracks, playingTrackId, playbackState, progress }) {
   return <section
     id={id}
     className="projects-track-preview"
@@ -18,18 +18,24 @@ export function CarouselTrackPreview({ id, project, tracks, flipped, onPlayTrack
     {tracks.length ? <ol className="projects-preview-list">
       {tracks.map((track, trackIndex) => {
         const current = track.id === playingTrackId;
-        return <li key={track.id}>
+        const canPause = current && (playbackState === "playing" || playbackState === "transition");
+        const canResume = current && (playbackState === "paused" || playbackState === "transition-paused");
+        const loading = current && playbackState === "loading";
+        const action = canPause ? "Pause" : canResume ? "Resume" : loading ? "Loading" : "Play";
+        const Cue = canPause ? Pause : Play;
+        return <li key={track.groupId ?? track.id} className={current ? "projects-preview-current" : undefined}>
           <button
             type="button"
             onClick={() => onPlayTrack(project, track)}
-            aria-label={`Play ${track.title}${track.versionName ? `, ${track.versionName}` : ""}`}
+            aria-label={`${action} ${track.title}${track.versionName ? `, ${track.versionName}` : ""}`}
+            aria-disabled={loading || undefined}
             aria-current={current ? "true" : undefined}
             style={current ? { "--track-progress": `${progress}%` } : undefined}
           >
             <span className="projects-preview-cue" aria-hidden="true">
-              {current && isPlaying
-                ? <TrackPlaybackIndicator />
-                : <><span className="projects-preview-index">{String(trackIndex + 1).padStart(2, "0")}</span><Play className="projects-preview-cue-play" size={11} weight="fill" /></>}
+              {canPause ? <span className="projects-preview-index"><TrackPlaybackIndicator /></span>
+                : !current && <span className="projects-preview-index">{String(trackIndex + 1).padStart(2, "0")}</span>}
+              <Cue className="projects-preview-cue-play" size={11} weight="fill" />
             </span>
             <span className="projects-preview-track-copy">
               <strong title={track.title}>{track.title}</strong>

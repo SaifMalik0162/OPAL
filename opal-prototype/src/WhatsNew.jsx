@@ -11,7 +11,7 @@ const waveform = [18, 31, 22, 43, 28, 60, 35, 74, 46, 82, 54, 67, 34, 72, 47, 91
 
 const highlights = [
   { Icon: Cards, tone: "ice", title: "One Library, two layouts", detail: "Switch between Carousel and Grid with the same projects, search, and sort." },
-  { Icon: ListBullets, tone: "pearl", title: "Play tracks from a cover", detail: "Flip to Tracks to see version names and play audio. Flip back with Cover." },
+  { Icon: ListBullets, tone: "pearl", title: "Play tracks from a cover", detail: "Flip to Tracks to play, pause, or resume. The current track stays in view as you scroll." },
   { Icon: FileAudio, tone: "gold", title: "Drop audio onto a project", detail: "Drag a bounce onto a cover in Carousel or Grid to import it." },
 ];
 

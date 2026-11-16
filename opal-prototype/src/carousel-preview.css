@@ -66,6 +66,13 @@
   padding: 0;
 }
 .projects-preview-list li { border-top: 1px solid rgba(232, 240, 255, .14); }
+.projects-preview-list .projects-preview-current {
+  position: sticky;
+  inset-block: 0;
+  z-index: 1;
+  border-radius: 6px;
+  background: #1d2b46;
+}
 .projects-preview-list button {
   position: relative;
   display: grid;
@@ -105,6 +112,7 @@
 .projects-preview-cue > * { grid-area: 1 / 1; }
 .projects-preview-index { font-size: 10px; font-variant-numeric: tabular-nums; }
 .projects-preview-cue-play { opacity: 0; }
+.projects-preview-current .projects-preview-cue-play:only-child,
 .projects-preview-list button:hover .projects-preview-cue-play,
 .projects-preview-list button:focus-visible .projects-preview-cue-play { opacity: 1; }
 .projects-preview-list button:hover .projects-preview-index,
