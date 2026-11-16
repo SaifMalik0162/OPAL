@@ -672,29 +672,18 @@
   }
 }
 
-.projects-screen {
+.library-grid-view {
   max-width: 1120px;
-  padding-top: 4.2vh;
+  padding-top: clamp(24px, 5vh, 48px);
 }
 
-.projects-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px 12px;
-  padding: 0 4px;
-}
-
-.projects-new-button {
-  white-space: nowrap;
-}
+.library-grid-view > .empty-library { margin: 0 auto; }
 
 .projects-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 32px 24px;
-  padding: 34px 4px 64px;
+  padding: 0 4px 24px;
 }
 
 .project-card {
@@ -823,38 +812,6 @@
   color: rgba(222,231,252,.46);
 }
 
-.projects-empty {
-  display: flex;
-  min-height: 340px;
-  margin: 34px 4px 64px;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 36px;
-  border-radius: 23px;
-  text-align: center;
-}
-
-.projects-empty > svg {
-  margin-bottom: 15px;
-  color: var(--lavender);
-}
-
-.projects-empty h2 {
-  margin: 0 0 9px;
-  font-family: Georgia, serif;
-  font-size: 30px;
-  font-weight: 400;
-  letter-spacing: -.06em;
-}
-
-.projects-empty p {
-  max-width: 300px;
-  margin: 0 0 20px;
-  color: var(--muted);
-  font-size: 10px;
-}
-
 @media (max-width: 980px) {
   .projects-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -862,14 +819,9 @@
 }
 
 @media (max-width: 760px) {
-  .projects-screen {
-    padding-top: 3.3vh;
-  }
-  .projects-toolbar { justify-content: space-between; }
   .projects-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 27px 16px;
-    padding-top: 27px;
   }
   .project-card-play {
     right: 8px;

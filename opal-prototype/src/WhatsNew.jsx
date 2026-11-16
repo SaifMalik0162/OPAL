@@ -5,7 +5,7 @@ import "./whats-new.css";
 const waveform = [18, 31, 22, 43, 28, 60, 35, 74, 46, 82, 54, 67, 34, 72, 47, 91, 59, 39, 70, 44, 61, 27, 48, 21];
 
 const highlights = [
-  { Icon: Cards, tone: "ice", title: "Cinematic project carousel", detail: "Turn a cover over to reveal its tracklist." },
+  { Icon: Cards, tone: "ice", title: "Flip covers in your Library", detail: "Open Tracks on a cover to see and play its tracklist." },
   { Icon: ListBullets, tone: "gold", title: "Drag tracks into place", detail: "Set a manual track order with a quick drag." },
   { Icon: ArrowsDownUp, tone: "pearl", title: "Sort your tracklist", detail: "Sort by title, date added, or last modified." },
   { Icon: NotePencil, tone: "mint", title: "A calmer project view", detail: "Versions, notes, and moments are easier to scan." },

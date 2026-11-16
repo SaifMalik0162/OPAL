@@ -1,9 +1,9 @@
 import React from "react";
-import { ArrowCounterClockwise, MusicNote, Play, Plus } from "@phosphor-icons/react";
+import { MusicNote, Play, Plus } from "@phosphor-icons/react";
 
 import { TrackPlaybackIndicator } from "./TrackPlaybackIndicator.jsx";
 
-export function CarouselTrackPreview({ id, project, tracks, flipped, closeRef, closePreview, onPlayTrack, onAddTracks, playingTrackId, isPlaying, progress }) {
+export function CarouselTrackPreview({ id, project, tracks, flipped, onPlayTrack, onAddTracks, playingTrackId, isPlaying, progress }) {
   return <section
     id={id}
     className="projects-track-preview"
@@ -14,7 +14,6 @@ export function CarouselTrackPreview({ id, project, tracks, flipped, closeRef, c
     <img className="projects-preview-art" src={project.artwork} alt="" draggable={false} />
     <div className="projects-preview-header">
       <div><strong>Tracks</strong><span>{tracks.length}</span></div>
-      {closePreview && <button ref={closeRef} type="button" onClick={closePreview} aria-label="Return to cover"><ArrowCounterClockwise size={15} /></button>}
     </div>
     {tracks.length ? <ol className="projects-preview-list">
       {tracks.map((track, trackIndex) => {

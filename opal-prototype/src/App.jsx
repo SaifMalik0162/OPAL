@@ -11,7 +11,6 @@ import { OnboardingAmbient } from "./OnboardingAmbient.jsx";
 import { WhatsNew } from "./WhatsNew.jsx";
 import { UpdateDialog } from "./UpdateDialog.jsx";
 import { CarouselTrackPreview } from "./CarouselTrackPreview.jsx";
-import { ProjectsCarousel } from "./ProjectsCarousel.jsx";
 import { TrackPlaybackIndicator } from "./TrackPlaybackIndicator.jsx";
 import { isCurrentPlaybackRequest, previousQueueIndex, repeatQueueIndex, shuffleQueue } from "./playback-queue.js";
 import { remainingGapMilliseconds } from "./playback-gap.js";
@@ -42,8 +41,6 @@ import {
   FileAudio,
   FolderOpen,
   GearSix,
-  GridFour,
-  Cards,
   Info,
   ImageSquare,
   LockKey,
@@ -252,6 +249,7 @@ function App() {
     return () => delete document.documentElement.dataset.platform;
   }, []);
   const [activeView, setActiveView] = useState("library");
+  const [libraryLayout, setLibraryLayout] = useState("carousel");
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -316,7 +314,6 @@ function App() {
   const [query, setQuery] = useState("");
   const [sortMode, setSortMode] = useState(readSortPreference);
   const [projectSection, setProjectSection] = useState("tracks");
-  const projectBackView = useRef("library");
   const [noteTargetId, setNoteTargetId] = useState(null);
   const [noteText, setNoteText] = useState("");
   const [noteStatus, setNoteStatus] = useState("saved");
@@ -742,30 +739,22 @@ function App() {
     setFocusedTrackId(trackId);
     setNoteTargetId(noteTrackId);
     setProjectSection(noteTrackId ? "notes" : "tracks");
-    if (activeView === "library" || activeView === "projects") projectBackView.current = activeView;
     setActiveView("project");
   }
 
-  async function returnToLibrary() {
+  async function returnToLibrary(layout = libraryLayout) {
     if (!(await flushNoteSave())) return;
+    if (activeView !== "library" || layout !== libraryLayout) {
+      window.scrollTo({ top: 0, behavior: "instant" });
+    }
+    setLibraryLayout(layout);
     setActiveView("library");
-    setFocusedTrackId("");
-  }
-
-  async function returnFromProject() {
-    if (!(await flushNoteSave())) return;
-    setActiveView(projectBackView.current);
     setFocusedTrackId("");
   }
 
   async function changeProjectSection(section) {
     if (section === projectSection || !(await flushNoteSave())) return;
     setProjectSection(section);
-  }
-
-  async function openProjectsView() {
-    if (!(await flushNoteSave())) return;
-    setActiveView("projects");
   }
 
   async function stepLibrarySelection(step) {
@@ -1404,7 +1393,6 @@ function App() {
       setSelectedId(created.id);
       setNoteTargetId(null);
       setProjectSection("tracks");
-      if (activeView === "library" || activeView === "projects") projectBackView.current = activeView;
       setActiveView("project");
       setCreateOpen(false);
       setError("");
@@ -1936,16 +1924,30 @@ function App() {
   }
 
   const visibleSelection = filteredProjects.find((project) => project.id === selectedId)?.id ?? filteredProjects[0]?.id ?? "";
-  const topbarImportProject = activeView === "library"
-    ? filteredProjects.find((project) => project.id === visibleSelection) ?? null
-    : activeView === "projects" ? null : selectedProject;
+  const libraryShowing = activeView === "library";
+  const gridShowing = libraryShowing && libraryLayout === "grid";
+  const carouselShowing = libraryShowing && libraryLayout === "carousel";
+  const topbarImportProject = libraryShowing ? null : selectedProject;
 
-  return <div className="opal-app" data-view={activeView}>
+  return <div className="opal-app" data-view={activeView} data-library-layout={libraryShowing ? libraryLayout : undefined}>
     <div className="ambient-field" aria-hidden="true" />
     <header className="topbar" data-tauri-drag-region="deep" onMouseDown={handleWindowMouseDown}>
-      <div className="topbar-left"><button className="brand-lockup" type="button" onClick={returnToLibrary} aria-label="Open OPAL library"><img className="brand-mark" src="/opal-mark.png" alt="" /><span className="brand-name">OPAL</span></button>{(import.meta.env.DEV || import.meta.env.VITE_OPAL_DEVELOPMENT === "1") && <span className="development-badge">Development</span>}<label className="search-field"><MagnifyingGlass size={14} weight="regular" /><input ref={searchInputRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search" />{query && <button type="button" className="clear-search" onClick={() => setQuery("")} aria-label="Clear search"><X size={13} /></button>}</label></div>
-      <nav className="top-navigation" aria-label="Primary navigation"><button type="button" className={activeView === "library" ? "is-active" : ""} aria-current={activeView === "library" ? "page" : undefined} onClick={returnToLibrary}>Library</button><button type="button" className={activeView === "projects" ? "is-active" : ""} aria-current={activeView === "projects" ? "page" : undefined} onClick={openProjectsView}>Projects</button></nav>
-      <div className="topbar-actions"><label className={`sort-control topbar-sort-control${activeView === "library" ? "" : " is-placeholder"}`} aria-hidden={activeView !== "library"}><span>Sort</span><select value={sortMode} onChange={(event) => setSortMode(event.target.value)} aria-label="Sort projects" tabIndex={activeView === "library" ? undefined : -1} disabled={activeView !== "library"}><option value="updated">Recently updated</option><option value="newest">Newest</option><option value="alphabetical">A–Z</option></select><CaretDown size={13} /></label><button type="button" className={`topbar-import ${importActive ? "is-busy" : ""}`} aria-label={importActive ? "Show import progress" : topbarImportProject ? `Import audio into ${topbarImportProject.title}` : "Create a new project"} onClick={() => importActive ? setImportOpen(true) : (topbarImportProject ? pickAudioFiles(topbarImportProject.id) : setCreateOpen(true))}><Plus size={14} />{importActive ? "Importing…" : topbarImportProject ? "Import audio" : "New project"}</button><button type="button" className="profile-button" onClick={openProfile} aria-label="Open OPAL settings" aria-expanded={profileOpen} title="Settings"><GearSix size={17} aria-hidden="true" /></button>{profileOpen && <ProfilePopover nativeAvailable={isTauri()} storageInfo={storageInfo} storageError={storageError} importProgress={importProgress} updateStatus={updateStatus} updateAvailable={Boolean(availableUpdate)} onCheckUpdates={checkForUpdates} onOpenUpdates={openUpdates} onPreviewUpdateBanner={IS_DEVELOPMENT_BUILD ? () => {
+      <div className="topbar-left"><button className="brand-lockup" type="button" onClick={() => returnToLibrary()} aria-label="Open OPAL library"><img className="brand-mark" src="/opal-mark.png" alt="" /><span className="brand-name">OPAL</span></button>{(import.meta.env.DEV || import.meta.env.VITE_OPAL_DEVELOPMENT === "1") && <span className="development-badge">Development</span>}<label className="search-field"><MagnifyingGlass size={14} weight="regular" /><input ref={searchInputRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search" />{query && <button type="button" className="clear-search" onClick={() => setQuery("")} aria-label="Clear search"><X size={13} /></button>}</label></div>
+      <div className="top-navigation" role="group" aria-label="Library layout">
+        <button type="button" className={carouselShowing ? "is-active" : ""} aria-pressed={carouselShowing} onClick={() => returnToLibrary("carousel")}>Carousel</button>
+        <button type="button" className={gridShowing ? "is-active" : ""} aria-pressed={gridShowing} onClick={() => returnToLibrary("grid")}>Grid</button>
+      </div>
+      <div className="topbar-actions">
+        <LibrarySort mode={sortMode} onChange={setSortMode} hidden={!libraryShowing} />
+        {(!gridShowing || importActive) && <button
+          type="button"
+          className={`topbar-import${importActive ? " is-busy" : ""}`}
+          title={libraryShowing && !importActive ? "New project" : undefined}
+          aria-label={importActive ? "Show import progress" : topbarImportProject ? `Import audio into ${topbarImportProject.title}` : "Create a new project"}
+          onClick={() => importActive ? setImportOpen(true) : (topbarImportProject ? pickAudioFiles(topbarImportProject.id) : setCreateOpen(true))}
+        ><Plus size={14} />{importActive ? "Importing…" : topbarImportProject ? "Import audio" : "New project"}</button>}
+        <button type="button" className="profile-button" onClick={openProfile} aria-label="Open OPAL settings" aria-expanded={profileOpen} title="Settings"><GearSix size={17} aria-hidden="true" /></button>
+        {profileOpen && <ProfilePopover nativeAvailable={isTauri()} storageInfo={storageInfo} storageError={storageError} importProgress={importProgress} updateStatus={updateStatus} updateAvailable={Boolean(availableUpdate)} onCheckUpdates={checkForUpdates} onOpenUpdates={openUpdates} onPreviewUpdateBanner={IS_DEVELOPMENT_BUILD ? () => {
         setProfileOpen(false);
         setUpdateBannerPreview((current) => current + 1);
       } : undefined} onPreviewWhatsNew={IS_DEVELOPMENT_BUILD ? previewWhatsNew : undefined} onRevealFolder={revealStorageFolder} onExportBackup={exportLibraryBackup} onRestoreBackup={restoreLibraryBackup} onRetryStorage={refreshStorageInfo} onDiagnostics={openDiagnostics} onReplayWelcome={() => { setProfileOpen(false); setWelcomeOpen(true); }} onClose={() => setProfileOpen(false)} />}</div>
@@ -1965,7 +1967,7 @@ function App() {
         <ArrowUpRight size={14} />
       </button>
     )}
-    <main className="stage">{compatibilityMode ? <CompatibilityView onRevealFolder={revealStorageFolder} /> : recoveryMode ? <RecoveryView onRevealFolder={revealStorageFolder} onRestore={restoreLibraryBackup} onRetry={retryStorage} /> : activeView === "project" && selectedProject ? <ProjectView key={selectedProject.id} project={selectedProject} capsules={capsuleSummaries} capsulesLoading={capsuleShelfLoading} onOpenCapsule={requestOpenCapsule} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} isPlaying={playbackState === "playing"} focusedTrackId={focusedTrackId} selectedMomentId={selectedMomentId} section={projectSection} onSectionChange={changeProjectSection} noteTargetId={noteTargetId} noteText={noteText} noteStatus={noteStatus} nativeAvailable={isTauri()} backLabel={projectBackView.current === "projects" ? "Projects" : "Library"} onBack={returnFromProject} onTrackInfo={(track) => setTrackInfo({ project: selectedProject, track })} onTrackSelect={(track) => startPlayback(selectedProject, track)} onVersionSelect={switchVersion} onMomentSelect={selectMoment} onMomentJump={jumpToMoment} onMomentUpdate={updateMoment} onMomentDelete={removeMoment} onJumpUnresolved={jumpUnresolved} onPlay={() => currentVersions(selectedProject)[0] && startPlayback(selectedProject, currentVersions(selectedProject)[0], 0)} onOpenSequence={() => openSequenceRoom(selectedProject)} onCreateCapsule={() => openCapsuleBuilder(selectedProject)} onNoteChange={handleNoteChange} onFlushNotes={flushNoteSave} onNoteTargetChange={changeNoteTarget} onImport={() => pickAudioFiles(selectedProject.id)} onAddVersion={(group) => pickAudioFiles(selectedProject.id, group.id)} onEditProject={() => setEditOpen(true)} onEditArtwork={pickArtwork} onRemoveArtwork={removeArtwork} onRemoveProject={() => removeProject(selectedProject)} onRenameTrack={renameTrack} onRenameVersion={renameVersion} onPromoteVersion={promoteVersion} onReorderGroups={reorderTrackGroups} onReorderVersions={reorderTrackVersions} onRemoveTrack={(group) => removeTrack(selectedProject, group)} onRemoveVersion={(version, group) => removeVersion(selectedProject, version, group)} /> : activeView === "sequence" && selectedProject ? <SequenceRoom project={selectedProject} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} playbackState={playbackState} elapsedMs={elapsedMs} durationMs={durationMs || displayTrack?.durationMs || 0} onBack={leaveSequenceRoom} onPlayTrack={playSequenceTrack} onAuditionTransition={auditionTransition} onReorderGroups={reorderTrackGroups} onUpdateTransition={updateTransition} onPlay={() => toggleSequencePlayback(selectedProject)} onPrevious={playPrevious} onNext={playNext} onProgressChange={seekPlayback} onCreateCapsule={() => openCapsuleBuilder(selectedProject)} /> : activeView === "capsule" && selectedProject && capsule ? <CapsuleView capsule={capsule} project={selectedProject} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} playbackState={playbackState} elapsedMs={elapsedMs} durationMs={durationMs || displayTrack?.durationMs || 0} onBack={leaveCapsuleView} onPlayTrack={playCapsuleTrack} onPlay={() => toggleCapsulePlayback(capsule)} onPrevious={playPrevious} onNext={playNext} onProgressChange={seekPlayback} onCopyReference={() => copyCapsuleReference(capsule)} onOpenResponse={() => setCapsuleResponseOpen(true)} onAddResponse={addCapsuleResponse} /> : activeView === "projects" ? <ProjectsView loading={loading} projects={filteredProjects} selectedId={selectedId} onPlayTrack={startPlayback} onAddTracks={pickAudioFiles} playingProjectId={playingProjectId} playingTrackId={playingTrackId} isPlaying={playbackState === "playing"} progress={progressValue} query={query} sortMode={sortMode} onSortChange={setSortMode} onOpenProject={openProject} onPlayProject={(project) => currentVersions(project)[0] && startPlayback(project, currentVersions(project)[0], 0)} onCreateProject={() => setCreateOpen(true)} onClearSearch={() => setQuery("")} /> : <LibraryView loading={loading} projects={filteredProjects} selectedId={visibleSelection} query={query} trackMatches={trackMatches} onOpenProject={openProject} onPlayTrack={startPlayback} onAddTracks={pickAudioFiles} playingProjectId={playingProjectId} playingTrackId={playingTrackId} isPlaying={playbackState === "playing"} progress={progressValue} onCreateProject={() => setCreateOpen(true)} onClearSearch={() => setQuery("")} onStep={stepLibrarySelection} />}</main>
+    <main className="stage">{compatibilityMode ? <CompatibilityView onRevealFolder={revealStorageFolder} /> : recoveryMode ? <RecoveryView onRevealFolder={revealStorageFolder} onRestore={restoreLibraryBackup} onRetry={retryStorage} /> : activeView === "project" && selectedProject ? <ProjectView key={selectedProject.id} project={selectedProject} capsules={capsuleSummaries} capsulesLoading={capsuleShelfLoading} onOpenCapsule={requestOpenCapsule} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} isPlaying={playbackState === "playing"} focusedTrackId={focusedTrackId} selectedMomentId={selectedMomentId} section={projectSection} onSectionChange={changeProjectSection} noteTargetId={noteTargetId} noteText={noteText} noteStatus={noteStatus} nativeAvailable={isTauri()} onBack={() => returnToLibrary()} onTrackInfo={(track) => setTrackInfo({ project: selectedProject, track })} onTrackSelect={(track) => startPlayback(selectedProject, track)} onVersionSelect={switchVersion} onMomentSelect={selectMoment} onMomentJump={jumpToMoment} onMomentUpdate={updateMoment} onMomentDelete={removeMoment} onJumpUnresolved={jumpUnresolved} onPlay={() => currentVersions(selectedProject)[0] && startPlayback(selectedProject, currentVersions(selectedProject)[0], 0)} onOpenSequence={() => openSequenceRoom(selectedProject)} onCreateCapsule={() => openCapsuleBuilder(selectedProject)} onNoteChange={handleNoteChange} onFlushNotes={flushNoteSave} onNoteTargetChange={changeNoteTarget} onImport={() => pickAudioFiles(selectedProject.id)} onAddVersion={(group) => pickAudioFiles(selectedProject.id, group.id)} onEditProject={() => setEditOpen(true)} onEditArtwork={pickArtwork} onRemoveArtwork={removeArtwork} onRemoveProject={() => removeProject(selectedProject)} onRenameTrack={renameTrack} onRenameVersion={renameVersion} onPromoteVersion={promoteVersion} onReorderGroups={reorderTrackGroups} onReorderVersions={reorderTrackVersions} onRemoveTrack={(group) => removeTrack(selectedProject, group)} onRemoveVersion={(version, group) => removeVersion(selectedProject, version, group)} /> : activeView === "sequence" && selectedProject ? <SequenceRoom project={selectedProject} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} playbackState={playbackState} elapsedMs={elapsedMs} durationMs={durationMs || displayTrack?.durationMs || 0} onBack={leaveSequenceRoom} onPlayTrack={playSequenceTrack} onAuditionTransition={auditionTransition} onReorderGroups={reorderTrackGroups} onUpdateTransition={updateTransition} onPlay={() => toggleSequencePlayback(selectedProject)} onPrevious={playPrevious} onNext={playNext} onProgressChange={seekPlayback} onCreateCapsule={() => openCapsuleBuilder(selectedProject)} /> : activeView === "capsule" && selectedProject && capsule ? <CapsuleView capsule={capsule} project={selectedProject} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} playbackState={playbackState} elapsedMs={elapsedMs} durationMs={durationMs || displayTrack?.durationMs || 0} onBack={leaveCapsuleView} onPlayTrack={playCapsuleTrack} onPlay={() => toggleCapsulePlayback(capsule)} onPrevious={playPrevious} onNext={playNext} onProgressChange={seekPlayback} onCopyReference={() => copyCapsuleReference(capsule)} onOpenResponse={() => setCapsuleResponseOpen(true)} onAddResponse={addCapsuleResponse} /> : <LibraryView layout={libraryLayout} loading={loading} projects={filteredProjects} selectedId={visibleSelection} query={query} trackMatches={trackMatches} onOpenProject={openProject} onPlayTrack={startPlayback} onAddTracks={pickAudioFiles} playingProjectId={playingProjectId} playingTrackId={playingTrackId} isPlaying={playbackState === "playing"} progress={progressValue} onCreateProject={() => setCreateOpen(true)} onClearSearch={() => setQuery("")} onStep={stepLibrarySelection} />}</main>
     {activeView !== "sequence" && activeView !== "capsule" && displayProject && displayTrack && <Player project={displayProject} track={displayTrack} selectedMomentId={selectedMomentId} status={playbackState} playbackError={playbackError} isPlaying={playbackState === "playing"} progress={progressValue} elapsedMs={elapsedMs} durationMs={durationMs || displayTrack.durationMs} volume={volume} muted={muted} volumeOpen={volumeOpen} queueOpen={queueOpen} menuOpen={playerMenuOpen} shuffleEnabled={shuffleEnabled} repeatMode={repeatMode} onTogglePlay={togglePlayback} onPrevious={playPrevious} onNext={playNext} onProgressChange={seekPlayer} onCreateMoment={(timeMs) => createMoment(displayProject, displayTrack, timeMs)} onSelectMoment={(moment) => selectMoment(displayProject, displayTrack, moment)} onVolumeChange={(event) => { setVolume(Number(event.target.value)); setMuted(false); }} onToggleMute={() => setMuted((value) => !value)} onToggleVolume={() => setVolumeOpen((openState) => !openState)} onToggleQueue={() => setQueueOpen((openState) => !openState)} onToggleMenu={() => setPlayerMenuOpen((openState) => !openState)} onToggleShuffle={toggleShuffle} onToggleRepeat={cycleRepeatMode} onOpenProject={() => openProject(displayProject.id)} onShowTrack={() => openProject(displayProject.id, displayTrack.id)} onOpenNotes={() => openProject(displayProject.id, displayTrack.id, displayTrack.id)} onRevealFile={async () => { try { await invoke("revealManagedFile", { managedFileRef: displayTrack.managedFileRef }); } catch (revealError) { setError(String(revealError)); } }} onShowInfo={() => setTrackInfo({ project: displayProject, track: displayTrack })} />}
     {activeView !== "sequence" && activeView !== "capsule" && queueOpen && displayProject && <QueuePopover project={displayProject} currentIndex={displayQueueIndex} onSelect={(track, index) => { startPlayback(displayProject, track, index); setQueueOpen(false); }} onClose={() => setQueueOpen(false)} />}
     {showWelcome && (
@@ -1997,70 +1999,75 @@ function App() {
   </div>;
 }
 
-function ProjectsView({ loading, projects: visibleProjects, selectedId, query, sortMode, onSortChange, onOpenProject, onPlayProject, onPlayTrack, onAddTracks, playingProjectId, playingTrackId, isPlaying, progress, onCreateProject, onClearSearch }) {
-  const [layout, setLayout] = useState(() => {
-    try {
-      return window.localStorage.getItem("opal-projects-layout") === "carousel" ? "carousel" : "grid";
-    } catch {
-      return "grid";
-    }
-  });
-  const [focusedId, setFocusedId] = useState(selectedId);
-  const focusedIndex = Math.max(0, visibleProjects.findIndex((project) => project.id === focusedId));
-  const selectProject = useCallback((index) => setFocusedId(visibleProjects[index].id), [visibleProjects]);
+function LibrarySort({ mode, onChange, hidden }) {
+  return <label className={`sort-control topbar-sort-control${hidden ? " is-placeholder" : ""}`} aria-hidden={hidden || undefined}>
+    <span>Sort</span>
+    <select value={mode} onChange={(event) => onChange(event.target.value)} aria-label="Sort projects" disabled={hidden}>
+      <option value="updated">Recently updated</option>
+      <option value="newest">Newest</option>
+      <option value="alphabetical">A–Z</option>
+    </select>
+    <CaretDown size={13} />
+  </label>;
+}
 
-  function changeLayout(nextLayout) {
-    if (nextLayout === layout) return;
-    setLayout(nextLayout);
-    window.scrollTo({ top: 0, behavior: "instant" });
-    try {
-      window.localStorage.setItem("opal-projects-layout", nextLayout);
-    } catch {
-      // The choice still applies for this session if storage is unavailable.
-    }
-  }
+function LibraryGrid({ projects, selectedId, query, trackMatches, onOpenProject, onPlayTrack, onCreateProject, onClearSearch }) {
+  return <section className="library-grid-view view-stack" aria-label="OPAL library">
+    {projects.length ? <div className="projects-grid">
+      <button className="project-create-card" type="button" onClick={onCreateProject}><span><Plus size={20} /></span><strong>New project</strong></button>
+      {projects.map((project) => {
+        function openProject() {
+          onOpenProject(project.id, trackMatches.get(project.id)?.id ?? "");
+        }
 
-  if (loading) return <section className="projects-screen view-stack loading-library"><div className="library-loading glass"><CircleNotch size={23} weight="thin" /></div></section>;
-  const hasSearch = Boolean(query.trim());
-  return <section className="projects-screen view-stack" data-layout={layout} aria-label="Projects">
-    <div className="projects-toolbar">
-      <label className="sort-control">
-        <span>Sort</span>
-        <select value={sortMode} onChange={(event) => onSortChange(event.target.value)} aria-label="Sort projects">
-          <option value="updated">Recently updated</option>
-          <option value="newest">Newest</option>
-          <option value="alphabetical">A–Z</option>
-        </select>
-        <CaretDown size={13} />
-      </label>
-      <div className="projects-layout-switch" role="group" aria-label="Projects layout">
-        <button type="button" aria-pressed={layout === "grid"} onClick={() => changeLayout("grid")}><GridFour size={16} />Grid</button>
-        <button className="projects-carousel-option" type="button" aria-label="Carousel, new" aria-pressed={layout === "carousel"} onClick={() => changeLayout("carousel")}><Cards size={16} />Carousel<span className="projects-new-pill" aria-hidden="true">NEW</span></button>
-      </div>
-      <button className="button button-primary projects-new-button" type="button" onClick={onCreateProject}><Plus size={14} />New project</button>
-    </div>
-    {!visibleProjects.length ? <div className="projects-empty glass"><FolderOpen size={27} weight="thin" /><h2>{hasSearch ? "No projects found" : "Your collection is empty"}</h2><p>{hasSearch ? <>No project matches “{query}”.</> : "Create a project to start building your collection."}</p><button className="button button-primary" type="button" onClick={hasSearch ? onClearSearch : onCreateProject}>{hasSearch ? "Clear search" : "Create project"}</button></div> : layout === "carousel" ? <ProjectsCarousel
-      projects={visibleProjects}
-      index={focusedIndex}
-      onSelect={selectProject}
-      onOpen={onOpenProject}
-      onPlay={onPlayProject}
-      tracks={currentVersions(visibleProjects[focusedIndex])}
-      onPlayTrack={onPlayTrack}
-      onAddTracks={onAddTracks}
-      playingTrackId={playingProjectId === visibleProjects[focusedIndex].id ? playingTrackId : ""}
-      isPlaying={isPlaying}
-      progress={progress}
-    /> : <div className="projects-grid">{visibleProjects.map((project) => <article className="project-card" key={project.id}><div className="project-card-art"><button className="project-card-open" type="button" onClick={() => onOpenProject(project.id)} aria-label={`Open ${project.title}`}><img src={project.artwork} alt="" /></button><button className="project-card-play" type="button" onClick={() => onPlayProject(project)} aria-label={`Play ${project.title}`} disabled={!project.count}><Play size={17} weight="fill" /></button></div><div className="project-card-meta"><button className="project-card-title" type="button" onClick={() => onOpenProject(project.id)}>{project.title}</button><div className="project-card-subline"><span>{project.count} {project.count === 1 ? "track" : "tracks"}</span><span>{project.duration}</span></div></div></article>)}<button className="project-create-card" type="button" onClick={onCreateProject}><span><Plus size={20} /></span><strong>New project</strong></button></div>}
+        return <article className="project-card" key={project.id}>
+          <div className="project-card-art">
+            <button className="project-card-open" type="button" onClick={openProject} aria-label={`Open ${project.title}`} aria-current={project.id === selectedId || undefined}>
+              <img src={project.artwork} alt="" />
+            </button>
+            <button className="project-card-play" type="button" onClick={() => {
+              const [firstTrack] = currentVersions(project);
+              if (firstTrack) onPlayTrack(project, firstTrack, 0);
+            }} aria-label={`Play ${project.title}`} disabled={!project.count}><Play size={17} weight="fill" /></button>
+          </div>
+          <div className="project-card-meta">
+            <button className="project-card-title" type="button" onClick={openProject}>{project.title}</button>
+            <div className="project-card-subline"><span>{project.count} {project.count === 1 ? "track" : "tracks"}</span><span>{project.duration}</span></div>
+          </div>
+        </article>;
+      })}
+    </div> : <LibraryEmpty query={query} onCreateProject={onCreateProject} onClearSearch={onClearSearch} />}
   </section>;
 }
 
-function LibraryView({ loading, projects: visibleProjects, selectedId, query, trackMatches, onOpenProject, onCreateProject, onClearSearch, onStep, onPlayTrack, onAddTracks, playingProjectId, playingTrackId, isPlaying, progress }) {
+function LibraryEmpty({ query, onCreateProject, onClearSearch }) {
+  const hasSearch = Boolean(query.trim());
+  return <div className="empty-library glass">
+    <div className="empty-library-art" aria-hidden="true"><span className="empty-library-orb" /><span className="empty-library-orbit" /></div>
+    <span className="eyebrow">{hasSearch ? "Library search" : "Your listening room"}</span>
+    <h1 id="empty-library-title">{hasSearch ? "Nothing found" : <>A home for every <em>version.</em></>}</h1>
+    <p>{hasSearch ? <>No project matches “{query}”. Clear your search to see the full collection.</> : "Keep each track, its alternate takes, listening notes, and the moments you want to return to together."}</p>
+    <div className="empty-library-actions">
+      <button className="button button-primary" type="button" onClick={hasSearch ? onClearSearch : onCreateProject}>{hasSearch ? "Clear search" : "Create a project"}<ArrowUpRight size={14} /></button>
+    </div>
+  </div>;
+}
+
+function LibraryView({ layout, loading, projects: visibleProjects, selectedId, query, trackMatches, onOpenProject, onCreateProject, onClearSearch, onStep, onPlayTrack, onAddTracks, playingProjectId, playingTrackId, isPlaying, progress }) {
   if (loading) return <section className="library-screen view-stack loading-library"><div className="library-loading glass"><CircleNotch size={23} weight="thin" /></div></section>;
-  if (!visibleProjects.length) {
-    const hasSearch = Boolean(query.trim());
-    return <section className="library-screen view-stack empty-library-screen" aria-labelledby="empty-library-title"><div className="empty-library glass"><div className="empty-library-art" aria-hidden="true"><span className="empty-library-orb" /><span className="empty-library-orbit" /></div><span className="eyebrow">{hasSearch ? "Library search" : "Your listening room"}</span><h1 id="empty-library-title">{hasSearch ? "Nothing found" : <>A home for every <em>version.</em></>}</h1><p>{hasSearch ? <>No project matches “{query}”. Clear your search to see the full collection.</> : "Keep each track, its alternate takes, listening notes, and the moments you want to return to together."}</p><div className="empty-library-actions"><button className="button button-primary" type="button" onClick={hasSearch ? onClearSearch : onCreateProject}>{hasSearch ? "Clear search" : "Create a project"}<ArrowUpRight size={14} /></button></div></div></section>;
-  }
+  if (layout === "grid") return <LibraryGrid
+    projects={visibleProjects}
+    selectedId={selectedId}
+    query={query}
+    trackMatches={trackMatches}
+    onOpenProject={onOpenProject}
+    onPlayTrack={onPlayTrack}
+    onCreateProject={onCreateProject}
+    onClearSearch={onClearSearch}
+  />;
+  if (!visibleProjects.length) return <section className="library-screen view-stack empty-library-screen" aria-labelledby="empty-library-title">
+    <LibraryEmpty query={query} onCreateProject={onCreateProject} onClearSearch={onClearSearch} />
+  </section>;
   return <ProjectCarousel
     key={JSON.stringify(visibleProjects.map((project) => project.id))}
     projects={visibleProjects}
@@ -2382,7 +2389,7 @@ function ProjectNotesPanel({ project, projectId, noteContextId, noteLabel, noteT
   </>;
 }
 
-function ProjectView({ project, capsules, capsulesLoading, onOpenCapsule, playingTrackId, isPlaying, focusedTrackId, selectedMomentId, section, onSectionChange, noteTargetId, noteText, noteStatus, nativeAvailable, backLabel, onBack, onTrackInfo, onTrackSelect, onVersionSelect, onMomentSelect, onMomentJump, onMomentUpdate, onMomentDelete, onJumpUnresolved, onPlay, onOpenSequence, onCreateCapsule, onNoteChange, onNoteTargetChange, onFlushNotes, onImport, onAddVersion, onEditProject, onEditArtwork, onRemoveArtwork, onRemoveProject, onRenameTrack, onRenameVersion, onPromoteVersion, onReorderGroups, onReorderVersions, onRemoveTrack, onRemoveVersion }) {
+function ProjectView({ project, capsules, capsulesLoading, onOpenCapsule, playingTrackId, isPlaying, focusedTrackId, selectedMomentId, section, onSectionChange, noteTargetId, noteText, noteStatus, nativeAvailable, onBack, onTrackInfo, onTrackSelect, onVersionSelect, onMomentSelect, onMomentJump, onMomentUpdate, onMomentDelete, onJumpUnresolved, onPlay, onOpenSequence, onCreateCapsule, onNoteChange, onNoteTargetChange, onFlushNotes, onImport, onAddVersion, onEditProject, onEditArtwork, onRemoveArtwork, onRemoveProject, onRenameTrack, onRenameVersion, onPromoteVersion, onReorderGroups, onReorderVersions, onRemoveTrack, onRemoveVersion }) {
   const baseGroups = useMemo(() => groupTracks(project), [project]);
   const [trackSortMode, setTrackSortMode] = useState("manual");
   const groups = useMemo(() => {
@@ -2524,7 +2531,7 @@ function ProjectView({ project, capsules, capsulesLoading, onOpenCapsule, playin
   }
   return <section className="project-screen project-detail-screen view-stack">
     <div className="project-topline">
-      <button className="back-action" type="button" onClick={onBack}><ArrowLeft size={16} />{backLabel}</button>
+      <button className="back-action" type="button" onClick={onBack}><ArrowLeft size={16} />Library</button>
     </div>
     <div className="project-detail-layout">
       <div className="project-artwork-rail">

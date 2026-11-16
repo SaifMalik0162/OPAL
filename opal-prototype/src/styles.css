@@ -693,6 +693,12 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   }
 }
 
+.opal-app[data-library-layout="grid"] .stage {
+  height: auto;
+  min-height: calc(100dvh - 64px);
+  padding-bottom: calc(var(--player-reserve) + 34px);
+}
+
 /* Reserve the native titlebar only in the leading column, keeping the tabs on the window centerline. */
 html[data-platform="macos"] .topbar-left {
   padding-inline-start: 100px;
