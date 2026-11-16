@@ -14,7 +14,7 @@ export function CarouselTrackPreview({ id, project, tracks, flipped, closeRef, c
     <img className="projects-preview-art" src={project.artwork} alt="" draggable={false} />
     <div className="projects-preview-header">
       <div><strong>Tracks</strong><span>{tracks.length}</span></div>
-      <button ref={closeRef} type="button" onClick={closePreview} aria-label="Return to cover"><ArrowCounterClockwise size={15} /></button>
+      {closePreview && <button ref={closeRef} type="button" onClick={closePreview} aria-label="Return to cover"><ArrowCounterClockwise size={15} /></button>}
     </div>
     {tracks.length ? <ol className="projects-preview-list">
       {tracks.map((track, trackIndex) => {

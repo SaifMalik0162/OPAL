@@ -23,6 +23,7 @@ import { serializeDiagnosticsReport } from "./diagnostics-report.js";
 import { readCachedWaveform, writeCachedWaveform } from "./waveform-cache.js";
 import {
   ArrowsDownUp,
+  ArrowCounterClockwise,
   ArrowLeft,
   ArrowSquareOut,
   ArrowUpRight,
@@ -2146,8 +2147,8 @@ function ProjectCarousel({ projects, selectedId, trackMatches, onOpenProject, on
     }
   }, [previewOpen]);
 
-  function closePreview() {
-    restoreToggleFocus.current = true;
+  function closePreview(restoreFocus = true) {
+    restoreToggleFocus.current = restoreFocus;
     setPreviewProjectId(null);
   }
 
@@ -2276,8 +2277,6 @@ function ProjectCarousel({ projects, selectedId, trackMatches, onOpenProject, on
                         project={selected}
                         tracks={tracks}
                         flipped={flipped}
-                        closeRef={previewCloseRef}
-                        closePreview={closePreview}
                         onPlayTrack={onPlayTrack}
                         onAddTracks={onAddTracks}
                         playingTrackId={playingProjectId === selected.id ? playingTrackId : ""}
@@ -2288,7 +2287,15 @@ function ProjectCarousel({ projects, selectedId, trackMatches, onOpenProject, on
                     <div className="sleeve-meta">
                       <strong>{project.title}</strong>
                       <div className="library-sleeve-detail">
-                        <small>{tracks.length} {tracks.length === 1 ? "track" : "tracks"}</small>
+                        <button
+                          ref={previewCloseRef}
+                          className="library-sleeve-track-toggle"
+                          type="button"
+                          aria-label="Return to cover"
+                          aria-expanded={flipped}
+                          aria-controls="library-track-preview"
+                          onClick={(event) => closePreview(event.detail === 0)}
+                        ><ArrowCounterClockwise size={14} />Cover</button>
                       </div>
                     </div>
                   </div>}
