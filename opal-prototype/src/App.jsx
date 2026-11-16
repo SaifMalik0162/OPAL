@@ -2083,6 +2083,7 @@ function ProjectCarousel({ projects, selectedId, trackMatches, onOpenProject, on
   const orbitRef = useRef(null);
   const previewToggleRef = useRef(null);
   const previewCloseRef = useRef(null);
+  const restoreToggleFocus = useRef(false);
   const [previewProjectId, setPreviewProjectId] = useState(null);
   const previewOpen = previewProjectId === selected.id;
   const tracks = useMemo(() => currentVersions(selected), [selected]);
@@ -2114,7 +2115,7 @@ function ProjectCarousel({ projects, selectedId, trackMatches, onOpenProject, on
   useEffect(() => {
     const orbit = orbitRef.current;
     function handleWheel(event) {
-      if (count < 2 || event.ctrlKey || event.target.closest(".projects-track-preview") || Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
+      if (count < 2 || event.ctrlKey || event.target.closest(".library-sleeve-back") || Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
       event.preventDefault();
       const now = performance.now();
       const wheel = wheelRef.current;
@@ -2126,8 +2127,8 @@ function ProjectCarousel({ projects, selectedId, trackMatches, onOpenProject, on
       directionRef.current = Math.sign(wheel.delta);
       wheel.delta = 0;
       wheel.lastStep = now;
-      if (orbit.contains(document.activeElement?.closest(".projects-track-preview"))) {
-        previewToggleRef.current?.focus({ preventScroll: true });
+      if (orbit.contains(document.activeElement?.closest(".library-sleeve-back, .library-sleeve-track-toggle"))) {
+        orbit.focus({ preventScroll: true });
       }
       onStep(directionRef.current);
     }
@@ -2136,19 +2137,25 @@ function ProjectCarousel({ projects, selectedId, trackMatches, onOpenProject, on
     return () => orbit.removeEventListener("wheel", handleWheel);
   }, [count, onStep]);
 
-  useEffect(() => {
-    if (previewOpen) previewCloseRef.current?.focus({ preventScroll: true });
+  useLayoutEffect(() => {
+    if (previewOpen) {
+      previewCloseRef.current?.focus({ preventScroll: true });
+    } else if (restoreToggleFocus.current) {
+      restoreToggleFocus.current = false;
+      previewToggleRef.current?.focus({ preventScroll: true });
+    }
   }, [previewOpen]);
 
   function closePreview() {
+    restoreToggleFocus.current = true;
     setPreviewProjectId(null);
-    previewToggleRef.current?.focus({ preventScroll: true });
   }
 
   function step(direction) {
     if (count < 2) return;
-    if (orbitRef.current?.contains(document.activeElement?.closest(".projects-track-preview"))) {
-      previewToggleRef.current?.focus({ preventScroll: true });
+    const orbit = orbitRef.current;
+    if (orbit?.contains(document.activeElement?.closest(".library-sleeve-back, .library-sleeve-track-toggle"))) {
+      orbit.focus({ preventScroll: true });
     }
     directionRef.current = direction;
     onStep(direction);
@@ -2157,7 +2164,7 @@ function ProjectCarousel({ projects, selectedId, trackMatches, onOpenProject, on
   function handlePointerDown(event) {
     if (!event.isPrimary || event.button !== 0) return;
     suppressClickRef.current = false;
-    if (count < 2 || event.target.closest(".projects-track-preview")) return;
+    if (count < 2 || event.target.closest(".library-sleeve-back, .library-sleeve-track-toggle")) return;
     pointerRef.current = { id: event.pointerId, x: event.clientX, y: event.clientY, dragging: false };
   }
 
@@ -2210,7 +2217,7 @@ function ProjectCarousel({ projects, selectedId, trackMatches, onOpenProject, on
           tabIndex={-1}
           aria-label="Project carousel. Swipe or use the arrow keys to browse."
           onKeyDown={(event) => {
-            if (event.target.closest(".projects-track-preview")) return;
+            if (event.target.closest(".library-sleeve-back")) return;
             if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
             event.preventDefault();
             event.currentTarget.focus({ preventScroll: true });
@@ -2237,36 +2244,54 @@ function ProjectCarousel({ projects, selectedId, trackMatches, onOpenProject, on
                 aria-hidden={buffered || mirror || undefined}
               >
                 <div className="projects-cover-turn library-sleeve-turn">
-                  <button
-                    type="button"
-                    className="library-sleeve-front"
-                    aria-current={isSelected || undefined}
-                    tabIndex={buffered || mirror ? -1 : undefined}
-                    disabled={buffered}
-                    aria-hidden={flipped || undefined}
-                    inert={flipped}
-                    aria-label={`Open ${project.title} project`}
-                    onClick={(event) => openCard(project, event)}
-                  >
-                    <span className="sleeve-image-wrap"><img src={project.artwork} alt="" draggable="false" /></span>
-                    <span className="sleeve-meta">
+                  <div className="library-sleeve-face library-sleeve-front" aria-hidden={flipped || undefined} inert={flipped}>
+                    <button
+                      type="button"
+                      className="library-sleeve-open"
+                      aria-current={isSelected || undefined}
+                      tabIndex={buffered || mirror ? -1 : undefined}
+                      disabled={buffered}
+                      aria-label={`Open ${project.title} project`}
+                      onClick={(event) => openCard(project, event)}
+                    ><span className="sleeve-image-wrap"><img src={project.artwork} alt="" draggable="false" /></span></button>
+                    <div className="sleeve-meta">
                       <strong>{project.title}</strong>
-                      <small>{(isSelected && project.tracks[0]?.title) || `${project.count} ${project.count === 1 ? "track" : "tracks"}`}</small>
-                    </span>
-                  </button>
-                  {isSelected && <CarouselTrackPreview
-                    id="library-track-preview"
-                    project={selected}
-                    tracks={tracks}
-                    flipped={flipped}
-                    closeRef={previewCloseRef}
-                    closePreview={closePreview}
-                    onPlayTrack={onPlayTrack}
-                    onAddTracks={onAddTracks}
-                    playingTrackId={playingProjectId === selected.id ? playingTrackId : ""}
-                    isPlaying={isPlaying}
-                    progress={progress}
-                  />}
+                      <div className="library-sleeve-detail">
+                        <small>{(isSelected && project.tracks[0]?.title) || `${project.count} ${project.count === 1 ? "track" : "tracks"}`}</small>
+                        {isSelected && <button
+                          ref={previewToggleRef}
+                          className="library-sleeve-track-toggle"
+                          type="button"
+                          aria-expanded={previewOpen}
+                          aria-controls="library-track-preview"
+                          onClick={() => setPreviewProjectId(selected.id)}
+                        ><ListBullets size={14} />Tracks</button>}
+                      </div>
+                    </div>
+                  </div>
+                  {isSelected && <div className="library-sleeve-face library-sleeve-back" aria-hidden={!flipped} inert={!flipped}>
+                    <div className="sleeve-image-wrap">
+                      <CarouselTrackPreview
+                        id="library-track-preview"
+                        project={selected}
+                        tracks={tracks}
+                        flipped={flipped}
+                        closeRef={previewCloseRef}
+                        closePreview={closePreview}
+                        onPlayTrack={onPlayTrack}
+                        onAddTracks={onAddTracks}
+                        playingTrackId={playingProjectId === selected.id ? playingTrackId : ""}
+                        isPlaying={isPlaying}
+                        progress={progress}
+                      />
+                    </div>
+                    <div className="sleeve-meta">
+                      <strong>{project.title}</strong>
+                      <div className="library-sleeve-detail">
+                        <small>{tracks.length} {tracks.length === 1 ? "track" : "tracks"}</small>
+                      </div>
+                    </div>
+                  </div>}
                 </div>
               </div>
             );
@@ -2275,14 +2300,6 @@ function ProjectCarousel({ projects, selectedId, trackMatches, onOpenProject, on
         {count > 1 && <button type="button" className="carousel-control carousel-control-right" onClick={() => step(1)} aria-label="Next project"><CaretRight size={22} /></button>}
       </div>
       <div className="carousel-caption library-carousel-actions">
-        <button
-          ref={previewToggleRef}
-          className="button button-ghost projects-preview-toggle"
-          type="button"
-          aria-expanded={previewOpen}
-          aria-controls="library-track-preview"
-          onClick={() => previewOpen ? closePreview() : setPreviewProjectId(selected.id)}
-        ><ListBullets size={16} />Tracks</button>
         <button className="caption-open" type="button" aria-label={`Open ${selected.title} project`} onClick={() => onOpenProject(selected.id, trackMatches.get(selected.id)?.id ?? "")}>
           <span>{selected.description?.trim() || `${selected.count} ${selected.count === 1 ? "track" : "tracks"} · ${selected.duration}`}</span>
           <ArrowUpRight size={16} />

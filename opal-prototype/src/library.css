@@ -1225,7 +1225,12 @@
   border-radius: inherit;
 }
 
-.opal-app[data-view="library"] .library-sleeve-front {
+.opal-app[data-view="library"] .sleeve[data-flipped="true"] .library-sleeve-turn {
+  transform: perspective(900px) rotateY(180deg);
+}
+
+.opal-app[data-view="library"] .library-sleeve-face {
+  position: relative;
   display: block;
   width: 100%;
   padding: clamp(5px, .9cqw, 9px) clamp(5px, .9cqw, 9px) 0;
@@ -1235,16 +1240,43 @@
   box-shadow: 0 24px 56px rgba(10, 16, 39, .27), inset 0 1px rgba(255, 255, 255, .24);
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
+  text-align: center;
   transition: border-color .32s ease, box-shadow .32s ease;
 }
 
-.opal-app[data-view="library"] .sleeve-orbit.is-dragging .library-sleeve-front { cursor: grabbing; }
+.opal-app[data-view="library"] .library-sleeve-face.library-sleeve-back {
+  position: absolute;
+  inset: 0;
+  transform: rotateY(180deg);
+}
 
-.opal-app[data-view="library"] .library-sleeve-turn .projects-track-preview {
+.library-sleeve-open {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
   border-radius: inherit;
+  background: none;
+  cursor: pointer;
+}
+
+/* The title and artwork open the project. The Tracks button has its own hit area. */
+.library-sleeve-open::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  content: "";
+}
+
+.opal-app[data-view="library"] .sleeve-orbit.is-dragging .library-sleeve-open { cursor: grabbing; }
+
+.library-sleeve-back .sleeve-image-wrap { position: relative; }
+
+.opal-app[data-view="library"] .library-sleeve-back .projects-track-preview {
+  border: 0;
+  border-radius: inherit;
+  box-shadow: none;
+  transform: none;
   text-align: left;
 }
 
@@ -1261,12 +1293,14 @@
   z-index: 8;
 }
 
-.opal-app[data-view="library"] .library-sleeve-front:focus-visible {
-  outline-color: rgba(250, 250, 255, .9);
+.library-sleeve-open:focus-visible { outline: none; }
+
+.library-sleeve-open:focus-visible::after {
+  outline: 2px solid rgba(250, 250, 255, .9);
   outline-offset: 5px;
 }
 
-.opal-app[data-view="library"] .sleeve.is-selected .library-sleeve-front {
+.opal-app[data-view="library"] .sleeve.is-selected .library-sleeve-face {
   border-color: #c4cbe0;
   box-shadow: 0 30px 72px rgba(10, 16, 39, .42), 0 0 0 1px rgba(235, 237, 255, .15), inset 0 1px 0 rgba(255, 255, 255, .34);
 }
@@ -1304,6 +1338,71 @@
   color: rgba(237, 239, 255, .68);
   font-size: clamp(10px, 1.9cqw, 16px);
   letter-spacing: 0;
+}
+
+.library-sleeve-detail {
+  display: grid;
+  min-width: 0;
+  min-height: 24px;
+  place-items: center;
+}
+
+.library-sleeve-detail > * { grid-area: 1 / 1; }
+
+.library-sleeve-detail small {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: opacity .18s ease;
+}
+
+.library-sleeve-track-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 24px;
+  padding: 2px 10px;
+  border: 1px solid rgba(234, 239, 255, .42);
+  border-radius: 999px;
+  background: rgba(22, 34, 59, .56);
+  color: #f5f7ff;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity .18s ease, transform .18s ease, background .18s ease;
+}
+
+.library-sleeve-track-toggle:hover {
+  border-color: #c4cbe0;
+  background: rgba(22, 34, 59, .8);
+}
+
+.library-sleeve-front:has(.library-sleeve-track-toggle):is(:hover, :focus-within) .library-sleeve-detail small {
+  opacity: 0;
+}
+
+.library-sleeve-front:is(:hover, :focus-within) .library-sleeve-track-toggle {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+
+@media (hover: none) {
+  .library-sleeve-detail { min-height: 28px; }
+  .library-sleeve-front:has(.library-sleeve-track-toggle) .library-sleeve-detail small { opacity: 0; }
+  .library-sleeve-track-toggle {
+    min-height: 28px;
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
+  }
 }
 
 .opal-app[data-view="library"] .sleeve[data-offset="-1"],
@@ -1357,20 +1456,9 @@
   --yaw: -55deg;
 }
 
-.opal-app[data-view="library"] .library-carousel-actions {
-  flex-direction: row;
-  justify-content: center;
-  gap: 12px;
-  width: min(100%, 760px);
-  margin-top: 16px;
-}
+.opal-app[data-view="library"] .library-carousel-actions { margin-top: 16px; }
 
-.library-carousel-actions .projects-preview-toggle {
-  flex: 0 0 auto;
-  font-size: 12px;
-}
-
-.library-sleeve-turn .projects-preview-list button:focus-visible { outline-offset: -2px; }
+.library-sleeve-back .projects-preview-list button:focus-visible { outline-offset: -2px; }
 
 .opal-app[data-view="library"] .caption-open {
   display: flex;
