@@ -1649,6 +1649,13 @@
 .project-actions-menu .project-sort-options button[aria-pressed="true"] { background: color-mix(in srgb, var(--lavender) 15%, transparent); color: var(--ivory); }
 .project-sort-options button[aria-pressed="true"] svg { color: var(--lavender-bright); }
 .project-sort-check-spacer { width: 15px; height: 15px; flex: 0 0 15px; }
+.project-sort-direction {
+  display: grid;
+  gap: 3px;
+  margin-top: 3px;
+  padding-top: 5px;
+  border-top: 1px solid color-mix(in srgb, var(--text-overlay-ink) 13%, transparent);
+}
 .project-sort-options button > span:last-child { color: color-mix(in srgb, var(--text-overlay-ink) 82%, transparent); }
 
 @keyframes project-sort-open {

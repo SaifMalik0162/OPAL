@@ -6,6 +6,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import { check } from "@tauri-apps/plugin-updater";
 import { exit, relaunch } from "@tauri-apps/plugin-process";
 import packageMetadata from "../package.json";
+import { readProjectPreference, writeProjectPreference, sortProjectGroups } from "./project-preferences.js";
 import { Onboarding } from "./Onboarding.jsx";
 import { OnboardingAmbient } from "./OnboardingAmbient.jsx";
 import { WhatsNew, WHATS_NEW_RELEASE } from "./WhatsNew.jsx";
@@ -878,7 +879,7 @@ function App({ initialAppearance = DEFAULT_APPEARANCE, canReconcileAppearanceAss
     setSelectedId(projectId);
     setFocusedTrackId(trackId);
     setNoteTargetId(noteTrackId);
-    setProjectSection(noteTrackId ? "notes" : "tracks");
+    setProjectSection(noteTrackId ? "notes" : trackId ? "tracks" : readProjectPreference(projectId).section);
     setActiveView("project");
   }
 
@@ -904,6 +905,7 @@ function App({ initialAppearance = DEFAULT_APPEARANCE, canReconcileAppearanceAss
   async function changeProjectSection(section) {
     if (section === projectSection || !(await flushNoteSave())) return;
     setProjectSection(section);
+    writeProjectPreference(selectedId, { section });
   }
 
   async function stepLibrarySelection(step) {
@@ -2643,14 +2645,18 @@ function ProjectNotesPanel({ project, projectId, noteContextId, noteLabel, noteT
 
 function ProjectView({ project, capsules, capsulesLoading, onOpenCapsule, playingTrackId, isPlaying, focusedTrackId, selectedMomentId, section, onSectionChange, noteTargetId, noteText, noteStatus, nativeAvailable, onBack, onTrackInfo, onTrackSelect, onVersionSelect, onMomentSelect, onMomentJump, onMomentUpdate, onMomentDelete, onJumpUnresolved, onPlay, onOpenSequence, onCreateCapsule, onNoteChange, onNoteTargetChange, onFlushNotes, onImport, onAddVersion, onEditProject, onEditArtwork, onRemoveArtwork, onRemoveProject, onRenameTrack, onRenameVersion, onPromoteVersion, onReorderGroups, onReorderVersions, onRemoveTrack, onRemoveVersion }) {
   const baseGroups = useMemo(() => groupTracks(project), [project]);
-  const [trackSortMode, setTrackSortMode] = useState("manual");
-  const groups = useMemo(() => {
-    const ordered = [...baseGroups];
-    if (trackSortMode === "alphabetical") ordered.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: "base" }));
-    if (trackSortMode === "fileCreated") ordered.sort((a, b) => (b.fileCreatedAt ?? -Infinity) - (a.fileCreatedAt ?? -Infinity) || 0);
-    if (trackSortMode === "fileModified") ordered.sort((a, b) => (b.fileModifiedAt ?? -Infinity) - (a.fileModifiedAt ?? -Infinity) || 0);
-    return ordered;
-  }, [baseGroups, trackSortMode]);
+  const [sortPreference, setSortPreference] = useState(() => readProjectPreference(project.id));
+  const { sortMode: trackSortMode, sortDirection } = sortPreference;
+  const groups = useMemo(
+    () => sortProjectGroups(baseGroups, trackSortMode, sortDirection),
+    [baseGroups, trackSortMode, sortDirection],
+  );
+
+  function updateSort(patch) {
+    setSortPreference((current) => ({ ...current, ...patch }));
+    writeProjectPreference(project.id, patch);
+  }
+
   const [editingGroupId, setEditingGroupId] = useState("");
   const [editingTitle, setEditingTitle] = useState("");
   const [draggedGroupId, setDraggedGroupId] = useState("");
@@ -2709,7 +2715,10 @@ function ProjectView({ project, capsules, capsulesLoading, onOpenCapsule, playin
   }
 
   function sortGroups(mode) {
-    setTrackSortMode(mode);
+    updateSort({
+      sortMode: mode,
+      sortDirection: mode === "fileCreated" || mode === "fileModified" ? "desc" : "asc",
+    });
     setProjectSortOpen(false);
   }
 
@@ -2755,7 +2764,7 @@ function ProjectView({ project, capsules, capsulesLoading, onOpenCapsule, playin
     if (drag.active) {
       const ids = dragPreviewIds ?? groups.map((group) => group.id);
       onReorderGroups(ids);
-      setTrackSortMode("manual");
+      updateSort({ sortMode: "manual" });
       suppressTrackClickRef.current = true;
       window.setTimeout(() => { suppressTrackClickRef.current = false; }, 0);
     }
@@ -2806,6 +2815,9 @@ function ProjectView({ project, capsules, capsulesLoading, onOpenCapsule, playin
                 <button type="button" className={`project-sort-trigger${projectSortOpen ? " is-open" : ""}`} onClick={() => setProjectSortOpen((open) => !open)} aria-expanded={projectSortOpen}><ArrowsDownUp size={16} /><span>Sort</span>{projectSortOpen ? <CaretDown size={14} /> : <CaretRight size={14} />}</button>
                 {projectSortOpen && <div className="project-sort-options" role="group" aria-label="Sort project tracks">
                   {[["manual", "Manual"], ["alphabetical", "Alphabetical"], ["fileCreated", "Date created"], ["fileModified", "Date modified"]].map(([mode, label]) => <button type="button" key={mode} aria-pressed={trackSortMode === mode} onClick={() => sortGroups(mode)}>{trackSortMode === mode ? <Check size={15} /> : <span className="project-sort-check-spacer" />}<span>{label}</span></button>)}
+                  {trackSortMode !== "manual" && <div className="project-sort-direction" role="group" aria-label="Sort direction">
+                    {[["asc", trackSortMode === "alphabetical" ? "A–Z" : "Oldest first"], ["desc", trackSortMode === "alphabetical" ? "Z–A" : "Newest first"]].map(([direction, label]) => <button type="button" key={direction} aria-pressed={sortDirection === direction} onClick={() => { updateSort({ sortDirection: direction }); setProjectSortOpen(false); }}>{sortDirection === direction ? <Check size={15} /> : <span className="project-sort-check-spacer" />}<span>{label}</span></button>)}
+                  </div>}
                 </div>}
                 <span className="project-actions-divider" />
                 <button type="button" onClick={() => runProjectAction(onEditProject)}><NotePencil size={16} />Edit details</button>
