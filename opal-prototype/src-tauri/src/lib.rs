@@ -4,7 +4,7 @@ use std::{
     io::{Read, Write},
     path::{Path, PathBuf},
     sync::{Mutex, MutexGuard, OnceLock},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
 use image::ImageFormat;
@@ -32,7 +32,7 @@ mod dev_fixtures;
 pub use dev_fixtures::generate_fixture_libraries;
 
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
-const DATABASE_VERSION: i64 = 8;
+const DATABASE_VERSION: i64 = 9;
 const BUILD_COMMIT: &str = match option_env!("OPAL_BUILD_COMMIT") {
     Some(commit) => commit,
     None => "unknown",
@@ -107,6 +107,7 @@ struct TrackDto {
     group_updated_at: i64,
     file_created_at: Option<i64>,
     file_modified_at: Option<i64>,
+    original_file_name: Option<String>,
     note: Option<NoteDto>,
     moments: Vec<MomentDto>,
 }
@@ -231,6 +232,8 @@ struct ImportProgress {
     file_name: String,
     status: String,
     message: String,
+    bytes_copied: u64,
+    total_bytes: u64,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -918,6 +921,23 @@ fn initialise_database(path: &Path) -> Result<(), String> {
             .commit()
             .map_err(|error| format!("Could not commit OPAL file date migration: {error}"))?;
     }
+    let transaction = connection
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+        .map_err(|error| format!("Could not begin OPAL filename migration: {error}"))?;
+    let version: i64 = transaction
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .map_err(|error| format!("Could not read OPAL filename schema version: {error}"))?;
+    if version == 8 {
+        transaction
+            .execute_batch(
+                "ALTER TABLE tracks ADD COLUMN original_file_name TEXT;
+                 PRAGMA user_version = 9;",
+            )
+            .map_err(|error| format!("Could not migrate OPAL filenames: {error}"))?;
+    }
+    transaction
+        .commit()
+        .map_err(|error| format!("Could not commit OPAL filename migration: {error}"))?;
     database_integrity(&connection)?;
     Ok(())
 }
@@ -1229,6 +1249,7 @@ fn track_from_row(row: &rusqlite::Row<'_>, roots: &StorageRoots) -> rusqlite::Re
         group_updated_at: row.get(14)?,
         file_created_at: row.get(15)?,
         file_modified_at: row.get(16)?,
+        original_file_name: row.get(17)?,
         note: None,
         moments: Vec::new(),
     })
@@ -1375,7 +1396,8 @@ fn load_project(
                  FROM tracks sibling
                  WHERE COALESCE(sibling.group_id, sibling.id) = COALESCE(t.group_id, t.id)) AS group_updated_at,
                 t.file_created_at,
-                t.file_modified_at
+                t.file_modified_at,
+                t.original_file_name
              FROM tracks t
              LEFT JOIN track_groups g ON g.id = t.group_id
              WHERE t.project_id = ?1
@@ -1728,17 +1750,51 @@ fn carry_unresolved_moments(
     Ok(())
 }
 
+#[cfg(test)]
 fn copy_import_to_staging(
     source: &Path,
     staged_file: &Path,
     injected_failure: Option<ImportFailurePoint>,
 ) -> Result<(), String> {
+    copy_import_with_progress(source, staged_file, injected_failure, |_, _| {})
+}
+
+fn copy_import_with_progress(
+    source: &Path,
+    staged_file: &Path,
+    injected_failure: Option<ImportFailurePoint>,
+    mut progress: impl FnMut(u64, u64),
+) -> Result<(), String> {
     if injected_failure == Some(ImportFailurePoint::DuringStagingCopy) {
         return Err("Injected import copy failure while staging the source file.".to_string());
     }
-    fs::copy(source, staged_file)
-        .map(|_| ())
-        .map_err(|error| format!("Could not copy into OPAL storage: {error}"))
+    let result = (|| {
+        let mut input = File::open(source).map_err(|error| format!("Could not open source audio: {error}"))?;
+        let total = input.metadata().map_err(|error| format!("Could not inspect source audio: {error}"))?.len();
+        let mut output = File::create(staged_file).map_err(|error| format!("Could not stage audio: {error}"))?;
+        let mut buffer = vec![0u8; 256 * 1024];
+        let mut copied = 0u64;
+        let mut last_update = Instant::now();
+        progress(0, total);
+        loop {
+            let count = input.read(&mut buffer).map_err(|error| format!("Could not read source audio: {error}"))?;
+            if count == 0 { break; }
+            output.write_all(&buffer[..count]).map_err(|error| format!("Could not copy into OPAL storage: {error}"))?;
+            copied += count as u64;
+            if last_update.elapsed().as_millis() >= 50 {
+                progress(copied, total);
+                last_update = Instant::now();
+            }
+        }
+        if copied != total {
+            return Err("The source file changed during import. Please try again.".to_string());
+        }
+        output.sync_all().map_err(|error| format!("Could not finish writing audio: {error}"))?;
+        progress(copied, total);
+        Ok(())
+    })();
+    if result.is_err() { let _ = fs::remove_file(staged_file); }
+    result
 }
 
 fn maybe_fail_import(
@@ -1780,7 +1836,7 @@ fn commit_imported_track(
         maybe_fail_import(injected_failure, ImportFailurePoint::AfterGroupCreated)?;
         transaction
             .execute(
-                "INSERT INTO tracks (id, project_id, group_id, title, position, version_name, version_position, is_current, duration_ms, format, managed_file_ref, source_hash, created_at, file_created_at, file_modified_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                "INSERT INTO tracks (id, project_id, group_id, title, position, version_name, version_position, is_current, duration_ms, format, managed_file_ref, source_hash, created_at, file_created_at, file_modified_at, original_file_name) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
                 params![
                     track.id,
                     track.project_id,
@@ -1796,7 +1852,8 @@ fn commit_imported_track(
                     source_hash,
                     now_ms(),
                     track.file_created_at,
-                    track.file_modified_at
+                    track.file_modified_at,
+                    track.original_file_name
                 ],
             )
             .map_err(|error| format!("Could not save the imported track: {error}"))?;
@@ -2796,6 +2853,15 @@ fn promote_track_version(
     let _operation = lock_library_operation()?;
     let roots = prepare_storage(&app)?;
     let mut connection = open_database(&roots.db_path)?;
+    promote_track_version_inner(&mut connection, &project_id, &track_id)?;
+    load_project(&connection, &roots, &project_id)
+}
+
+fn promote_track_version_inner(
+    connection: &mut Connection,
+    project_id: &str,
+    track_id: &str,
+) -> Result<(), String> {
     let group_id: String = connection
         .query_row(
             "SELECT COALESCE(group_id, id) FROM tracks WHERE id = ?1 AND project_id = ?2",
@@ -2829,7 +2895,7 @@ fn promote_track_version(
     transaction
         .commit()
         .map_err(|error| format!("Could not commit version promotion: {error}"))?;
-    load_project(&connection, &roots, &project_id)
+    Ok(())
 }
 
 fn capsule_deletion_impact(
@@ -2921,6 +2987,15 @@ fn delete_track_version(
     let _operation = lock_library_operation()?;
     let roots = prepare_storage(&app)?;
     let mut connection = open_database(&roots.db_path)?;
+    delete_track_version_inner(&mut connection, &roots, &project_id, &track_id)
+}
+
+fn delete_track_version_inner(
+    connection: &mut Connection,
+    roots: &StorageRoots,
+    project_id: &str,
+    track_id: &str,
+) -> Result<ProjectDto, String> {
     let version = connection
         .query_row(
             "SELECT managed_file_ref, COALESCE(group_id, id), version_position, is_current,
@@ -2950,8 +3025,9 @@ fn delete_track_version(
             .query_row(
                 "SELECT id FROM tracks
                  WHERE project_id = ?1 AND COALESCE(group_id, id) = ?2 AND id <> ?3
-                 ORDER BY version_position ASC, position ASC LIMIT 1",
-                params![project_id, version.1, track_id],
+                 ORDER BY CASE WHEN version_position > ?4 THEN 0 ELSE 1 END,
+                          version_position ASC, position ASC LIMIT 1",
+                params![project_id, version.1, track_id, version.2],
                 |row| row.get::<_, String>(0),
             )
             .optional()
@@ -2993,8 +3069,8 @@ fn delete_track_version(
     transaction
         .commit()
         .map_err(|error| format!("Could not commit version removal: {error}"))?;
-    let _ = remove_managed_file_if_unreferenced(&connection, &roots, &version.0);
-    load_project(&connection, &roots, &project_id)
+    let _ = remove_managed_file_if_unreferenced(connection, roots, &version.0);
+    load_project(connection, roots, project_id)
 }
 
 #[tauri::command(rename = "saveNote", rename_all = "camelCase")]
@@ -3310,17 +3386,21 @@ fn remove_project_artwork(app: tauri::AppHandle, project_id: String) -> Result<P
 }
 
 #[tauri::command(rename = "importAudioFiles", rename_all = "camelCase")]
-fn import_audio_files(
+async fn import_audio_files(
     app: tauri::AppHandle,
-    state: tauri::State<'_, ImportState>,
     project_id: String,
     paths: Vec<String>,
     allow_duplicates: bool,
     track_group_id: Option<String>,
 ) -> Result<ImportSummary, String> {
-    let _operation = lock_library_operation()?;
-    let _guard = state.begin(&project_id)?;
-    import_audio_files_inner(app, project_id, paths, allow_duplicates, track_group_id)
+    tauri::async_runtime::spawn_blocking(move || {
+        let _operation = lock_library_operation()?;
+        let state = app.state::<ImportState>();
+        let _guard = state.begin(&project_id)?;
+        import_audio_files_inner(app.clone(), project_id, paths, allow_duplicates, track_group_id)
+    })
+    .await
+    .map_err(|error| format!("Audio import could not finish: {error}"))?
 }
 
 fn import_audio_files_inner(
@@ -3386,6 +3466,8 @@ fn import_audio_files_inner(
         send_import_progress(
             &app,
             ImportProgress {
+                bytes_copied: 0,
+                total_bytes: 0,
                 project_id: project_id.clone(),
                 current: index,
                 total,
@@ -3405,6 +3487,8 @@ fn import_audio_files_inner(
             send_import_progress(
                 &app,
                 ImportProgress {
+                    bytes_copied: 0,
+                    total_bytes: 0,
                     project_id: project_id.clone(),
                     current: index + 1,
                     total,
@@ -3426,6 +3510,8 @@ fn import_audio_files_inner(
             send_import_progress(
                 &app,
                 ImportProgress {
+                    bytes_copied: 0,
+                    total_bytes: 0,
                     project_id: project_id.clone(),
                     current: index + 1,
                     total,
@@ -3449,6 +3535,8 @@ fn import_audio_files_inner(
                 send_import_progress(
                     &app,
                     ImportProgress {
+                        bytes_copied: 0,
+                        total_bytes: 0,
                         project_id: project_id.clone(),
                         current: index + 1,
                         total,
@@ -3486,6 +3574,8 @@ fn import_audio_files_inner(
             send_import_progress(
                 &app,
                 ImportProgress {
+                    bytes_copied: 0,
+                    total_bytes: 0,
                     project_id: project_id.clone(),
                     current: index + 1,
                     total,
@@ -3511,6 +3601,8 @@ fn import_audio_files_inner(
                 send_import_progress(
                     &app,
                     ImportProgress {
+                        bytes_copied: 0,
+                        total_bytes: 0,
                         project_id: project_id.clone(),
                         current: index + 1,
                         total,
@@ -3582,7 +3674,18 @@ fn import_audio_files_inner(
         let track_id = Uuid::new_v4().to_string();
         let source_file_metadata = fs::metadata(&source).ok();
         let staged_file = batch_dir.join(format!("{track_id}.{}", extension(&source)));
-        if let Err(error) = copy_import_to_staging(&source, &staged_file, None) {
+        if let Err(error) = copy_import_with_progress(&source, &staged_file, None, |bytes_copied, total_bytes| {
+            send_import_progress(&app, ImportProgress {
+                project_id: project_id.clone(),
+                current: index,
+                total,
+                file_name: file_name.clone(),
+                status: "processing".to_string(),
+                message: if bytes_copied == total_bytes { "Preparing version…".to_string() } else { "Copying audio…".to_string() },
+                bytes_copied,
+                total_bytes,
+            });
+        }) {
             let message = error;
             results.push(ImportItemResult {
                 path: source_string.clone(),
@@ -3594,6 +3697,8 @@ fn import_audio_files_inner(
             send_import_progress(
                 &app,
                 ImportProgress {
+                    bytes_copied: 0,
+                    total_bytes: 0,
                     project_id: project_id.clone(),
                     current: index + 1,
                     total,
@@ -3617,6 +3722,8 @@ fn import_audio_files_inner(
             send_import_progress(
                 &app,
                 ImportProgress {
+                    bytes_copied: 0,
+                    total_bytes: 0,
                     project_id: project_id.clone(),
                     current: index + 1,
                     total,
@@ -3656,6 +3763,7 @@ fn import_audio_files_inner(
                 .as_ref()
                 .and_then(|metadata| metadata.created().ok())
                 .map(file_timestamp_ms),
+            original_file_name: source.file_name().map(|name| name.to_string_lossy().into_owned()),
             file_modified_at: source_file_metadata
                 .as_ref()
                 .and_then(|metadata| metadata.modified().ok())
@@ -3688,6 +3796,8 @@ fn import_audio_files_inner(
             send_import_progress(
                 &app,
                 ImportProgress {
+                    bytes_copied: 0,
+                    total_bytes: 0,
                     project_id: project_id.clone(),
                     current: index + 1,
                     total,
@@ -3713,6 +3823,8 @@ fn import_audio_files_inner(
         send_import_progress(
             &app,
             ImportProgress {
+                bytes_copied: source_file_metadata.as_ref().map(|metadata| metadata.len()).unwrap_or(0),
+                total_bytes: source_file_metadata.as_ref().map(|metadata| metadata.len()).unwrap_or(0),
                 project_id: project_id.clone(),
                 current: index + 1,
                 total,
@@ -4110,6 +4222,41 @@ fn get_storage_info(app: tauri::AppHandle) -> Result<StorageInfo, String> {
 fn reveal_storage_folder(app: tauri::AppHandle) -> Result<(), String> {
     let roots = storage_roots(&app)?;
     reveal_in_file_manager(&roots.root)
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TrackFileInfo {
+    file_size: u64,
+    sample_rate: Option<u32>,
+    bit_depth: Option<u8>,
+}
+
+#[tauri::command(rename = "getTrackFileInfo", rename_all = "camelCase")]
+async fn get_track_file_info(
+    app: tauri::AppHandle,
+    managed_file_ref: String,
+) -> Result<TrackFileInfo, String> {
+    let roots = prepare_storage(&app)?;
+    let path = safe_managed_path(&roots, &managed_file_ref)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let metadata = fs::metadata(&path)
+            .map_err(|error| format!("Could not inspect the audio file: {error}"))?;
+        if !metadata.is_file() {
+            return Err("This managed audio file is missing.".to_string());
+        }
+        let properties = Probe::open(&path)
+            .and_then(|probe| probe.read())
+            .ok()
+            .map(|audio| audio.properties().clone());
+        Ok(TrackFileInfo {
+            file_size: metadata.len(),
+            sample_rate: properties.as_ref().and_then(|properties| properties.sample_rate()),
+            bit_depth: properties.as_ref().and_then(|properties| properties.bit_depth()),
+        })
+    })
+    .await
+    .map_err(|error| format!("Could not load audio file information: {error}"))?
 }
 
 #[tauri::command(rename = "revealManagedFile", rename_all = "camelCase")]
@@ -4762,6 +4909,7 @@ pub fn run() {
             get_storage_info,
             reveal_storage_folder,
             reveal_managed_file,
+            get_track_file_info,
             get_audio_waveform,
             export_backup,
             restore_backup,
@@ -5073,7 +5221,7 @@ mod tests {
 
     #[test]
     fn supported_migration_chains_keep_one_verified_pre_migration_backup() {
-        for source_version in 3..=7 {
+        for source_version in 3..=8 {
             let directory = tempdir().expect("temporary migration library");
             let database = if source_version == 3 {
                 seed_v3_library(directory.path())
@@ -5082,8 +5230,13 @@ mod tests {
                 seed_full_library(&roots);
                 let connection = open_database(&roots.db_path).expect("fixture database");
                 connection
-                    .execute_batch("ALTER TABLE tracks DROP COLUMN file_created_at; ALTER TABLE tracks DROP COLUMN file_modified_at;")
-                    .expect("remove file dates from pre-v8 fixture");
+                    .execute_batch("ALTER TABLE tracks DROP COLUMN original_file_name;")
+                    .expect("remove filename from pre-v9 fixture");
+                if source_version < 8 {
+                    connection
+                        .execute_batch("ALTER TABLE tracks DROP COLUMN file_created_at; ALTER TABLE tracks DROP COLUMN file_modified_at;")
+                        .expect("remove file dates from pre-v8 fixture");
+                }
                 match source_version {
                     4 => connection
                         .execute_batch(
@@ -5100,7 +5253,7 @@ mod tests {
                             "DROP TABLE capsule_responses; DROP TABLE capsule_tracks; DROP TABLE listening_capsules;",
                         )
                         .expect("downgrade fixture to v6"),
-                    7 => (),
+                    7 | 8 => (),
                     _ => unreachable!(),
                 }
                 connection
@@ -5168,7 +5321,7 @@ mod tests {
                 .expect("capsule count");
             assert_eq!(
                 capsules,
-                if source_version == 7 { 1 } else { 0 },
+                if source_version >= 7 { 1 } else { 0 },
                 "capsule count after v{source_version} migration"
             );
             drop(migrated);
@@ -5831,6 +5984,7 @@ mod tests {
                 group_updated_at: 1,
                 file_created_at: None,
                 file_modified_at: None,
+                original_file_name: Some("Original bounce.wav".to_string()),
                 note: None,
                 moments: Vec::new(),
             };
@@ -5897,6 +6051,38 @@ mod tests {
         assert_eq!(summaries[0].missing_version_count, 1);
         assert!(summaries[0].has_password);
         assert!(summaries[0].is_expired);
+    }
+
+    #[test]
+    fn deleting_active_versions_selects_next_then_wraps_and_keeps_last_version() {
+        let live = tempdir().expect("temporary library");
+        let roots = test_roots(live.path());
+        seed_full_library(&roots);
+        let mut connection = open_database(&roots.db_path).expect("database");
+        let project = load_project(&connection, &roots, "p").expect("project");
+        let group_id = project.tracks[0].group_id.clone();
+        let mut versions: Vec<_> = project.tracks.iter().filter(|track| track.group_id == group_id).collect();
+        versions.sort_by_key(|track| track.version_position);
+        assert_eq!(versions.len(), 2);
+        let first_id = versions[0].id.clone();
+        let middle_id = versions[1].id.clone();
+        connection.execute(
+            "INSERT INTO tracks (id, project_id, group_id, title, position, version_name, version_position, is_current, duration_ms, format, managed_file_ref, source_hash, created_at)
+             SELECT 'next-version', project_id, group_id, title, 99, 'Next', 2, 0, duration_ms, format, 'audio/p/next.wav', 'next-hash', created_at FROM tracks WHERE id = ?1",
+            params![first_id],
+        ).expect("third version");
+        promote_track_version_inner(&mut connection, "p", &middle_id).expect("activate middle");
+        let updated = delete_track_version_inner(&mut connection, &roots, "p", &middle_id).expect("delete active middle");
+        let active: Vec<_> = updated.tracks.iter().filter(|track| track.group_id == group_id && track.is_current).collect();
+        assert_eq!(active.len(), 1);
+        assert_eq!(active[0].id, "next-version");
+        let updated = delete_track_version_inner(&mut connection, &roots, "p", "next-version").expect("delete active last in order");
+        let active: Vec<_> = updated.tracks.iter().filter(|track| track.group_id == group_id && track.is_current).collect();
+        assert_eq!(active.len(), 1);
+        assert_eq!(active[0].id, first_id);
+        assert!(delete_track_version_inner(&mut connection, &roots, "p", &first_id).is_err());
+        let reloaded = load_project(&connection, &roots, "p").expect("reload");
+        assert!(reloaded.tracks.iter().any(|track| track.id == first_id && track.is_current));
     }
 
     #[test]
@@ -6226,6 +6412,46 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn import_copy_reports_real_bytes_and_preserves_audio() {
+        let directory = tempdir().expect("temporary import");
+        let source = directory.path().join("source.wav");
+        let staged = directory.path().join("staged.wav");
+        let bytes = vec![37u8; 1024 * 1024 + 17];
+        fs::write(&source, &bytes).expect("source audio");
+        let mut events = Vec::new();
+        copy_import_with_progress(&source, &staged, None, |copied, total| events.push((copied, total))).expect("copy");
+        assert_eq!(events.first(), Some(&(0, bytes.len() as u64)));
+        assert_eq!(events.last(), Some(&(bytes.len() as u64, bytes.len() as u64)));
+        assert!(events.windows(2).all(|pair| pair[0].0 <= pair[1].0));
+        assert!(events.iter().all(|(copied, total)| copied <= total));
+        assert_eq!(fs::read(&staged).expect("staged audio"), bytes);
+        assert_eq!(fs::read(&source).expect("source preserved"), bytes);
+    }
+
+    #[test]
+    fn promoting_a_version_keeps_exactly_one_active_and_rejects_invalid_targets() {
+        let directory = tempdir().expect("temporary library");
+        let roots = test_roots(directory.path());
+        seed_full_library(&roots);
+        let mut connection = open_database(&roots.db_path).expect("database");
+        let tracks = load_project(&connection, &roots, "p").expect("project").tracks;
+        let group_id = tracks[0].group_id.clone();
+        let versions: Vec<_> = tracks.iter().filter(|track| track.group_id == group_id).collect();
+        assert!(versions.len() >= 2);
+        for target in versions.iter().rev() {
+            promote_track_version_inner(&mut connection, "p", &target.id).expect("promote version");
+            let updated = load_project(&connection, &roots, "p").expect("updated project");
+            let active: Vec<_> = updated.tracks.iter().filter(|track| track.group_id == group_id && track.is_current).collect();
+            assert_eq!(active.len(), 1);
+            assert_eq!(active[0].id, target.id);
+        }
+        assert!(promote_track_version_inner(&mut connection, "wrong-project", &versions[0].id).is_err());
+        assert!(promote_track_version_inner(&mut connection, "p", "missing-track").is_err());
+        let updated = load_project(&connection, &roots, "p").expect("unchanged project");
+        assert_eq!(updated.tracks.iter().filter(|track| track.group_id == group_id && track.is_current).count(), 1);
     }
 
     #[test]
