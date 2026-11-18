@@ -32,7 +32,7 @@ mod dev_fixtures;
 pub use dev_fixtures::generate_fixture_libraries;
 
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
-const DATABASE_VERSION: i64 = 7;
+const DATABASE_VERSION: i64 = 8;
 const BUILD_COMMIT: &str = match option_env!("OPAL_BUILD_COMMIT") {
     Some(commit) => commit,
     None => "unknown",
@@ -105,6 +105,8 @@ struct TrackDto {
     managed_file_path: Option<String>,
     group_created_at: i64,
     group_updated_at: i64,
+    file_created_at: Option<i64>,
+    file_modified_at: Option<i64>,
     note: Option<NoteDto>,
     moments: Vec<MomentDto>,
 }
@@ -359,6 +361,13 @@ fn now_ms() -> i64 {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis() as i64)
         .unwrap_or_default()
+}
+
+fn file_timestamp_ms(time: SystemTime) -> i64 {
+    match time.duration_since(UNIX_EPOCH) {
+        Ok(duration) => duration.as_millis() as i64,
+        Err(error) => -(error.duration().as_millis() as i64),
+    }
 }
 
 fn record_diagnostic_error(context: &'static str) {
@@ -889,6 +898,26 @@ fn initialise_database(path: &Path) -> Result<(), String> {
             "COMPATIBILITY_REQUIRED: This library was created by a newer OPAL version (database {current_version}). Install a newer OPAL build to open it. Your library has not been changed."
         ));
     }
+    if current_version == 6 || current_version == 7 {
+        let transaction = connection
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+            .map_err(|error| format!("Could not begin OPAL file date migration: {error}"))?;
+        let version: i64 = transaction
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .map_err(|error| format!("Could not read OPAL file date schema version: {error}"))?;
+        if version == 7 {
+            transaction
+                .execute_batch(
+                    "ALTER TABLE tracks ADD COLUMN file_created_at INTEGER;
+                     ALTER TABLE tracks ADD COLUMN file_modified_at INTEGER;
+                     PRAGMA user_version = 8;",
+                )
+                .map_err(|error| format!("Could not migrate OPAL file dates: {error}"))?;
+        }
+        transaction
+            .commit()
+            .map_err(|error| format!("Could not commit OPAL file date migration: {error}"))?;
+    }
     database_integrity(&connection)?;
     Ok(())
 }
@@ -1198,6 +1227,8 @@ fn track_from_row(row: &rusqlite::Row<'_>, roots: &StorageRoots) -> rusqlite::Re
             .then(|| managed_file_path.to_string_lossy().into_owned()),
         group_created_at: row.get(13)?,
         group_updated_at: row.get(14)?,
+        file_created_at: row.get(15)?,
+        file_modified_at: row.get(16)?,
         note: None,
         moments: Vec::new(),
     })
@@ -1342,7 +1373,9 @@ fn load_project(
                 COALESCE(g.created_at, t.created_at) AS group_created_at,
                 (SELECT MAX(sibling.created_at)
                  FROM tracks sibling
-                 WHERE COALESCE(sibling.group_id, sibling.id) = COALESCE(t.group_id, t.id)) AS group_updated_at
+                 WHERE COALESCE(sibling.group_id, sibling.id) = COALESCE(t.group_id, t.id)) AS group_updated_at,
+                t.file_created_at,
+                t.file_modified_at
              FROM tracks t
              LEFT JOIN track_groups g ON g.id = t.group_id
              WHERE t.project_id = ?1
@@ -1747,7 +1780,7 @@ fn commit_imported_track(
         maybe_fail_import(injected_failure, ImportFailurePoint::AfterGroupCreated)?;
         transaction
             .execute(
-                "INSERT INTO tracks (id, project_id, group_id, title, position, version_name, version_position, is_current, duration_ms, format, managed_file_ref, source_hash, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                "INSERT INTO tracks (id, project_id, group_id, title, position, version_name, version_position, is_current, duration_ms, format, managed_file_ref, source_hash, created_at, file_created_at, file_modified_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
                 params![
                     track.id,
                     track.project_id,
@@ -1761,7 +1794,9 @@ fn commit_imported_track(
                     track.format,
                     track.managed_file_ref,
                     source_hash,
-                    now_ms()
+                    now_ms(),
+                    track.file_created_at,
+                    track.file_modified_at
                 ],
             )
             .map_err(|error| format!("Could not save the imported track: {error}"))?;
@@ -3545,6 +3580,7 @@ fn import_audio_files_inner(
                 )
         };
         let track_id = Uuid::new_v4().to_string();
+        let source_file_metadata = fs::metadata(&source).ok();
         let staged_file = batch_dir.join(format!("{track_id}.{}", extension(&source)));
         if let Err(error) = copy_import_to_staging(&source, &staged_file, None) {
             let message = error;
@@ -3616,6 +3652,14 @@ fn import_audio_files_inner(
             managed_file_path: Some(managed_path.to_string_lossy().into_owned()),
             group_created_at: now_ms(),
             group_updated_at: now_ms(),
+            file_created_at: source_file_metadata
+                .as_ref()
+                .and_then(|metadata| metadata.created().ok())
+                .map(file_timestamp_ms),
+            file_modified_at: source_file_metadata
+                .as_ref()
+                .and_then(|metadata| metadata.modified().ok())
+                .map(file_timestamp_ms),
             note: None,
             moments: Vec::new(),
         };
@@ -4918,7 +4962,7 @@ mod tests {
         let version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("version");
-        assert_eq!(version, 7);
+        assert_eq!(version, DATABASE_VERSION);
         connection.execute("INSERT INTO projects (id, title, created_at, updated_at) VALUES ('p', 'Project', 1, 1)", []).expect("project insert");
         connection.execute("INSERT INTO tracks (id, project_id, title, position, format, managed_file_ref, source_hash, created_at) VALUES ('t', 'p', 'Track', 0, 'WAV', 'audio/p/t.wav', 'hash', 1)", []).expect("track insert");
         let title: String = connection
@@ -5026,7 +5070,7 @@ mod tests {
 
     #[test]
     fn supported_migration_chains_keep_one_verified_pre_migration_backup() {
-        for source_version in 3..=6 {
+        for source_version in 3..=7 {
             let directory = tempdir().expect("temporary migration library");
             let database = if source_version == 3 {
                 seed_v3_library(directory.path())
@@ -5034,6 +5078,9 @@ mod tests {
                 let roots = test_roots(directory.path());
                 seed_full_library(&roots);
                 let connection = open_database(&roots.db_path).expect("fixture database");
+                connection
+                    .execute_batch("ALTER TABLE tracks DROP COLUMN file_created_at; ALTER TABLE tracks DROP COLUMN file_modified_at;")
+                    .expect("remove file dates from pre-v8 fixture");
                 match source_version {
                     4 => connection
                         .execute_batch(
@@ -5050,6 +5097,7 @@ mod tests {
                             "DROP TABLE capsule_responses; DROP TABLE capsule_tracks; DROP TABLE listening_capsules;",
                         )
                         .expect("downgrade fixture to v6"),
+                    7 => (),
                     _ => unreachable!(),
                 }
                 connection
@@ -5116,8 +5164,9 @@ mod tests {
                 })
                 .expect("capsule count");
             assert_eq!(
-                capsules, 0,
-                "capsules are introduced in v7, after source v{source_version}"
+                capsules,
+                if source_version == 7 { 1 } else { 0 },
+                "capsule count after v{source_version} migration"
             );
             drop(migrated);
 
@@ -5269,7 +5318,7 @@ mod tests {
         let version: i64 = migrated
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("version");
-        assert_eq!(version, 7);
+        assert_eq!(version, DATABASE_VERSION);
         let cleanup_table: String = migrated
             .query_row(
                 "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'cleanup_queue'",
@@ -5777,6 +5826,8 @@ mod tests {
                 managed_file_path: Some(managed_path.to_string_lossy().into_owned()),
                 group_created_at: 1,
                 group_updated_at: 1,
+                file_created_at: None,
+                file_modified_at: None,
                 note: None,
                 moments: Vec::new(),
             };

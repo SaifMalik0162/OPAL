@@ -214,12 +214,16 @@ function groupTracks(project) {
       id: groupId,
       title: track.title,
       position: track.position ?? 0,
-      createdAt: track.groupCreatedAt ?? track.createdAt ?? 0,
-      updatedAt: track.groupUpdatedAt ?? track.updatedAt ?? track.createdAt ?? 0,
+      fileCreatedAt: null,
+      fileModifiedAt: null,
       versions: [],
     };
-    group.createdAt = Math.min(group.createdAt || Infinity, track.groupCreatedAt ?? track.createdAt ?? group.createdAt);
-    group.updatedAt = Math.max(group.updatedAt, track.groupUpdatedAt ?? track.updatedAt ?? track.createdAt ?? 0);
+    if (track.fileCreatedAt != null) {
+      group.fileCreatedAt = Math.min(group.fileCreatedAt ?? Infinity, track.fileCreatedAt);
+    }
+    if (track.fileModifiedAt != null) {
+      group.fileModifiedAt = Math.max(group.fileModifiedAt ?? -Infinity, track.fileModifiedAt);
+    }
     group.versions.push(track);
     groups.set(groupId, group);
   });
@@ -2643,8 +2647,8 @@ function ProjectView({ project, capsules, capsulesLoading, onOpenCapsule, playin
   const groups = useMemo(() => {
     const ordered = [...baseGroups];
     if (trackSortMode === "alphabetical") ordered.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: "base" }));
-    if (trackSortMode === "dateAdded") ordered.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
-    if (trackSortMode === "dateModified") ordered.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+    if (trackSortMode === "fileCreated") ordered.sort((a, b) => (b.fileCreatedAt ?? -Infinity) - (a.fileCreatedAt ?? -Infinity) || 0);
+    if (trackSortMode === "fileModified") ordered.sort((a, b) => (b.fileModifiedAt ?? -Infinity) - (a.fileModifiedAt ?? -Infinity) || 0);
     return ordered;
   }, [baseGroups, trackSortMode]);
   const [editingGroupId, setEditingGroupId] = useState("");
@@ -2801,7 +2805,7 @@ function ProjectView({ project, capsules, capsulesLoading, onOpenCapsule, playin
                 {CAPSULES_ENABLED && <button type="button" disabled={!groups.length} onClick={() => runProjectAction(onCreateCapsule)}><ShareNetwork size={16} />Make capsule</button>}
                 <button type="button" className={`project-sort-trigger${projectSortOpen ? " is-open" : ""}`} onClick={() => setProjectSortOpen((open) => !open)} aria-expanded={projectSortOpen}><ArrowsDownUp size={16} /><span>Sort</span>{projectSortOpen ? <CaretDown size={14} /> : <CaretRight size={14} />}</button>
                 {projectSortOpen && <div className="project-sort-options" role="group" aria-label="Sort project tracks">
-                  {[["manual", "Manual"], ["alphabetical", "Alphabetical"], ["dateAdded", "Date added"], ["dateModified", "Date modified"]].map(([mode, label]) => <button type="button" key={mode} aria-pressed={trackSortMode === mode} onClick={() => sortGroups(mode)}>{trackSortMode === mode ? <Check size={15} /> : <span className="project-sort-check-spacer" />}<span>{label}</span></button>)}
+                  {[["manual", "Manual"], ["alphabetical", "Alphabetical"], ["fileCreated", "Date created"], ["fileModified", "Date modified"]].map(([mode, label]) => <button type="button" key={mode} aria-pressed={trackSortMode === mode} onClick={() => sortGroups(mode)}>{trackSortMode === mode ? <Check size={15} /> : <span className="project-sort-check-spacer" />}<span>{label}</span></button>)}
                 </div>}
                 <span className="project-actions-divider" />
                 <button type="button" onClick={() => runProjectAction(onEditProject)}><NotePencil size={16} />Edit details</button>
