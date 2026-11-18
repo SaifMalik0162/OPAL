@@ -2159,7 +2159,7 @@ function App({ initialAppearance = DEFAULT_APPEARANCE, canReconcileAppearanceAss
     <div className={`ambient-field${visibleAppearance.themeId === "custom" && visibleBackgroundUrl ? " has-custom-image" : ""}`} aria-hidden="true">
       {visibleAppearance.themeId === "custom" && visibleBackgroundUrl && <img className="appearance-background-image" src={visibleBackgroundUrl} alt="" />}
     </div>
-    <header className="topbar" data-tauri-drag-region="deep" onMouseDown={handleWindowMouseDown}>
+    <header className="topbar" onMouseDown={handleWindowMouseDown}>
       <div className="topbar-left"><button className="brand-lockup" type="button" onClick={() => returnToLibrary()} aria-label="Open OPAL library"><img className="brand-mark" src="/opal-mark.png" alt="" /><span className="brand-name">OPAL</span></button>{(import.meta.env.DEV || import.meta.env.VITE_OPAL_DEVELOPMENT === "1") && <span className="development-badge">Development</span>}<label className="search-field"><MagnifyingGlass size={14} weight="regular" /><input ref={searchInputRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search" />{query && <button type="button" className="clear-search" onClick={() => setQuery("")} aria-label="Clear search"><X size={13} /></button>}</label></div>
       <div className="top-navigation" role="group" aria-label="Library layout">
         <button type="button" className={carouselShowing ? "is-active" : ""} aria-pressed={carouselShowing} onClick={() => returnToLibrary("carousel")}>Carousel</button>

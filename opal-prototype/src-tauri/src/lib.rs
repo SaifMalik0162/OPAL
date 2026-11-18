@@ -50,7 +50,7 @@ use window_vibrancy::{
 };
 
 #[cfg(target_os = "windows")]
-use window_vibrancy::{apply_acrylic, apply_blur, apply_mica};
+use window_vibrancy::apply_mica;
 
 #[derive(Clone)]
 struct StorageRoots {
@@ -4665,13 +4665,16 @@ fn configure_window(window: &tauri::WebviewWindow) {
 
     #[cfg(target_os = "windows")]
     {
-        if apply_mica(window, Some(true)).is_ok() {
-            log::info!("OPAL Windows Mica applied");
-        } else if apply_acrylic(window, Some((23, 18, 47, 220))).is_ok() {
-            log::info!("OPAL Windows Acrylic applied");
-        } else {
-            let _ = apply_blur(window, Some((23, 18, 47, 220)));
-            log::info!("OPAL Windows blur fallback applied");
+        // Acrylic and Blur have documented move/resize stalls on affected Windows
+        // versions. Keep Mica where supported and use an opaque fallback elsewhere.
+        match apply_mica(window, Some(true)) {
+            Ok(()) => log::info!("OPAL Windows Mica applied"),
+            Err(error) => {
+                log::info!("Windows Mica unavailable; using solid background: {error}");
+                if let Err(error) = window.set_background_color(Some(tauri::window::Color(23, 18, 47, 255))) {
+                    log::warn!("Could not set Windows fallback background: {error}");
+                }
+            }
         }
     }
 
