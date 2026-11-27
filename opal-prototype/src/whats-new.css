@@ -98,7 +98,7 @@
 
 .whats-new-theme-presets {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 5px;
 }
 
@@ -201,3 +201,15 @@
   .whats-new-copy { padding: 19px 22px; }
   .whats-new-copy h2 { font-size: clamp(32px, 8vw, 42px); }
 }
+
+/* Alpha 5.3: selection and versions, with the two new palettes beneath. */
+.whats-new-track-preview { position: relative; isolation: isolate; overflow: hidden; padding: 16px 12px 12px; border-radius: 12px; background: var(--swatch-background); }
+.whats-new-preview-background { position: absolute; z-index: -1; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: brightness(.35); }
+.whats-new-preview-track { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 11px 8px; border: 1px solid transparent; border-radius: 9px; }
+.whats-new-preview-track + .whats-new-preview-track { margin-top: 4px; }
+.whats-new-preview-track.is-selected { border-color: var(--accent-outline); background: var(--accent-wash); }
+.whats-new-preview-check { display: grid; width: 18px; height: 18px; place-items: center; color: var(--muted); font-size: 8px; }
+.whats-new-preview-track.is-selected .whats-new-preview-check { border: 1px solid var(--accent-outline); border-radius: 50%; color: var(--opal-accent-bright); }
+.whats-new-preview-track strong { display: block; overflow: hidden; color: var(--ivory); font-size: 11px; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
+.whats-new-preview-track small { display: block; margin-top: 4px; color: var(--muted); font-size: 8px; }
+.whats-new-preview-track time { color: var(--muted); font-size: 9px; font-variant-numeric: tabular-nums; }

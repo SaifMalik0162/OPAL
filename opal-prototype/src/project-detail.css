@@ -377,3 +377,54 @@
   .track-details-actions { padding-top: 14px; gap: 8px; }
   .track-details-actions .button { min-height: 44px; }
 }
+
+/* Keep the original row geometry; selection adds only a checkmark. */
+.project-detail-screen .project-main-column .track-row {
+  user-select: none;
+  -webkit-user-select: none;
+  grid-template-columns: minmax(0, 1fr) auto 80px;
+  gap: 5px;
+}
+.project-detail-screen .project-main-column .track-row > .track-main { grid-column: 1; grid-row: 1; min-width: 0; }
+.project-detail-screen .project-main-column .track-row > .track-duration { grid-column: 2; grid-row: 1; white-space: nowrap; }
+.project-detail-screen .project-main-column .track-row > .track-actions { grid-column: 3; grid-row: 1; }
+.project-detail-screen .project-main-column .track-row.is-selected {
+  background: var(--accent-wash);
+  border-color: var(--accent-outline);
+  box-shadow: inset 2px 0 0 var(--opal-accent);
+}
+.project-detail-screen .project-main-column .track-row.is-dragging { opacity: .6; box-shadow: none; }
+.project-detail-screen .project-track-group { position: relative; }
+.project-track-group.drop-before::before, .project-track-group.drop-after::after {
+  content: "";
+  position: absolute;
+  z-index: 4;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--opal-accent-bright);
+  box-shadow: 0 0 0 3px var(--accent-wash);
+  pointer-events: none;
+}
+.project-track-group.drop-before::before { top: -1px; }
+.project-track-group.drop-after::after { bottom: -1px; }
+.track-move-destinations { max-height: 180px; overflow-y: auto; margin: 2px 0 5px 12px; padding-left: 5px; border-left: 1px solid var(--accent-outline); }
+.track-move-destinations button { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.track-move-destinations > span { display: block; padding: 8px; color: var(--muted); font-size: 11px; }
+@media (max-width: 600px) {
+  .project-detail-screen .project-main-column .track-row { grid-template-columns: minmax(0, 1fr) auto 58px; }
+}
+
+.project-detail-screen .track-number .track-selection-mark {
+  display: grid;
+  width: 21px;
+  height: 21px;
+  place-items: center;
+  border: 1px solid var(--accent-outline);
+  border-radius: 50%;
+  background: var(--accent-wash);
+  color: var(--opal-accent-bright);
+}
+.project-detail-screen .track-number .track-selection-mark svg { opacity: 1; }
+.track-selection-announcement { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; pointer-events: none; }

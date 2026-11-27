@@ -3221,6 +3221,79 @@ fn delete_track(
     load_project(&connection, &roots, &project_id)
 }
 
+// Move or delete complete song groups as one operation, including every version.
+#[tauri::command(rename = "changeTrackGroups", rename_all = "camelCase")]
+fn change_track_groups(
+    app: tauri::AppHandle,
+    project_id: String,
+    group_ids: Vec<String>,
+    destination_id: Option<String>,
+) -> Result<Vec<ProjectDto>, String> {
+    let _operation = lock_library_operation()?;
+    let roots = prepare_storage(&app)?;
+    let mut connection = open_database(&roots.db_path)?;
+    change_track_groups_inner(&mut connection, &roots, &project_id, &group_ids, destination_id.as_deref())
+}
+
+fn change_track_groups_inner(
+    connection: &mut Connection,
+    roots: &StorageRoots,
+    project_id: &str,
+    group_ids: &[String],
+    destination_id: Option<&str>,
+) -> Result<Vec<ProjectDto>, String> {
+    if group_ids.is_empty() || group_ids.iter().collect::<HashSet<_>>().len() != group_ids.len() {
+        return Err("Choose a valid selection of tracks.".into());
+    }
+    let transaction = connection.transaction().map_err(|e| e.to_string())?;
+    if let Some(destination) = destination_id {
+        let exists: bool = transaction.query_row("SELECT EXISTS(SELECT 1 FROM projects WHERE id = ?1)", [destination], |r| r.get(0)).map_err(|e| e.to_string())?;
+        if destination == project_id || !exists { return Err("Choose another existing project.".into()); }
+    }
+    // Resolve and validate the complete selection before changing any records.
+    let mut tracks = Vec::new();
+    for group in group_ids {
+        let valid: bool = transaction.query_row("SELECT EXISTS(SELECT 1 FROM track_groups WHERE id = ?1 AND project_id = ?2)", params![group, project_id], |r| r.get(0)).map_err(|e| e.to_string())?;
+        if !valid { return Err("The selection changed. Reload the project and try again.".into()); }
+        let mut statement = transaction.prepare("SELECT id, managed_file_ref FROM tracks WHERE group_id = ?1 AND project_id = ?2 ORDER BY version_position, position").map_err(|e| e.to_string())?;
+        let rows = statement.query_map(params![group, project_id], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))).map_err(|e| e.to_string())?;
+        for row in rows { tracks.push(row.map_err(|e| e.to_string())?); }
+    }
+    if destination_id.is_some() {
+        for (id, _) in &tracks {
+            let referenced: bool = transaction.query_row("SELECT EXISTS(SELECT 1 FROM capsule_tracks WHERE track_id = ?1)", [id], |r| r.get(0)).map_err(|e| e.to_string())?;
+            if referenced { return Err("A selected track belongs to a Capsule. Remove that Capsule before moving the track.".into()); }
+        }
+    }
+    for group in group_ids {
+        transaction.execute("DELETE FROM sequence_transitions WHERE from_group_id = ?1 OR to_group_id = ?1", [group]).map_err(|e| e.to_string())?;
+    }
+    if let Some(destination) = destination_id {
+        let group_start: i64 = transaction.query_row("SELECT COALESCE(MAX(position), -1) + 1 FROM track_groups WHERE project_id = ?1", [destination], |r| r.get(0)).map_err(|e| e.to_string())?;
+        let track_start: i64 = transaction.query_row("SELECT COALESCE(MAX(position), -1) + 1 FROM tracks WHERE project_id = ?1", [destination], |r| r.get(0)).map_err(|e| e.to_string())?;
+        for (offset, group) in group_ids.iter().enumerate() {
+            transaction.execute("UPDATE track_groups SET project_id = ?1, position = ?2 WHERE id = ?3", params![destination, group_start + offset as i64, group]).map_err(|e| e.to_string())?;
+        }
+        for (offset, (id, _)) in tracks.iter().enumerate() {
+            transaction.execute("UPDATE tracks SET project_id = ?1, position = ?2 WHERE id = ?3", params![destination, track_start + offset as i64, id]).map_err(|e| e.to_string())?;
+        }
+        transaction.execute("UPDATE projects SET updated_at = ?1 WHERE id = ?2", params![now_ms(), destination]).map_err(|e| e.to_string())?;
+    } else {
+        for (id, _) in &tracks { delete_capsules_referencing_track(&transaction, id)?; }
+        for group in group_ids {
+            transaction.execute("DELETE FROM track_groups WHERE id = ?1 AND project_id = ?2", params![group, project_id]).map_err(|e| e.to_string())?;
+        }
+    }
+    transaction.execute("UPDATE projects SET updated_at = ?1 WHERE id = ?2", params![now_ms(), project_id]).map_err(|e| e.to_string())?;
+    transaction.commit().map_err(|e| e.to_string())?;
+    if destination_id.is_none() {
+        for (_, file) in tracks { let _ = remove_managed_file_if_unreferenced(connection, roots, &file); }
+    }
+    let mut projects = vec![load_project(connection, roots, project_id)?];
+    if let Some(destination) = destination_id { projects.push(load_project(connection, roots, destination)?); }
+    Ok(projects)
+}
+
 #[tauri::command(rename = "deleteProject", rename_all = "camelCase")]
 fn delete_project(app: tauri::AppHandle, project_id: String) -> Result<(), String> {
     let _operation = lock_library_operation()?;
@@ -4902,6 +4975,7 @@ pub fn run() {
             add_capsule_response,
             save_note,
             delete_track,
+            change_track_groups,
             delete_project,
             set_project_artwork,
             remove_project_artwork,
@@ -4935,6 +5009,40 @@ mod tests {
             artwork_dir: root.join("artwork"),
             staging_dir: root.join(".staging"),
         }
+    }
+
+    #[test]
+    fn bulk_groups_move_versions_and_notes_atomically_and_validate_selection() {
+        let directory = tempdir().unwrap();
+        let roots = test_roots(directory.path());
+        seed_full_library(&roots);
+        let mut connection = open_database(&roots.db_path).unwrap();
+        connection.execute("INSERT INTO projects(id, title, description, created_at, updated_at) VALUES('dest', 'Destination', '', 1, 1)", []).unwrap();
+        let before = load_project(&connection, &roots, "p").unwrap();
+        let group = before.tracks[0].group_id.clone();
+        let selection = vec![group.clone(), "missing".into()];
+        assert!(change_track_groups_inner(&mut connection, &roots, "p", &selection, Some("dest")).is_err());
+        assert_eq!(load_project(&connection, &roots, "p").unwrap().tracks.len(), before.tracks.len());
+        assert!(load_project(&connection, &roots, "dest").unwrap().tracks.is_empty());
+        // Capsule references must prevent a move without deleting anything.
+        assert!(change_track_groups_inner(&mut connection, &roots, "p", &[group.clone()], Some("dest")).is_err());
+        connection.execute("DELETE FROM listening_capsules", []).unwrap();
+        let ids: Vec<String> = before.tracks.iter().map(|track| track.group_id.clone()).collect::<HashSet<_>>().into_iter().collect();
+        let changed = change_track_groups_inner(&mut connection, &roots, "p", &ids, Some("dest")).unwrap();
+        assert!(changed[0].tracks.is_empty());
+        assert_eq!(changed[1].tracks.len(), before.tracks.len());
+        for track in &before.tracks {
+            let moved = changed[1].tracks.iter().find(|item| item.id == track.id).unwrap();
+            assert_eq!(moved.group_id, track.group_id);
+            assert_eq!(moved.managed_file_ref, track.managed_file_ref);
+            assert_eq!(moved.is_current, track.is_current);
+            assert_eq!(moved.note.as_ref().map(|note| &note.text), track.note.as_ref().map(|note| &note.text));
+            assert_eq!(moved.moments.len(), track.moments.len());
+        }
+        let removed = change_track_groups_inner(&mut connection, &roots, "dest", &ids, None).unwrap();
+        assert!(removed[0].tracks.is_empty());
+        let remaining: i64 = connection.query_row("SELECT COUNT(*) FROM track_groups WHERE project_id = 'dest'", [], |r| r.get(0)).unwrap();
+        assert_eq!(remaining, 0);
     }
 
     #[test]
