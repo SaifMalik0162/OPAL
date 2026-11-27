@@ -892,10 +892,8 @@
 }
 
 .version-menu {
-  z-index: 31;
-  position: absolute;
-  top: calc(100% + 7px);
-  right: 0;
+  z-index: 1200;
+  position: fixed;
   display: grid;
   width: min(194px, calc(100vw - 32px));
   max-height: min(70dvh, 540px);

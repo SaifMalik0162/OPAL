@@ -939,128 +939,6 @@
   white-space: nowrap;
 }
 
-.version-ribbon {
-  display: flex;
-  min-width: 0;
-  align-items: stretch;
-  gap: 7px;
-  overflow-x: auto;
-  padding: 7px 0 10px 55px;
-  border-bottom: 1px solid var(--line);
-  scrollbar-width: thin;
-}
-
-.version-chip-wrap {
-  position: relative;
-  display: flex;
-  flex: 0 0 auto;
-  align-items: stretch;
-}
-
-.version-chip {
-  display: flex;
-  min-width: 126px;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 27px 7px 8px;
-  border: 1px solid color-mix(in srgb, var(--text-overlay-ink) 12%, transparent);
-  border-radius: 11px;
-  background: color-mix(in srgb, var(--text-overlay-ink) 5.5%, transparent);
-  color: var(--ivory);
-  cursor: pointer;
-  text-align: left;
-  transition: border-color .18s ease, background .18s ease, transform .18s ease;
-}
-
-.version-chip:hover, .version-chip:focus-visible {
-  border-color: color-mix(in srgb, var(--lavender) 50%, transparent);
-  background: color-mix(in srgb, var(--lavender) 12%, transparent);
-  transform: translateY(-1px);
-}
-
-.version-chip.is-current {
-  border-color: color-mix(in srgb, var(--text-overlay-ink) 72%, transparent);
-  background: linear-gradient(135deg, color-mix(in srgb, var(--lavender) 24%, transparent), color-mix(in srgb, var(--lavender) 10%, transparent));
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-overlay-ink) 12%, transparent), 0 5px 16px color-mix(in srgb, var(--surface-inset-ink) 12%, transparent);
-}
-
-.version-chip.is-current .version-chip-marker {
-  background: var(--opal-accent);
-  color: var(--accent-foreground);
-  box-shadow: 0 0 14px color-mix(in srgb, var(--text-overlay-ink) 22%, transparent);
-}
-
-.version-chip.is-playing {
-  box-shadow: inset 3px 0 var(--lavender-bright);
-}
-
-.version-chip-marker {
-  display: grid;
-  width: 20px;
-  height: 20px;
-  flex: 0 0 auto;
-  place-items: center;
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--surface-inset-ink) 30%, transparent);
-  color: var(--lavender-bright);
-  font-size: 8px;
-}
-
-.version-chip > span:last-child {
-  display: grid;
-  min-width: 0;
-  gap: 3px;
-}
-
-.version-chip strong, .version-chip small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.version-chip strong {
-  max-width: 86px;
-  font-family: Georgia, serif;
-  font-size: 11px;
-  font-weight: 400;
-}
-
-.version-chip small {
-  color: var(--muted);
-  font-size: 8px;
-}
-
-.version-chip-menu {
-  position: absolute;
-  top: 50%;
-  right: 3px;
-  display: grid;
-  width: 24px;
-  height: 24px;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  transform: translateY(-50%);
-}
-
-.version-chip-menu:hover, .version-chip-menu:focus-visible, .version-chip-wrap.is-menu-open .version-chip-menu {
-  background: color-mix(in srgb, var(--lavender) 20%, transparent);
-  color: var(--lavender-bright);
-}
-
-@media (max-width: 760px) {
-  .version-ribbon {
-    padding-left: 46px;
-  }
-  .version-chip {
-    min-width: 116px;
-  }
-}
-
 .moment-marker {
   position: absolute;
   z-index: 4;
@@ -1649,6 +1527,13 @@
 .project-actions-menu .project-sort-options button[aria-pressed="true"] { background: color-mix(in srgb, var(--lavender) 15%, transparent); color: var(--ivory); }
 .project-sort-options button[aria-pressed="true"] svg { color: var(--lavender-bright); }
 .project-sort-check-spacer { width: 15px; height: 15px; flex: 0 0 15px; }
+.project-sort-direction {
+  display: grid;
+  gap: 3px;
+  margin-top: 3px;
+  padding-top: 5px;
+  border-top: 1px solid color-mix(in srgb, var(--text-overlay-ink) 13%, transparent);
+}
 .project-sort-options button > span:last-child { color: color-mix(in srgb, var(--text-overlay-ink) 82%, transparent); }
 
 @keyframes project-sort-open {

@@ -86,11 +86,15 @@ test("custom preferences clamp values and accept only generated IDs and hex colo
   assert.deepEqual(normalizeAppearance({ version: 1, themeId: "custom", custom: { assetId: "../../outside" } }), DEFAULT_APPEARANCE);
 });
 
-test("writes a normalized versioned appearance preference", () => {
-  const storage = memoryStorage();
-  const result = writeAppearancePreference({ version: 1, themeId: "cream", custom: null }, storage);
-  assert.equal(result.ok, true);
-  assert.deepEqual(JSON.parse(storage.read()), { version: 1, themeId: "cream", custom: null });
+test("every shipped preset survives saving and reopening appearance preferences", () => {
+  for (const theme of THEMES) {
+    const storage = memoryStorage();
+    const expected = { version: 1, themeId: theme.id, custom: null };
+    const result = writeAppearancePreference(expected, storage);
+    assert.equal(result.ok, true, theme.label);
+    assert.deepEqual(JSON.parse(storage.read()), expected, theme.label);
+    assert.deepEqual(readAppearancePreference(storage).appearance, expected, theme.label);
+  }
 });
 
 test("storage write failures leave the caller with a recoverable result", () => {

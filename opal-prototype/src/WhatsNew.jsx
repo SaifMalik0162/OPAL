@@ -1,19 +1,19 @@
 import React from "react";
-import { ArrowUpRight, Cards, ImageSquare, Palette, Waveform } from "@phosphor-icons/react";
+import { ArrowUpRight, ArrowsDownUp, Check, Checks, Info, Palette } from "@phosphor-icons/react";
 import { ThemeSwatch, themeSwatchStyle } from "./appearance/ThemeSwatch.jsx";
-import { THEME_BY_ID, THEMES } from "./appearance/themes.js";
+import { THEME_BY_ID } from "./appearance/themes.js";
 import "./whats-new.css";
 
 export const WHATS_NEW_RELEASE = {
-  version: "0.1.0-alpha.5.2",
-  label: "Alpha 5.2",
+  version: "0.1.0-alpha.5.3",
+  label: "Alpha 5.3",
 };
 
 const highlights = [
-  { Icon: Palette, title: "Five built-in themes", detail: "Preview OPAL, Lavender, Deep Plum, Cream, and Obsidian before you apply one." },
-  { Icon: ImageSquare, title: "Bring your own background", detail: "Choose an image from your Mac or PC, then adjust its framing, dimming, and blur. It stays on your device." },
-  { Icon: Waveform, title: "A player that matches", detail: "Player colors follow your theme. OPAL can pull an accent from your image, or you can choose your own." },
-  { Icon: Cards, title: "Glass throughout the Library", detail: "Flipped covers keep their artwork behind the track list. Audio drop highlights match your theme." },
+  { Icon: ArrowsDownUp, title: "More sorting options", detail: "Sort by name, date created, or date modified in either direction. Your sort order is saved for each project." },
+  { Icon: Info, title: "Updated track details", detail: "See original filenames and audio details, and switch between versions of a track." },
+  { Icon: Checks, title: "Select multiple tracks", detail: "Shift-click a range or Cmd/Ctrl-click individual tracks to move, delete, or reorder them together." },
+  { Icon: Palette, title: "Burgundy and Jade themes", detail: "Two new themes, with matching colors across the app and player." },
 ];
 
 function ThemeGallery({ appearance, backgroundUrl }) {
@@ -28,11 +28,16 @@ function ThemeGallery({ appearance, backgroundUrl }) {
       <span className="whats-new-art-brand"><img src="/opal-mark.png" alt="" />OPAL</span>
       <div className="whats-new-theme-gallery">
         <figure className="whats-new-theme-hero">
-          <ThemeSwatch imageUrl={previewImage} style={previewStyle} />
-          <figcaption>{previewImage ? "Your custom background" : "Theme preview"}</figcaption>
+          <div className="whats-new-track-preview" style={previewStyle}>
+            {previewImage && <img className="whats-new-preview-background" src={previewImage} alt="" />}
+            {["Untitled track 1", "Untitled track 2", "Untitled track 3"].map((title, index) => <div key={title} className={`whats-new-preview-track${index < 2 ? " is-selected" : ""}`}>
+              <span className="whats-new-preview-check">{index < 2 ? <Check size={11} weight="bold" /> : "3"}</span>
+              <span><strong>{title}</strong><small>{index === 1 ? "Warm mix · 3 versions" : "Original"}</small></span><time>{["2:41", "3:12", "2:58"][index]}</time>
+            </div>)}
+          </div>
         </figure>
         <div className="whats-new-theme-presets">
-          {THEMES.map(({ id, label, colors }) => (
+          {[THEME_BY_ID.burgundy, THEME_BY_ID.jade].map(({ id, label, colors }) => (
             <figure key={id}>
               <ThemeSwatch style={themeSwatchStyle(colors)} />
               <figcaption>{label}</figcaption>
@@ -50,7 +55,7 @@ export function WhatsNew({ appearance, backgroundUrl, onClose, onTryTheme }) {
       <ThemeGallery appearance={appearance} backgroundUrl={backgroundUrl} />
       <div className="whats-new-copy">
         <span className="whats-new-kicker">{WHATS_NEW_RELEASE.label} · What’s new</span>
-        <h2 id="whats-new-title">Make OPAL <em>yours.</em></h2>
+        <h2 id="whats-new-title">New in<br /><em>Alpha 5.3</em></h2>
         <ul className="whats-new-highlights">
           {highlights.map(({ Icon, title, detail }) => (
             <li key={title}>

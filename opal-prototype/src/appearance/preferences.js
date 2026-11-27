@@ -1,7 +1,7 @@
 export const APPEARANCE_STORAGE_KEY = "opal.appearance.v1";
 export const DEFAULT_APPEARANCE = Object.freeze({ version: 1, themeId: "opal", custom: null });
 
-const THEME_IDS = new Set(["opal", "lavender", "deep-plum", "cream", "obsidian", "custom"]);
+const THEME_IDS = new Set(["opal", "lavender", "deep-plum", "burgundy", "jade", "cream", "obsidian", "custom"]);
 const ASSET_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/i;
 
