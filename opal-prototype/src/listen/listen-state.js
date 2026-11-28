@@ -23,7 +23,11 @@ export function listenStateReducer(state, action) {
   switch (action.type) {
     case "OPEN_CAROUSEL_SURFACE": {
       if (!["tracks", "notes"].includes(action.surface) || !action.projectId) return state;
-      return { ...state, carouselSurface: { type: action.surface, projectId: action.projectId } };
+      return {
+        ...state,
+        carouselSurface: { type: action.surface, projectId: action.projectId },
+        listen: { ...state.listen, transition: "closed", utility: { type: "closed" } },
+      };
     }
     case "CLOSE_CAROUSEL_SURFACE":
       if (action.projectId && state.carouselSurface.projectId !== action.projectId) return state;
@@ -31,6 +35,7 @@ export function listenStateReducer(state, action) {
     case "OPEN_LISTEN":
       return {
         ...state,
+        carouselSurface: { type: "closed" },
         listen: {
           ...state.listen,
           transition: "opening",

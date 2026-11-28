@@ -26,6 +26,13 @@ export function noteKeyParts(key) {
   };
 }
 
+export function noteKeyForContext({ projectId, targetId = "project" } = {}) {
+  if (typeof projectId !== "string" || !projectId || typeof targetId !== "string" || !targetId) {
+    throw new Error("A project ID and note target ID are required.");
+  }
+  return `${projectId}:${targetId}`;
+}
+
 export function createNoteStore(storage) {
   const journal = safeStorage(storage);
   const drafts = readDrafts(journal);

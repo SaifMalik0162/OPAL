@@ -27,6 +27,25 @@ test("Listen transitions keep binding separate from transport", () => {
   assert.deepEqual(state.listen.binding, { type: "playback" });
 });
 
+test("opening Listen closes an active carousel surface", () => {
+  let state = createInitialListenState();
+  state = listenStateReducer(state, { type: "OPEN_CAROUSEL_SURFACE", surface: "notes", projectId: "project-a" });
+  state = listenStateReducer(state, { type: "OPEN_LISTEN" });
+  assert.deepEqual(state.carouselSurface, { type: "closed" });
+  assert.equal(state.listen.transition, "opening");
+});
+
+test("opening a carousel surface closes Listen and its utility", () => {
+  let state = createInitialListenState();
+  state = listenStateReducer(state, { type: "OPEN_LISTEN" });
+  state = listenStateReducer(state, { type: "LISTEN_OPENED" });
+  state = listenStateReducer(state, { type: "OPEN_LISTEN_UTILITY", utility: "queue" });
+  state = listenStateReducer(state, { type: "OPEN_CAROUSEL_SURFACE", surface: "tracks", projectId: "project-a" });
+  assert.deepEqual(state.carouselSurface, { type: "tracks", projectId: "project-a" });
+  assert.equal(state.listen.transition, "closed");
+  assert.deepEqual(state.listen.utility, { type: "closed" });
+});
+
 test("Listen utilities are mutually exclusive", () => {
   let state = createInitialListenState();
   state = listenStateReducer(state, { type: "OPEN_LISTEN_UTILITY", utility: "queue" });

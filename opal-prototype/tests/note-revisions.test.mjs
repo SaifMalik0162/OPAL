@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { shouldApplyNoteSave } from "../src/note-revisions.js";
-import { createNoteStore, noteKeyParts } from "../src/note-store.js";
+import { createNoteStore, noteKeyForContext, noteKeyParts } from "../src/note-store.js";
 
 const current = {
   currentRevision: 4,
@@ -39,6 +39,12 @@ test("ignores a save response for a previous note context", () => {
 test("maps project and track note keys to one backend owner", () => {
   assert.deepEqual(noteKeyParts("project-1:project"), { projectId: "project-1", trackId: null });
   assert.deepEqual(noteKeyParts("project-1:track-1"), { projectId: null, trackId: "track-1" });
+});
+
+test("uses an explicit project and target identity for project and version notes", () => {
+  assert.equal(noteKeyForContext({ projectId: "project-1", targetId: "project" }), "project-1:project");
+  assert.equal(noteKeyForContext({ projectId: "project-1", targetId: "version-1" }), "project-1:version-1");
+  assert.throws(() => noteKeyForContext({ projectId: "", targetId: "project" }), /project ID and note target ID/);
 });
 
 test("serializes saves and keeps a newer draft after an older save resolves", async () => {
