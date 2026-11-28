@@ -15,8 +15,14 @@ function normalizeBinding(binding) {
     type: "preview",
     projectId: binding.projectId,
     trackId: binding.trackId,
-    pendingSeekMs: Math.max(0, Number(binding.pendingSeekMs) || 0),
+    pendingSeekMs: clampPreviewPosition(binding.pendingSeekMs),
   };
+}
+
+export function clampPreviewPosition(positionMs, durationMs = 0) {
+  const position = Math.max(0, Number(positionMs) || 0);
+  const duration = Number(durationMs);
+  return Number.isFinite(duration) && duration > 0 ? Math.min(position, duration) : position;
 }
 
 export function listenStateReducer(state, action) {
@@ -68,6 +74,20 @@ export function listenStateReducer(state, action) {
             trackId: action.trackId,
             pendingSeekMs: action.pendingSeekMs,
           }),
+        },
+      };
+    case "UPDATE_LISTEN_PREVIEW_SEEK":
+      if (state.listen.binding.type !== "preview") return state;
+      if (action.projectId && state.listen.binding.projectId !== action.projectId) return state;
+      if (action.trackId && state.listen.binding.trackId !== action.trackId) return state;
+      return {
+        ...state,
+        listen: {
+          ...state.listen,
+          binding: {
+            ...state.listen.binding,
+            pendingSeekMs: clampPreviewPosition(action.pendingSeekMs, action.durationMs),
+          },
         },
       };
     case "OPEN_LISTEN_UTILITY": {

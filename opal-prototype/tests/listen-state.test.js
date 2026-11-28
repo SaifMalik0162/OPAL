@@ -27,6 +27,18 @@ test("Listen transitions keep binding separate from transport", () => {
   assert.deepEqual(state.listen.binding, { type: "playback" });
 });
 
+test("preview seek is local, clamped, and ignored after switching target", () => {
+  let state = createInitialListenState();
+  state = listenStateReducer(state, { type: "BIND_LISTEN_PREVIEW", projectId: "project-b", trackId: "track-b" });
+  state = listenStateReducer(state, { type: "UPDATE_LISTEN_PREVIEW_SEEK", projectId: "project-b", trackId: "track-b", pendingSeekMs: 9000, durationMs: 5000 });
+  assert.equal(state.listen.binding.pendingSeekMs, 5000);
+  state = listenStateReducer(state, { type: "BIND_LISTEN_PREVIEW", projectId: "project-b", trackId: "track-c" });
+  const switched = listenStateReducer(state, { type: "UPDATE_LISTEN_PREVIEW_SEEK", projectId: "project-b", trackId: "track-b", pendingSeekMs: 1200, durationMs: 5000 });
+  assert.deepEqual(switched, state);
+  state = listenStateReducer(state, { type: "BIND_LISTEN_PLAYBACK" });
+  assert.deepEqual(listenStateReducer(state, { type: "UPDATE_LISTEN_PREVIEW_SEEK", pendingSeekMs: 1200 }), state);
+});
+
 test("opening Listen closes an active carousel surface", () => {
   let state = createInitialListenState();
   state = listenStateReducer(state, { type: "OPEN_CAROUSEL_SURFACE", surface: "notes", projectId: "project-a" });
