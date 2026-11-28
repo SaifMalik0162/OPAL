@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, useId } from "react";
 import { convertFileSrc, invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { createPortal } from "react-dom";
@@ -23,11 +23,16 @@ import { TrackPlaybackIndicator } from "./TrackPlaybackIndicator.jsx";
 import { isCurrentPlaybackRequest, previousQueueIndex, repeatQueueIndex, shuffleQueue } from "./playback-queue.js";
 import { remainingGapMilliseconds } from "./playback-gap.js";
 import { reconcilePlayingQueue } from "./queue-state.js";
-import { shouldApplyNoteSave } from "./note-revisions.js";
 import { createNoteStore, noteKeyParts } from "./note-store.js";
+import { createNoteContextManager } from "./notes/note-context.js";
+import { useNoteContext } from "./notes/useNoteContext.js";
 import { playbackErrorMessage } from "./audio-playback-error.js";
 import { serializeDiagnosticsReport } from "./diagnostics-report.js";
-import { readCachedWaveform, writeCachedWaveform } from "./waveform-cache.js";
+import { WaveformProgress } from "./player/WaveformProgress.jsx";
+import { createInitialListenState, listenStateReducer } from "./listen/listen-state.js";
+import { useOverlayLayer } from "./useOverlayLayer.js";
+import { hasActiveOverlay } from "./overlay-coordinator.js";
+import { DialogFrame } from "./DialogFrame.jsx";
 import {
   ArrowsDownUp,
   ArrowCounterClockwise,
@@ -369,8 +374,7 @@ function App({ initialAppearance = DEFAULT_APPEARANCE, canReconcileAppearanceAss
   const [sortMode, setSortMode] = useState(readSortPreference);
   const [projectSection, setProjectSection] = useState("tracks");
   const [noteTargetId, setNoteTargetId] = useState(null);
-  const [noteText, setNoteText] = useState("");
-  const [noteStatus, setNoteStatus] = useState("saved");
+  const [listenUiState, dispatchListenUi] = useReducer(listenStateReducer, undefined, createInitialListenState);
   const [selectedMomentId, setSelectedMomentId] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -394,11 +398,8 @@ function App({ initialAppearance = DEFAULT_APPEARANCE, canReconcileAppearanceAss
   const repeatRef = useRef("off");
   const lastTimeUpdateRef = useRef(0);
   const momentShortcutRef = useRef(null);
-  const noteTimerRef = useRef(null);
-  const noteContextRef = useRef({ key: "", draftText: "", persistedText: "", revision: 0 });
-  const noteTextRef = useRef("");
-  const noteRevisionRef = useRef(0);
   const noteStoreRef = useRef(null);
+  const noteContextManagerRef = useRef(null);
   const searchInputRef = useRef(null);
   const closeInProgressRef = useRef(false);
   const importActiveProjectsRef = useRef(new Set());
@@ -406,6 +407,7 @@ function App({ initialAppearance = DEFAULT_APPEARANCE, canReconcileAppearanceAss
   const capsulePasswordRef = useRef("");
 
   if (!noteStoreRef.current) noteStoreRef.current = createNoteStore(window.localStorage);
+  if (!noteContextManagerRef.current) noteContextManagerRef.current = createNoteContextManager(noteStoreRef.current);
 
   useEffect(() => {
     if (!isTauri() || !canReconcileAppearanceAssets || appearanceMaintenanceRef.current) return;
@@ -505,6 +507,24 @@ function App({ initialAppearance = DEFAULT_APPEARANCE, canReconcileAppearanceAss
   const importProject = projects.find((project) => project.id === importTargetId) ?? selectedProject;
   const importTargetGroup = groupTracks(importProject).find((group) => group.id === importTargetGroupId) ?? null;
   const noteContextKey = selectedProject ? `${selectedProject.id}:${noteTargetId ?? "project"}` : "";
+  const selectedNote = selectedProject
+    ? noteTargetId
+      ? selectedProject.tracks.find((track) => track.id === noteTargetId)?.note
+      : selectedProject.projectNote
+    : null;
+  const noteContext = useNoteContext({
+    manager: noteContextManagerRef.current,
+    key: noteContextKey,
+    persistedText: selectedNote?.text ?? "",
+    onDebouncedSave: flushNoteSave,
+    onJournalError: () => setError("OPAL couldn’t keep a local recovery copy of this draft. Keep the window open while it saves."),
+    journalDraft: isTauri(),
+  });
+  const noteText = noteContext.text;
+  const noteStatus = noteContext.status;
+  const handleNoteChange = noteContext.update;
+  const noteContextDebounceRef = useRef(noteContext.cancelDebounce);
+  noteContextDebounceRef.current = noteContext.cancelDebounce;
   const progressValue = durationMs > 0 ? Math.min(100, (elapsedMs / durationMs) * 100) : 0;
 
   async function reloadProjects(preferredId = selectedId) {
@@ -629,7 +649,7 @@ function App({ initialAppearance = DEFAULT_APPEARANCE, canReconcileAppearanceAss
       return target?.matches?.("input, textarea, select, button, [contenteditable='true']");
     }
     function handleKeyboardShortcuts(event) {
-      if (showWelcome) return;
+      if (showWelcome || hasActiveOverlay()) return;
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         searchInputRef.current?.focus();
@@ -663,48 +683,6 @@ function App({ initialAppearance = DEFAULT_APPEARANCE, canReconcileAppearanceAss
   useEffect(() => {
     window.localStorage.setItem(SORT_STORAGE_KEY, sortMode);
   }, [sortMode]);
-
-  useEffect(() => {
-    if (!selectedProject) {
-      noteTextRef.current = "";
-      setNoteText("");
-      noteRevisionRef.current += 1;
-      noteContextRef.current = { key: "", draftText: "", persistedText: "", revision: noteRevisionRef.current };
-      return;
-    }
-    const note = noteTargetId ? selectedProject.tracks.find((track) => track.id === noteTargetId)?.note : selectedProject.projectNote;
-    const pendingText = noteStoreRef.current.get(noteContextKey);
-    const nextText = pendingText ?? note?.text ?? "";
-    noteTextRef.current = nextText;
-    noteRevisionRef.current += 1;
-    noteContextRef.current = { key: noteContextKey, draftText: nextText, persistedText: note?.text ?? "", revision: noteRevisionRef.current };
-    setNoteText(nextText);
-    setNoteStatus(pendingText !== undefined && pendingText !== (note?.text ?? "") ? "saving" : "saved");
-  }, [noteContextKey]);
-
-  useEffect(() => {
-    if (!noteContextKey) return undefined;
-    if (noteTextRef.current !== noteText) return undefined;
-    noteContextRef.current = { ...noteContextRef.current, draftText: noteText };
-    if (noteText === noteContextRef.current.persistedText) {
-      noteStoreRef.current.remove(noteContextKey);
-      return undefined;
-    }
-    if (!isTauri()) return undefined;
-    noteStoreRef.current.edit(noteContextKey, noteText);
-    if (noteStoreRef.current.getJournalError()) {
-      setNoteStatus("error");
-      setError("OPAL couldn’t keep a local recovery copy of this draft. Keep the window open while it saves.");
-    } else {
-      setNoteStatus("saving");
-    }
-    noteRevisionRef.current += 1;
-    if (noteTimerRef.current) clearTimeout(noteTimerRef.current);
-    noteTimerRef.current = setTimeout(() => { void flushNoteSave(); }, 650);
-    return () => {
-      if (noteTimerRef.current) clearTimeout(noteTimerRef.current);
-    };
-  }, [noteContextKey, noteText]);
 
   useEffect(() => {
     if (!isTauri()) return undefined;
@@ -818,46 +796,28 @@ function App({ initialAppearance = DEFAULT_APPEARANCE, canReconcileAppearanceAss
     }));
   }
 
-  async function persistNote(contextKey, text) {
+  async function saveNoteRecord(contextKey, text) {
     if (!isTauri() || !contextKey) return null;
     const { projectId, trackId } = noteKeyParts(contextKey);
-    const revision = noteContextRef.current.key === contextKey ? noteRevisionRef.current : -1;
-    try {
-      const savedNote = await invoke("saveNote", { projectId, trackId, text });
-      const isFresh = shouldApplyNoteSave({
-        requestRevision: revision,
-        currentRevision: noteRevisionRef.current,
-        requestKey: contextKey,
-        currentKey: noteContextRef.current.key,
-        requestText: text,
-        currentDraft: noteContextRef.current.draftText,
-      });
-      if (!isFresh) return savedNote;
-      noteContextRef.current = { ...noteContextRef.current, persistedText: text };
-      applySavedNote(savedNote);
-      setNoteStatus("saved");
-      setError("");
-      return savedNote;
-    } catch (saveError) {
-      const isCurrent = noteContextRef.current.key === contextKey && noteStoreRef.current.get(contextKey) === text;
-      if (isCurrent) {
-        setNoteStatus("error");
-        setError(String(saveError));
-      }
-      throw saveError;
-    }
+    return invoke("saveNote", { projectId, trackId, text });
+  }
+
+  async function persistNote(contextKey, text) {
+    if (!isTauri() || !contextKey) return null;
+    const savedNote = await noteContextManagerRef.current.persist(contextKey, text, saveNoteRecord, applySavedNote);
+    setError("");
+    return savedNote;
   }
 
   async function flushNoteSave() {
-    if (noteTimerRef.current) clearTimeout(noteTimerRef.current);
+    noteContextDebounceRef.current?.();
     if (!isTauri()) return true;
     try {
       await noteStoreRef.current.flush(persistNote);
       return true;
     } catch (saveError) {
-      const current = noteContextRef.current;
-      if (current.key && noteStoreRef.current.get(current.key) !== undefined) {
-        setNoteStatus("error");
+      const current = noteContextKey;
+      if (current && noteStoreRef.current.get(current) !== undefined) {
         setError(String(saveError));
       }
       return false;
@@ -888,6 +848,7 @@ function App({ initialAppearance = DEFAULT_APPEARANCE, canReconcileAppearanceAss
       scrollTop: window.scrollY,
     } : null;
     if (!(await flushNoteSave())) return;
+    dispatchListenUi({ type: "CLOSE_CAROUSEL_SURFACE" });
     if (libraryPosition) {
       libraryPositionRef.current = libraryPosition;
       if (!trackId && !noteTrackId) {
@@ -903,6 +864,7 @@ function App({ initialAppearance = DEFAULT_APPEARANCE, canReconcileAppearanceAss
 
   async function returnToLibrary(layout = libraryLayout) {
     if (!(await flushNoteSave())) return;
+    dispatchListenUi({ type: "CLOSE_CAROUSEL_SURFACE" });
     if (activeView !== "library" || layout !== libraryLayout) {
       const position = libraryPositionRef.current;
       if (position?.layout !== layout) {
@@ -939,22 +901,6 @@ function App({ initialAppearance = DEFAULT_APPEARANCE, canReconcileAppearanceAss
     if (!(await flushNoteSave())) return;
     setNoteTargetId(trackId);
     setProjectSection("notes");
-  }
-
-  function handleNoteChange(nextText) {
-    noteTextRef.current = nextText;
-    setNoteText(nextText);
-    if (noteContextKey && isTauri()) {
-      noteContextRef.current = { ...noteContextRef.current, draftText: nextText };
-      noteRevisionRef.current += 1;
-      noteStoreRef.current.edit(noteContextKey, nextText);
-      if (noteStoreRef.current.getJournalError()) {
-        setNoteStatus("error");
-        setError("OPAL couldn’t keep a local recovery copy of this draft. Keep the window open while it saves.");
-      } else {
-        setNoteStatus("saving");
-      }
-    }
   }
 
   function handleWindowMouseDown(event) {
@@ -1670,7 +1616,7 @@ function App({ initialAppearance = DEFAULT_APPEARANCE, canReconcileAppearanceAss
               ?? updated.tracks.find((track) => (track.groupId ?? track.id) === group.id && track.isCurrent);
             return visibleTrack ? { project: updated, track: visibleTrack } : null;
           });
-          noteStoreRef.current.remove(`${project.id}:${version.id}`);
+          noteContextManagerRef.current.remove(`${project.id}:${version.id}`);
           if (noteTargetId === version.id) setNoteTargetId(null);
           setError("");
           return true;
@@ -1701,7 +1647,7 @@ function App({ initialAppearance = DEFAULT_APPEARANCE, canReconcileAppearanceAss
           playbackRef.current = { ...activePlayback, project: destination, projectId: destination.id, queue, index: queue.findIndex(track => track.id === activePlayback.trackId) };
           setPlayingProjectId(destination.id);
         } else if (activePlayback.projectId === project.id && affected.has(activePlayback.trackId)) stopPlayback();
-        for (const id of affected) noteStoreRef.current.remove(`${project.id}:${id}`);
+        for (const id of affected) noteContextManagerRef.current.remove(`${project.id}:${id}`);
         setNoteTargetId(current => affected.has(current) ? null : current);
         setFocusedTrackId(current => affected.has(current) ? "" : current);
         setProjects(current => current.map(item => changed.find(next => next.id === item.id) ?? item));
@@ -1750,7 +1696,7 @@ function App({ initialAppearance = DEFAULT_APPEARANCE, canReconcileAppearanceAss
           const removedIds = new Set(removedTracks.map((track) => track.id));
           const playback = playbackRef.current;
           if (playback.projectId === project.id && !remainingIds.has(playback.trackId)) stopPlayback();
-          for (const track of removedTracks) noteStoreRef.current.remove(`${project.id}:${track.id}`);
+          for (const track of removedTracks) noteContextManagerRef.current.remove(`${project.id}:${track.id}`);
           setNoteTargetId((current) => removedIds.has(current) ? null : current);
           setFocusedTrackId((current) => removedIds.has(current) ? "" : current);
           applyProjectUpdate(updated);
@@ -1793,7 +1739,7 @@ function App({ initialAppearance = DEFAULT_APPEARANCE, canReconcileAppearanceAss
     try {
       if (playingProjectId === project.id) stopPlayback();
       await invoke("deleteProject", { projectId: project.id });
-      noteStoreRef.current.removePrefix(`${project.id}:`);
+      noteContextManagerRef.current.removePrefix(`${project.id}:`);
       setSelectedId("");
       setActiveView("library");
       await reloadProjects("");
@@ -2160,6 +2106,20 @@ function App({ initialAppearance = DEFAULT_APPEARANCE, canReconcileAppearanceAss
   const gridShowing = libraryShowing && libraryLayout === "grid";
   const carouselShowing = libraryShowing && libraryLayout === "carousel";
 
+  const changeCarouselSurface = useCallback((surface, projectId) => {
+    dispatchListenUi(surface === "closed"
+      ? { type: "CLOSE_CAROUSEL_SURFACE", projectId }
+      : { type: "OPEN_CAROUSEL_SURFACE", surface, projectId });
+  }, []);
+
+  useEffect(() => {
+    const surface = listenUiState.carouselSurface;
+    if (surface.type === "closed") return;
+    if (!carouselShowing || surface.projectId !== visibleSelection || !filteredProjects.some((project) => project.id === surface.projectId)) {
+      dispatchListenUi({ type: "CLOSE_CAROUSEL_SURFACE", projectId: surface.projectId });
+    }
+  }, [carouselShowing, filteredProjects, listenUiState.carouselSurface, visibleSelection]);
+
   useLayoutEffect(() => {
     const position = libraryPositionRef.current;
     let scrollTop = 0;
@@ -2195,7 +2155,7 @@ function App({ initialAppearance = DEFAULT_APPEARANCE, canReconcileAppearanceAss
     ? filteredProjects.find((project) => project.id === libraryDropTarget.projectId)
     : null;
 
-  return <div className={`opal-app${visibleAppearance.themeId === "custom" && visibleBackgroundUrl ? " has-custom-background" : ""}`} data-view={activeView} data-library-layout={libraryShowing ? libraryLayout : undefined}>
+  return <div className={`opal-app${visibleAppearance.themeId === "custom" && visibleBackgroundUrl ? " has-custom-background" : ""}`} data-overlay-background data-view={activeView} data-library-layout={libraryShowing ? libraryLayout : undefined}>
     <div className={`ambient-field${visibleAppearance.themeId === "custom" && visibleBackgroundUrl ? " has-custom-image" : ""}`} aria-hidden="true">
       {visibleAppearance.themeId === "custom" && visibleBackgroundUrl && <img className="appearance-background-image" src={visibleBackgroundUrl} alt="" />}
     </div>
@@ -2251,7 +2211,7 @@ function App({ initialAppearance = DEFAULT_APPEARANCE, canReconcileAppearanceAss
       <div className="library-drop-status" role="status">
         {dropProject && <span><Plus size={14} aria-hidden="true" />Add to {dropProject.title}</span>}
       </div>
-      {compatibilityMode ? <CompatibilityView onRevealFolder={revealStorageFolder} /> : recoveryMode ? <RecoveryView onRevealFolder={revealStorageFolder} onRestore={restoreLibraryBackup} onRetry={retryStorage} /> : activeView === "project" && selectedProject ? <ProjectView key={selectedProject.id} project={selectedProject} capsules={capsuleSummaries} capsulesLoading={capsuleShelfLoading} onOpenCapsule={requestOpenCapsule} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} isPlaying={playbackState === "playing"} focusedTrackId={focusedTrackId} selectedMomentId={selectedMomentId} section={projectSection} onSectionChange={changeProjectSection} noteTargetId={noteTargetId} noteText={noteText} noteStatus={noteStatus} nativeAvailable={isTauri()} onBack={() => returnToLibrary()} onTrackInfo={(track) => setTrackInfo({ project: selectedProject, track })} onTrackSelect={(track) => startPlayback(selectedProject, track)} onMomentSelect={selectMoment} onMomentJump={jumpToMoment} onMomentUpdate={updateMoment} onMomentDelete={removeMoment} onJumpUnresolved={jumpUnresolved} onPlay={() => currentVersions(selectedProject)[0] && startPlayback(selectedProject, currentVersions(selectedProject)[0], 0)} onOpenSequence={() => openSequenceRoom(selectedProject)} onCreateCapsule={() => openCapsuleBuilder(selectedProject)} onNoteChange={handleNoteChange} onFlushNotes={flushNoteSave} onNoteTargetChange={changeNoteTarget} onImport={() => pickAudioFiles(selectedProject.id)} onAddVersion={(group) => pickAudioFiles(selectedProject.id, group.id)} onEditProject={() => setEditOpen(true)} onEditArtwork={pickArtwork} onRemoveArtwork={removeArtwork} onRemoveProject={() => removeProject(selectedProject)} onRenameTrack={renameTrack} onReorderGroups={reorderTrackGroups} onRemoveTrack={(group) => removeTrack(selectedProject, group)} projects={projects} onChangeSelectedTracks={changeSelectedTracks} /> : activeView === "sequence" && selectedProject ? <SequenceRoom project={selectedProject} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} playbackState={playbackState} elapsedMs={elapsedMs} durationMs={durationMs || displayTrack?.durationMs || 0} onBack={leaveSequenceRoom} onPlayTrack={playSequenceTrack} onAuditionTransition={auditionTransition} onReorderGroups={reorderTrackGroups} onUpdateTransition={updateTransition} onPlay={() => toggleSequencePlayback(selectedProject)} onPrevious={playPrevious} onNext={playNext} onProgressChange={seekPlayback} onCreateCapsule={() => openCapsuleBuilder(selectedProject)} /> : activeView === "capsule" && selectedProject && capsule ? <CapsuleView capsule={capsule} project={selectedProject} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} playbackState={playbackState} elapsedMs={elapsedMs} durationMs={durationMs || displayTrack?.durationMs || 0} onBack={leaveCapsuleView} onPlayTrack={playCapsuleTrack} onPlay={() => toggleCapsulePlayback(capsule)} onPrevious={playPrevious} onNext={playNext} onProgressChange={seekPlayback} onCopyReference={() => copyCapsuleReference(capsule)} onOpenResponse={() => setCapsuleResponseOpen(true)} onAddResponse={addCapsuleResponse} /> : <LibraryView layout={libraryLayout} dropTargetKey={dropProject ? libraryDropTarget.key : undefined} loading={loading} projects={filteredProjects} selectedId={visibleSelection} query={query} trackMatches={trackMatches} onOpenProject={openProject} onPlayTrack={playLibraryTrack} onAddTracks={pickAudioFiles} playingProjectId={playingProjectId} playingTrackId={playingTrackId} playbackState={playbackState} progress={progressValue} onCreateProject={() => setCreateOpen(true)} onClearSearch={() => setQuery("")} onStep={stepLibrarySelection} />}</main>
+      {compatibilityMode ? <CompatibilityView onRevealFolder={revealStorageFolder} /> : recoveryMode ? <RecoveryView onRevealFolder={revealStorageFolder} onRestore={restoreLibraryBackup} onRetry={retryStorage} /> : activeView === "project" && selectedProject ? <ProjectView key={selectedProject.id} project={selectedProject} capsules={capsuleSummaries} capsulesLoading={capsuleShelfLoading} onOpenCapsule={requestOpenCapsule} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} isPlaying={playbackState === "playing"} focusedTrackId={focusedTrackId} selectedMomentId={selectedMomentId} section={projectSection} onSectionChange={changeProjectSection} noteTargetId={noteTargetId} noteText={noteText} noteStatus={noteStatus} nativeAvailable={isTauri()} onBack={() => returnToLibrary()} onTrackInfo={(track) => setTrackInfo({ project: selectedProject, track })} onTrackSelect={(track) => startPlayback(selectedProject, track)} onMomentSelect={selectMoment} onMomentJump={jumpToMoment} onMomentUpdate={updateMoment} onMomentDelete={removeMoment} onJumpUnresolved={jumpUnresolved} onPlay={() => currentVersions(selectedProject)[0] && startPlayback(selectedProject, currentVersions(selectedProject)[0], 0)} onOpenSequence={() => openSequenceRoom(selectedProject)} onCreateCapsule={() => openCapsuleBuilder(selectedProject)} onNoteChange={handleNoteChange} onFlushNotes={flushNoteSave} onNoteTargetChange={changeNoteTarget} onImport={() => pickAudioFiles(selectedProject.id)} onAddVersion={(group) => pickAudioFiles(selectedProject.id, group.id)} onEditProject={() => setEditOpen(true)} onEditArtwork={pickArtwork} onRemoveArtwork={removeArtwork} onRemoveProject={() => removeProject(selectedProject)} onRenameTrack={renameTrack} onReorderGroups={reorderTrackGroups} onRemoveTrack={(group) => removeTrack(selectedProject, group)} projects={projects} onChangeSelectedTracks={changeSelectedTracks} /> : activeView === "sequence" && selectedProject ? <SequenceRoom project={selectedProject} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} playbackState={playbackState} elapsedMs={elapsedMs} durationMs={durationMs || displayTrack?.durationMs || 0} onBack={leaveSequenceRoom} onPlayTrack={playSequenceTrack} onAuditionTransition={auditionTransition} onReorderGroups={reorderTrackGroups} onUpdateTransition={updateTransition} onPlay={() => toggleSequencePlayback(selectedProject)} onPrevious={playPrevious} onNext={playNext} onProgressChange={seekPlayback} onCreateCapsule={() => openCapsuleBuilder(selectedProject)} /> : activeView === "capsule" && selectedProject && capsule ? <CapsuleView capsule={capsule} project={selectedProject} playingTrackId={playingProjectId === selectedProject.id ? playingTrackId : ""} playbackState={playbackState} elapsedMs={elapsedMs} durationMs={durationMs || displayTrack?.durationMs || 0} onBack={leaveCapsuleView} onPlayTrack={playCapsuleTrack} onPlay={() => toggleCapsulePlayback(capsule)} onPrevious={playPrevious} onNext={playNext} onProgressChange={seekPlayback} onCopyReference={() => copyCapsuleReference(capsule)} onOpenResponse={() => setCapsuleResponseOpen(true)} onAddResponse={addCapsuleResponse} /> : <LibraryView carouselSurface={listenUiState.carouselSurface} onCarouselSurfaceChange={changeCarouselSurface} layout={libraryLayout} dropTargetKey={dropProject ? libraryDropTarget.key : undefined} loading={loading} projects={filteredProjects} selectedId={visibleSelection} query={query} trackMatches={trackMatches} onOpenProject={openProject} onPlayTrack={playLibraryTrack} onAddTracks={pickAudioFiles} playingProjectId={playingProjectId} playingTrackId={playingTrackId} playbackState={playbackState} progress={progressValue} onCreateProject={() => setCreateOpen(true)} onClearSearch={() => setQuery("")} onStep={stepLibrarySelection} />}</main>
     {activeView !== "sequence" && activeView !== "capsule" && displayProject && displayTrack && <Player project={displayProject} track={displayTrack} selectedMomentId={selectedMomentId} status={playbackState} playbackError={playbackError} isPlaying={playbackState === "playing"} progress={progressValue} elapsedMs={elapsedMs} durationMs={durationMs || displayTrack.durationMs} volume={volume} muted={muted} volumeOpen={volumeOpen} queueOpen={queueOpen} menuOpen={playerMenuOpen} shuffleEnabled={shuffleEnabled} repeatMode={repeatMode} onTogglePlay={togglePlayback} onPrevious={playPrevious} onNext={playNext} onProgressChange={seekPlayer} onCreateMoment={(timeMs) => createMoment(displayProject, displayTrack, timeMs)} onSelectMoment={(moment) => selectMoment(displayProject, displayTrack, moment)} onVolumeChange={(event) => { setVolume(Number(event.target.value)); setMuted(false); }} onToggleMute={() => setMuted((value) => !value)} onToggleVolume={() => setVolumeOpen((openState) => !openState)} onToggleQueue={() => setQueueOpen((openState) => !openState)} onToggleMenu={() => setPlayerMenuOpen((openState) => !openState)} onToggleShuffle={toggleShuffle} onToggleRepeat={cycleRepeatMode} onOpenProject={() => openProject(displayProject.id)} onShowTrack={() => openProject(displayProject.id, displayTrack.id)} onOpenNotes={() => openProject(displayProject.id, displayTrack.id, displayTrack.id)} onRevealFile={async () => { try { await invoke("revealManagedFile", { managedFileRef: displayTrack.managedFileRef }); } catch (revealError) { setError(String(revealError)); } }} onShowInfo={() => setTrackInfo({ project: displayProject, track: displayTrack })} />}
     {activeView !== "sequence" && activeView !== "capsule" && queueOpen && displayProject && <QueuePopover project={displayProject} currentIndex={displayQueueIndex} onSelect={(track, index) => { startPlayback(displayProject, track, index); setQueueOpen(false); }} onClose={() => setQueueOpen(false)} />}
     {showWelcome && (
@@ -2358,7 +2318,7 @@ function LibraryEmpty({ query, onCreateProject, onClearSearch }) {
   </div>;
 }
 
-function LibraryView({ layout, dropTargetKey, loading, projects: visibleProjects, selectedId, query, trackMatches, onOpenProject, onCreateProject, onClearSearch, onStep, onPlayTrack, onAddTracks, playingProjectId, playingTrackId, playbackState, progress }) {
+function LibraryView({ layout, dropTargetKey, loading, projects: visibleProjects, selectedId, query, trackMatches, onOpenProject, onCreateProject, onClearSearch, onStep, onPlayTrack, onAddTracks, playingProjectId, playingTrackId, playbackState, progress, carouselSurface, onCarouselSurfaceChange }) {
   if (loading) return <section className="library-screen view-stack loading-library"><div className="library-loading glass"><CircleNotch size={23} weight="thin" /></div></section>;
   if (layout === "grid") return <LibraryGrid
     projects={visibleProjects}
@@ -2387,10 +2347,12 @@ function LibraryView({ layout, dropTargetKey, loading, projects: visibleProjects
     playingTrackId={playingTrackId}
     playbackState={playbackState}
     progress={progress}
+    surface={carouselSurface}
+    onSurfaceChange={onCarouselSurfaceChange}
   />;
 }
 
-function ProjectCarousel({ projects, selectedId, dropTargetKey, trackMatches, onOpenProject, onStep, onPlayTrack, onAddTracks, playingProjectId, playingTrackId, playbackState, progress }) {
+function ProjectCarousel({ projects, selectedId, dropTargetKey, trackMatches, onOpenProject, onStep, onPlayTrack, onAddTracks, playingProjectId, playingTrackId, playbackState, progress, surface, onSurfaceChange }) {
   const count = projects.length;
   const selectedIndex = Math.max(0, projects.findIndex((project) => project.id === selectedId));
   const selected = projects[selectedIndex];
@@ -2398,8 +2360,7 @@ function ProjectCarousel({ projects, selectedId, dropTargetKey, trackMatches, on
   const previewToggleRef = useRef(null);
   const previewCloseRef = useRef(null);
   const restoreToggleFocus = useRef(false);
-  const [previewProjectId, setPreviewProjectId] = useState(null);
-  const previewOpen = previewProjectId === selected.id;
+  const previewOpen = surface.type === "tracks" && surface.projectId === selected.id;
   const previewTrackId = playingProjectId === selected.id ? playingTrackId : "";
   const tracks = useMemo(() => playbackTracks(selected, previewTrackId), [selected, previewTrackId]);
   const pointerRef = useRef(null);
@@ -2414,7 +2375,6 @@ function ProjectCarousel({ projects, selectedId, dropTargetKey, trackMatches, on
     if (Math.abs(delta) === count / 2) delta = directionRef.current * Math.abs(delta);
     cursor += delta;
     setPosition({ index: selectedIndex, cursor });
-    setPreviewProjectId(null);
   }
 
   const visibleRadius = count >= 4 ? 2 : count >= 2 ? 1 : 0;
@@ -2425,6 +2385,17 @@ function ProjectCarousel({ projects, selectedId, dropTargetKey, trackMatches, on
     const slot = cursor + offset;
     const index = ((slot % count) + count) % count;
     return { project: projects[index], offset, slot };
+  });
+
+  useEffect(() => {
+    if (surface.type !== "closed" && surface.projectId !== selected.id) onSurfaceChange("closed", surface.projectId);
+  }, [onSurfaceChange, selected.id, surface]);
+
+  useOverlayLayer({
+    active: previewOpen,
+    elementRef: orbitRef,
+    initialFocus: false,
+    onEscape: () => closePreview(),
   });
 
   useEffect(() => {
@@ -2463,7 +2434,7 @@ function ProjectCarousel({ projects, selectedId, dropTargetKey, trackMatches, on
 
   function closePreview(restoreFocus = true) {
     restoreToggleFocus.current = restoreFocus;
-    setPreviewProjectId(null);
+    onSurfaceChange("closed", selected.id);
   }
 
   function step(direction) {
@@ -2516,12 +2487,7 @@ function ProjectCarousel({ projects, selectedId, dropTargetKey, trackMatches, on
   }
 
   return (
-    <section className="library-screen view-stack" aria-label="OPAL library" onKeyDown={(event) => {
-      if (event.key !== "Escape" || !previewOpen) return;
-      event.preventDefault();
-      event.stopPropagation();
-      closePreview();
-    }}>
+    <section className="library-screen view-stack" aria-label="OPAL library">
       <h1 className="library-accessible-title">Library</h1>
       <div className="carousel-wrap">
         {count > 1 && <button type="button" className="carousel-control carousel-control-left" onClick={() => step(-1)} aria-label="Previous project"><CaretLeft size={22} /></button>}
@@ -2584,7 +2550,7 @@ function ProjectCarousel({ projects, selectedId, dropTargetKey, trackMatches, on
                         type="button"
                         aria-expanded={previewOpen}
                         aria-controls="library-track-preview"
-                        onClick={() => setPreviewProjectId(selected.id)}
+                        onClick={() => onSurfaceChange("tracks", selected.id)}
                       ><ListBullets size={14} />Tracks</button>}
                     </div>
                   </div>
@@ -2785,6 +2751,16 @@ function ProjectView({ project, capsules, capsulesLoading, onOpenCapsule, playin
   const [projectSortOpen, setProjectSortOpen] = useState(false);
   const projectActionsRef = useRef(null);
   const projectActionsTriggerRef = useRef(null);
+  useOverlayLayer({
+    active: projectActionsOpen,
+    elementRef: projectActionsRef,
+    initialFocus: false,
+    trapFocus: true,
+    onEscape: () => {
+      setProjectActionsOpen(false);
+      projectActionsTriggerRef.current?.focus({ preventScroll: true });
+    },
+  });
 
   useEffect(() => {
     if (!groups.some((group) => group.id === activeGroupId)) setActiveGroupId(groups[0]?.id ?? "");
@@ -2801,17 +2777,9 @@ function ProjectView({ project, capsules, capsulesLoading, onOpenCapsule, playin
     function handlePointerDown(event) {
       if (!projectActionsRef.current?.contains(event.target)) setProjectActionsOpen(false);
     }
-    function handleKeyDown(event) {
-      if (event.key === "Escape") {
-        setProjectActionsOpen(false);
-        projectActionsTriggerRef.current?.focus();
-      }
-    }
     document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
     return () => {
       document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
     };
   }, [projectActionsOpen]);
 
@@ -3227,13 +3195,6 @@ function CapsuleResponsePrompt({ capsule, currentTrack, timeMs, onClose, onSend 
 }
 
 function handleActionMenuKeyDown(event, menuRef, onClose) {
-  if (event.key === "Escape") {
-    event.preventDefault();
-    const trigger = menuRef.current?.parentElement?.querySelector('[aria-expanded="true"]');
-    onClose();
-    window.requestAnimationFrame(() => trigger?.focus());
-    return;
-  }
   if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
   const items = [...(menuRef.current?.querySelectorAll('[role="menuitem"]:not(:disabled)') ?? [])];
   if (!items.length) return;
@@ -3249,6 +3210,7 @@ function TrackMenu({ group, onRename, onAddVersion, onNotes, onInfo, onRemove, o
   const [choosingProject, setChoosingProject] = useState(false);
   const multiple = selectionIds.length > 1;
   const menuRef = useRef(null);
+  useOverlayLayer({ elementRef: menuRef, initialFocus: false, trapFocus: true, onEscape: onClose });
   useLayoutEffect(() => {
     const menu = menuRef.current;
     const anchor = menu.parentElement;
@@ -3319,6 +3281,7 @@ function VersionMenu({ anchor, version, index, versionCount, onMove, onRename, o
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   const [position, setPosition] = useState(null);
+  useOverlayLayer({ elementRef: menuRef, initialFocus: false, trapFocus: true, onEscape: () => closeRef.current() });
 
   useLayoutEffect(() => {
     function positionMenu() {
@@ -3352,30 +3315,12 @@ function VersionMenu({ anchor, version, index, versionCount, onMove, onRename, o
     function handlePointerDown(event) {
       if (!menuRef.current?.contains(event.target) && !anchor?.contains(event.target)) closeRef.current();
     }
-    function handleEscape(event) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        closeRef.current();
-        anchor?.focus({ preventScroll: true });
-      }
-    }
     document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleEscape);
     return () => {
       document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleEscape);
     };
   }, [anchor]);
-  return createPortal(<div ref={menuRef} className="version-menu glass" style={{ ...position, visibility: position ? "visible" : "hidden" }} data-popover role="menu" aria-label={`Actions for ${version.versionName}`} onKeyDown={(event) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      onClose();
-      anchor?.focus({ preventScroll: true });
-    } else {
-      handleActionMenuKeyDown(event, menuRef, onClose);
-    }
-  }}>
+  return createPortal(<div ref={menuRef} className="version-menu glass" style={{ ...position, visibility: position ? "visible" : "hidden" }} data-popover role="menu" aria-label={`Actions for ${version.versionName}`} onKeyDown={(event) => handleActionMenuKeyDown(event, menuRef, onClose)}>
     <span className="eyebrow">Version actions</span>
     {onNotes && <button type="button" role="menuitem" onClick={onNotes}><NotePencil size={14} />{version.note?.text ? "Edit notes" : "Open notes"}</button>}
     {onInfo && <button type="button" role="menuitem" onClick={onInfo}><Info size={14} />Track details</button>}
@@ -3424,70 +3369,9 @@ function MomentCompare({ project, track, moment, versions, onJumpMoment, onClose
   return <div className="moment-compare"><div className="moment-compare-heading"><div><span className="eyebrow">Same marked section</span><strong>Compare versions</strong></div><button type="button" onClick={onClose} aria-label="Close moment comparison"><X size={14} /></button></div>{otherVersions.length > 1 && <label className="moment-compare-select"><span>Compare with</span><select value={compareTrack?.id ?? ""} onChange={(event) => setCompareVersionId(event.target.value)}>{otherVersions.map((version) => <option key={version.id} value={version.id}>{version.versionName}</option>)}</select></label>}<div className="moment-compare-grid"><div className="moment-compare-card"><span className="eyebrow">A · {track.versionName}</span><strong>{formatTime(moment.timeMs)}</strong><small>{momentStateLabel(moment.state)}{moment.isResolved ? " · Resolved" : " · Open"}</small><button type="button" onClick={() => onJumpMoment(project, track, moment)}>Play this moment</button></div><div className="moment-compare-connector" aria-hidden="true">↔</div><div className="moment-compare-card"><span className="eyebrow">B · {compareTrack?.versionName ?? "Version"}</span>{compareTrack ? <><strong>{formatTime(compareMoment?.timeMs ?? moment.timeMs)}</strong><small>{compareMoment ? `${momentStateLabel(compareMoment.state)}${compareMoment.isResolved ? " · Resolved" : " · Open"}` : "No linked decision"}</small><button type="button" onClick={() => compareMoment && onJumpMoment(project, compareTrack, compareMoment)} disabled={!compareMoment}>Play this moment</button></> : <small>Add another version to compare this section.</small>}</div></div></div>;
 }
 
-function WaveformProgress({ id = "player-seek", track, progress, durationMs, showWaveform, moments = [], selectedMomentId, onChange, onSelectMoment, onCreateMoment }) {
-  const [bars, setBars] = useState([]);
-  const [analysisState, setAnalysisState] = useState("loading");
-
-  useEffect(() => {
-    if (!showWaveform) return;
-    let cancelled = false;
-    const cached = readCachedWaveform(track);
-    if (cached?.length) {
-      setBars(cached);
-      setAnalysisState("ready");
-      return () => { cancelled = true; };
-    }
-    setBars([]);
-    if (!isTauri() || !track.managedFileRef) {
-      setAnalysisState("unavailable");
-      return () => { cancelled = true; };
-    }
-    setAnalysisState("loading");
-    invoke("getAudioWaveform", { managedFileRef: track.managedFileRef }).then((nextBars) => {
-      if (cancelled) return;
-      const normalizedBars = Array.from(nextBars ?? [], (bar) => Number(bar)).filter(Number.isFinite);
-      if (normalizedBars.length) {
-        writeCachedWaveform(track, normalizedBars);
-        setBars(normalizedBars);
-        setAnalysisState("ready");
-      } else {
-        setAnalysisState("unavailable");
-      }
-    }).catch(() => {
-      if (!cancelled) setAnalysisState("unavailable");
-    });
-    return () => { cancelled = true; };
-  }, [showWaveform, track.id, track.managedFileRef, track.title, track.durationMs, track.format]);
-
-  const safeProgress = Math.max(0, Math.min(100, Number(progress) || 0));
-  const renderBars = (layer) => bars.map((height, index) => <span key={`${layer}-${index}`} style={{ height: `${height}%` }} />);
-
-  const waveformReady = showWaveform && analysisState === "ready";
-
-  return <div id={id} className={`waveform-progress${waveformReady ? " is-waveform" : ""}`} style={{ "--waveform-progress": `${safeProgress}%` }} role="group" aria-label="Playback waveform" onContextMenu={(event) => {
-    if (event.target?.closest?.(".moment-marker")) {
-      event.preventDefault();
-      return;
-    }
-    event.preventDefault();
-    const bounds = event.currentTarget.getBoundingClientRect();
-    if (!durationMs || !onCreateMoment || bounds.width <= 0) return;
-    const position = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
-    onCreateMoment(position * durationMs);
-  }}>
-    {waveformReady && <>
-      <div className="waveform-layer waveform-layer-muted" aria-hidden="true">{renderBars("muted")}</div>
-      <div className="waveform-layer waveform-layer-active" aria-hidden="true">{renderBars("active")}</div>
-    </>}
-    {showWaveform && !waveformReady && <span className={`waveform-analysis is-${analysisState}`} role="status">{analysisState === "loading" ? "Analyzing waveform" : "Waveform unavailable"}</span>}
-    <span className="waveform-cursor" aria-hidden="true" />
-    {moments.filter((moment) => durationMs > 0 && moment.timeMs >= 0 && moment.timeMs <= durationMs).map((moment) => <button type="button" key={moment.id} className={`moment-marker state-${moment.state} ${moment.isResolved ? "is-resolved" : ""} ${selectedMomentId === moment.id ? "is-selected" : ""}`} style={{ left: `${(moment.timeMs / durationMs) * 100}%` }} onClick={(event) => { event.stopPropagation(); onSelectMoment?.(moment); }} aria-label={`${momentStateLabel(moment.state)} moment at ${formatTime(moment.timeMs)}`} title={`${momentStateLabel(moment.state)} · ${formatTime(moment.timeMs)}`} />)}
-    <input className="waveform-input" aria-label="Playback position" title={onCreateMoment ? "Click or drag to seek · Right-click to add a moment · Press M at the playhead" : "Click or drag to seek"} type="range" min="0" max="100" step="any" aria-valuetext={`${formatTime(durationMs * safeProgress / 100)} of ${formatTime(durationMs)}`} value={safeProgress} onChange={onChange} disabled={!durationMs || !onChange} />
-  </div>;
-}
-
 function Player({ project, track, selectedMomentId, status, playbackError, isPlaying, progress, elapsedMs, durationMs, volume, muted, volumeOpen, queueOpen, menuOpen, shuffleEnabled, repeatMode, onTogglePlay, onPrevious, onNext, onProgressChange, onCreateMoment, onSelectMoment, onVolumeChange, onToggleMute, onToggleVolume, onToggleQueue, onToggleMenu, onToggleShuffle, onToggleRepeat, onOpenProject, onShowTrack, onOpenNotes, onRevealFile, onShowInfo }) {
   const [showWaveform, setShowWaveform] = useState(false);
+  const seekGroupId = `player-seek-${useId().replace(/:/g, "")}`;
   const statusText = status === "loading" ? "Loading" : status === "error" ? "Unavailable" : status === "transition" ? "Breathing room" : status === "transition-paused" ? "Paused between songs" : `${track.versionName ?? "Original"} · ${project.title}`;
   const repeatLabel = repeatMode === "track" ? "Repeat track" : repeatMode === "project" ? "Repeat project" : "Repeat off";
   return <section className="player-shell glass" aria-label="Audio player">
@@ -3510,14 +3394,14 @@ function Player({ project, track, selectedMomentId, status, playbackError, isPla
           onClick={() => setShowWaveform((visible) => !visible)}
           aria-label="Waveform view"
           aria-pressed={showWaveform}
-          aria-controls="player-seek"
+          aria-controls={seekGroupId}
           title={showWaveform ? "Show progress bar" : "Show waveform"}
         ><Waveform size={18} weight="bold" /></button>
         <span className="player-menu-wrap"><button className="player-more" type="button" onClick={onToggleMenu} aria-label="Open player menu" aria-expanded={menuOpen} title="Track options"><DotsThree size={18} /></button>{menuOpen && <PlayerMenu track={track} elapsedMs={elapsedMs} onCreateMoment={onCreateMoment} onOpenProject={onOpenProject} onShowTrack={onShowTrack} onOpenNotes={onOpenNotes} onRevealFile={onRevealFile} onShowInfo={onShowInfo} onClose={onToggleMenu} />}</span>
       </div>
       <div className="player-progress">
         <span className="player-time">{formatTime(elapsedMs)}</span>
-        <WaveformProgress track={track} showWaveform={showWaveform} moments={track.moments} selectedMomentId={selectedMomentId} progress={progress} durationMs={durationMs} onChange={onProgressChange} onSelectMoment={onSelectMoment} onCreateMoment={onCreateMoment} />
+        <WaveformProgress id={seekGroupId} track={track} showWaveform={showWaveform} moments={track.moments} selectedMomentId={selectedMomentId} progress={progress} durationMs={durationMs} onChange={onProgressChange} onSelectMoment={onSelectMoment} onCreateMoment={onCreateMoment} formatTime={formatTime} momentStateLabel={momentStateLabel} />
         <span className="player-time">{formatTime(durationMs)}</span>
       </div>
     </div>
@@ -3534,130 +3418,32 @@ function VolumePopover({ volume, muted, onChange, onToggleMute, onClose }) {
   const popoverRef = useRef(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  useOverlayLayer({ elementRef: popoverRef, trapFocus: true, onEscape: () => onCloseRef.current() });
   useEffect(() => {
-    const previous = document.activeElement;
-    const focusable = () => Array.from(popoverRef.current?.querySelectorAll("input, button") ?? []).filter((element) => !element.disabled);
-    const focusTimer = window.setTimeout(() => focusable()[0]?.focus(), 0);
-    function handleKeyDown(event) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onCloseRef.current();
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const elements = focusable();
-      if (!elements.length) return;
-      if (event.shiftKey && document.activeElement === elements[0]) {
-        event.preventDefault();
-        elements[elements.length - 1].focus();
-      } else if (!event.shiftKey && document.activeElement === elements[elements.length - 1]) {
-        event.preventDefault();
-        elements[0].focus();
-      }
-    }
     function handlePointerDown(event) {
       if (!popoverRef.current?.contains(event.target) && !event.target.closest?.(".volume-button")) onCloseRef.current();
     }
-    document.addEventListener("keydown", handleKeyDown);
     document.addEventListener("pointerdown", handlePointerDown);
     return () => {
-      window.clearTimeout(focusTimer);
-      document.removeEventListener("keydown", handleKeyDown);
       document.removeEventListener("pointerdown", handlePointerDown);
-      if (previous instanceof HTMLElement) previous.focus();
     };
   }, []);
   const volumeValue = muted ? 0 : Math.max(0, Math.min(100, Number(volume) || 0));
   return <div ref={popoverRef} className="volume-popover" role="dialog" aria-label="Volume control"><div className="volume-slider" style={{ "--volume-level": `${volumeValue}%` }}><span className="volume-slider-rail" aria-hidden="true" /><span className="volume-slider-fill" aria-hidden="true" /><span className="volume-slider-thumb" aria-hidden="true" /><input className="volume-slider-input" aria-label="Volume" type="range" min="0" max="100" step="any" value={volumeValue} onChange={onChange} /></div><button type="button" className="volume-mute" onClick={onToggleMute} aria-label={muted ? "Unmute" : "Mute"} title={muted ? "Unmute" : "Mute"}>{muted ? <SpeakerX size={20} /> : <SpeakerHigh size={20} />}</button></div>;
 }
 
-function DialogFrame({ titleId, onClose, children, className = "", backdrop, dismissOnBackdrop = true }) {
-  const dialogRef = useRef(null);
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
-
-  useEffect(() => {
-    const previous = document.activeElement;
-    const focusable = () => Array.from(dialogRef.current?.querySelectorAll("button, input, textarea, select, [tabindex]:not([tabindex='-1'])") ?? []).filter((element) => !element.disabled && element.getAttribute("aria-hidden") !== "true");
-    const focusTimer = window.setTimeout(() => {
-      if (!dialogRef.current?.contains(document.activeElement)) focusable()[0]?.focus();
-    }, 0);
-    function handleKeyDown(event) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onCloseRef.current();
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const elements = focusable();
-      if (!elements.length) return;
-      const first = elements[0];
-      const last = elements[elements.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    }
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.clearTimeout(focusTimer);
-      document.removeEventListener("keydown", handleKeyDown);
-      if (previous instanceof HTMLElement) previous.focus();
-    };
-  }, []);
-
-  return createPortal(
-    <div
-      className="modal-backdrop"
-      role="presentation"
-      onMouseDown={(event) => { if (dismissOnBackdrop && event.target === event.currentTarget) onClose(); }}
-    >
-      {backdrop}
-      <section ref={dialogRef} className={`import-prompt glass modal-form ${className}`} role="dialog" aria-modal="true" aria-labelledby={titleId} onMouseDown={(event) => event.stopPropagation()}>
-        {children}
-      </section>
-    </div>, document.body
-  );
-}
-
 function ProfilePopover({ nativeAvailable, storageInfo, storageError, importProgress, updateStatus, updateAvailable, onCheckUpdates, onOpenUpdates, onAppearance, onPreviewUpdateBanner, onPreviewWhatsNew, onRevealFolder, onExportBackup, onRestoreBackup, onRetryStorage, onDiagnostics, onReplayWelcome, onClose }) {
   const popoverRef = useRef(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  useOverlayLayer({ elementRef: popoverRef, trapFocus: true, onEscape: () => onCloseRef.current() });
   useEffect(() => {
-    const previous = document.activeElement;
-    const focusable = () => Array.from(popoverRef.current?.querySelectorAll("button, input") ?? []).filter((element) => !element.disabled);
-    const focusTimer = window.setTimeout(() => focusable()[0]?.focus(), 0);
-    function handleKeyDown(event) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onCloseRef.current();
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const elements = focusable();
-      if (!elements.length) return;
-      if (event.shiftKey && document.activeElement === elements[0]) {
-        event.preventDefault();
-        elements[elements.length - 1].focus();
-      } else if (!event.shiftKey && document.activeElement === elements[elements.length - 1]) {
-        event.preventDefault();
-        elements[0].focus();
-      }
-    }
     function handlePointerDown(event) {
       if (!popoverRef.current?.contains(event.target) && !event.target.closest?.(".profile-button")) onCloseRef.current();
     }
-    document.addEventListener("keydown", handleKeyDown);
     document.addEventListener("pointerdown", handlePointerDown);
     return () => {
-      window.clearTimeout(focusTimer);
-      document.removeEventListener("keydown", handleKeyDown);
       document.removeEventListener("pointerdown", handlePointerDown);
-      if (previous instanceof HTMLElement) previous.focus();
     };
   }, []);
   const nativeHint = "Available in the native OPAL app.";
@@ -3715,37 +3501,14 @@ function PlayerMenu({ track, elapsedMs, onCreateMoment, onOpenProject, onShowTra
   const menuRef = useRef(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  useOverlayLayer({ elementRef: menuRef, trapFocus: true, onEscape: () => onCloseRef.current() });
   useEffect(() => {
-    const previous = document.activeElement;
-    const focusable = () => Array.from(menuRef.current?.querySelectorAll("button") ?? []).filter((element) => !element.disabled);
-    const focusTimer = window.setTimeout(() => focusable()[0]?.focus(), 0);
-    function handleKeyDown(event) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onCloseRef.current();
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const elements = focusable();
-      if (!elements.length) return;
-      if (event.shiftKey && document.activeElement === elements[0]) {
-        event.preventDefault();
-        elements[elements.length - 1].focus();
-      } else if (!event.shiftKey && document.activeElement === elements[elements.length - 1]) {
-        event.preventDefault();
-        elements[0].focus();
-      }
-    }
     function handlePointerDown(event) {
       if (!menuRef.current?.contains(event.target) && !event.target.closest?.(".player-more")) onCloseRef.current();
     }
-    document.addEventListener("keydown", handleKeyDown);
     document.addEventListener("pointerdown", handlePointerDown);
     return () => {
-      window.clearTimeout(focusTimer);
-      document.removeEventListener("keydown", handleKeyDown);
       document.removeEventListener("pointerdown", handlePointerDown);
-      if (previous instanceof HTMLElement) previous.focus();
     };
   }, []);
   const run = (action) => {
@@ -3756,6 +3519,7 @@ function PlayerMenu({ track, elapsedMs, onCreateMoment, onOpenProject, onShowTra
 }
 
 function TrackInfoDialog({ project, track, onClose, onAddVersion, onSelectVersion, onRemoveVersion, importProgress, importBusy = false, isPlaying, playbackProgress = 0, onTogglePlay, onSeek }) {
+  const seekGroupId = `track-details-seek-${useId().replace(/:/g, "")}`;
   const [fileInfo, setFileInfo] = useState(null);
   const [loadingFileInfo, setLoadingFileInfo] = useState(isTauri());
   const [notice, setNotice] = useState("");
@@ -3815,6 +3579,15 @@ function TrackInfoDialog({ project, track, onClose, onAddVersion, onSelectVersio
   const [metadataPopover, setMetadataPopover] = useState("");
   const metadataRef = useRef(null);
   const metadataTriggerRef = useRef(null);
+  useOverlayLayer({
+    active: Boolean(metadataPopover),
+    elementRef: metadataRef,
+    initialFocus: false,
+    onEscape: () => {
+      setMetadataPopover("");
+      metadataTriggerRef.current?.focus({ preventScroll: true });
+    },
+  });
 
   useEffect(() => {
     if (!metadataPopover) return;
@@ -3880,14 +3653,7 @@ function TrackInfoDialog({ project, track, onClose, onAddVersion, onSelectVersio
     </div>
     <header className="track-details-summary">
       <h2 id="track-info-title">{track.title}</h2>
-      <div className="track-musical-tags" ref={metadataRef} onKeyDown={(event) => {
-        if (event.key === "Escape" && metadataPopover) {
-          event.preventDefault();
-          event.stopPropagation();
-          setMetadataPopover("");
-          metadataTriggerRef.current?.focus();
-        }
-      }}>
+      <div className="track-musical-tags" ref={metadataRef}>
         <div className="track-tag-control"><span>Key</span><button className="track-tag-trigger" type="button" aria-label={tags.key ? `Choose musical key, ${tags.key}` : "Choose musical key"} aria-haspopup="dialog" aria-expanded={metadataPopover === "key"} onClick={(event) => toggleMetadata(event, "key")}>{tags.key || "Set key"}</button></div>
         <div className="track-tag-control"><span>BPM</span><button className="track-tag-trigger" type="button" aria-label={tags.bpm ? `Set tempo, ${tags.bpm} BPM` : "Set tempo"} aria-haspopup="dialog" aria-expanded={metadataPopover === "bpm"} onClick={(event) => toggleMetadata(event, "bpm")}>{tags.bpm || "Set BPM"}</button></div>
         {metadataPopover === "key" && <div className="track-key-popover glass" role="dialog" aria-label="Musical key">
@@ -3918,7 +3684,7 @@ function TrackInfoDialog({ project, track, onClose, onAddVersion, onSelectVersio
     </header>
     <div className="track-details-playback">
       <button className="track-details-play" type="button" onClick={onTogglePlay} disabled={!track.managedFileRef || !onTogglePlay} aria-label={isPlaying ? "Pause track" : "Play track"}>{isPlaying ? <Pause size={23} weight="fill" /> : <Play size={23} weight="fill" />}</button>
-      <WaveformProgress id="track-details-seek" track={track} progress={playbackProgress} durationMs={track.durationMs} showWaveform={true} onChange={onSeek} />
+      <WaveformProgress id={seekGroupId} track={track} progress={playbackProgress} durationMs={track.durationMs} showWaveform={true} onChange={onSeek} formatTime={formatTime} momentStateLabel={momentStateLabel} />
     </div>
     <section ref={versionsScrollRef} className="track-version-stack" aria-label="Song versions" tabIndex={0}>
       {versions.map((version) => <fieldset className={`track-version-card${version.isCurrent ? " is-current" : ""}`} key={version.id}>
@@ -3975,37 +3741,14 @@ function QueuePopover({ project, currentIndex, onSelect, onClose }) {
   const popoverRef = useRef(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  useOverlayLayer({ elementRef: popoverRef, trapFocus: true, onEscape: () => onCloseRef.current() });
   useEffect(() => {
-    const previous = document.activeElement;
-    const focusable = () => Array.from(popoverRef.current?.querySelectorAll("button") ?? []).filter((element) => !element.disabled);
-    const focusTimer = window.setTimeout(() => focusable()[0]?.focus(), 0);
-    function handleKeyDown(event) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onCloseRef.current();
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const elements = focusable();
-      if (!elements.length) return;
-      if (event.shiftKey && document.activeElement === elements[0]) {
-        event.preventDefault();
-        elements[elements.length - 1].focus();
-      } else if (!event.shiftKey && document.activeElement === elements[elements.length - 1]) {
-        event.preventDefault();
-        elements[0].focus();
-      }
-    }
     function handlePointerDown(event) {
       if (!popoverRef.current?.contains(event.target) && !event.target.closest?.(".queue-button")) onCloseRef.current();
     }
-    document.addEventListener("keydown", handleKeyDown);
     document.addEventListener("pointerdown", handlePointerDown);
     return () => {
-      window.clearTimeout(focusTimer);
-      document.removeEventListener("keydown", handleKeyDown);
       document.removeEventListener("pointerdown", handlePointerDown);
-      if (previous instanceof HTMLElement) previous.focus();
     };
   }, []);
   const nextTracks = currentVersions(project).slice(Math.max(0, currentIndex + 1), currentIndex + 4);

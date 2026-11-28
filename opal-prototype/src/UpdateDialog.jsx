@@ -1,16 +1,23 @@
-import React from "react";
+import React, { useRef } from "react";
+import { createPortal } from "react-dom";
 import { ArrowDown, Check, CircleNotch, CloudCheck, X } from "@phosphor-icons/react";
+import { useOverlayLayer } from "./useOverlayLayer.js";
 import "./update-dialog.css";
 
 export function UpdateDialog({ update, appVersion, status, progress, error, busy, onCheck, onInstall, onClose }) {
+  const layerRef = useRef(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   const installing = status === "downloading" || status === "installing";
   const checking = status === "checking";
   const noUpdate = status === "current";
   const installed = status === "installed";
   const message = update?.body?.trim() || "A new OPAL build is ready with refinements and fixes.";
+  useOverlayLayer({ elementRef: layerRef, modal: true, trapFocus: true, onEscape: () => { if (!installing) onCloseRef.current(); } });
 
-  return (
-    <div className="modal-backdrop update-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !installing) onClose(); }}>
+  if (typeof document === "undefined") return null;
+  return createPortal((
+    <div ref={layerRef} data-overlay-layer className="modal-backdrop update-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !installing) onClose(); }}>
       <section className="update-dialog glass" role="dialog" aria-modal="true" aria-labelledby="update-title">
         {!installing && <button className="modal-close" type="button" onClick={onClose} aria-label="Close update window"><X size={18} /></button>}
         <div className="update-dialog-mark" aria-hidden="true">{installed ? <Check size={22} weight="light" /> : <CloudCheck size={22} weight="light" />}</div>
@@ -31,5 +38,5 @@ export function UpdateDialog({ update, appVersion, status, progress, error, busy
         <p className="update-footnote">Installing restarts OPAL. Your library, versions, notes, and artwork stay on this device.</p>
       </section>
     </div>
-  );
+  ), document.body);
 }
