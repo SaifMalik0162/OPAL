@@ -14,6 +14,7 @@ import "./accessibility.css";
 import "./carousel-preview.css";
 import "./project-detail.css";
 import "./appearance/appearance.css";
+import "./responsive-layout.css";
 
 const appearancePreference = readAppearancePreference();
 initializeAppearance(appearancePreference.appearance);

@@ -1,0 +1,97 @@
+/* Keep the windowed composition as the baseline. Size in CSS pixels so OS
+   display scaling is respected; cap growth on very large or ultrawide screens. */
+:root {
+  --layout-scale: 1;
+  --layout-viewport-height: calc(100dvh / var(--layout-scale));
+}
+
+@media (min-width: 761px) {
+  :root { --player-reserve: calc(166px * var(--layout-scale)); }
+
+  .topbar { zoom: var(--layout-scale); }
+
+  /* Workspaces share the same density as the toolbar and player. Keep their
+     internal measurements logical so player clearance is applied only once. */
+  .opal-app:not([data-view="library"]) .stage {
+    zoom: var(--layout-scale);
+    --player-reserve: 166px;
+    min-height: calc(var(--layout-viewport-height) - 64px);
+  }
+
+  .opal-app:not([data-view="library"]) .stage .view-stack { width: min(100%, 1240px); }
+  .sequence-room, .capsule-room { min-height: calc(var(--layout-viewport-height) - 76px); }
+  .recovery-screen { min-height: calc(var(--layout-viewport-height) - 170px); }
+
+  /* Dialogs live outside the scaled workspaces, including nested note dialogs. */
+  .modal-backdrop { zoom: var(--layout-scale); }
+  .modal-backdrop .import-prompt,
+  .modal-backdrop .update-dialog {
+    max-height: calc(var(--layout-viewport-height) - 48px);
+  }
+  .modal-backdrop .import-prompt:not(.appearance-dialog, .track-details-dialog, .capsule-create-dialog),
+  .modal-backdrop .update-dialog { overflow-y: auto; }
+  .modal-backdrop .track-details-dialog { height: min(740px, calc(var(--layout-viewport-height) - 48px)); }
+  .notes-expanded-input { min-height: min(calc(var(--layout-viewport-height) * .46), 420px); }
+
+  .profile-popover {
+    max-height: calc(var(--layout-viewport-height) - 100px);
+    overflow-y: auto;
+  }
+
+  .queue-popover {
+    zoom: var(--layout-scale);
+    right: max(16px, calc((100vw / var(--layout-scale) - 980px) / 2));
+    bottom: calc(clamp(14px, calc(3.5vh / var(--layout-scale)), 34px) + 108px);
+    max-height: min(620px, calc(var(--layout-viewport-height) - 200px));
+  }
+
+  .version-menu {
+    zoom: var(--layout-scale);
+    max-height: min(540px, calc(var(--layout-viewport-height) * .7));
+  }
+
+  .error-banner, .notice-banner, .update-available-banner { zoom: var(--layout-scale); }
+
+  .view-stack { width: min(100%, calc(1240px * var(--layout-scale))); }
+
+  .library-grid-view { max-width: calc(1120px * var(--layout-scale)); }
+  .projects-grid { gap: calc(32px * var(--layout-scale)) calc(24px * var(--layout-scale)); }
+  .project-card-meta { zoom: var(--layout-scale); }
+
+  .opal-app[data-view="library"] .stage {
+    height: calc(100dvh - 64px * var(--layout-scale));
+  }
+
+  .opal-app[data-library-layout="grid"] .stage { height: auto; }
+
+  .opal-app[data-view="library"] .library-screen {
+    width: min(100%, calc(1240px * var(--layout-scale)));
+    padding-bottom: calc(6.4vh + 88px * var(--layout-scale));
+  }
+
+  .opal-app[data-view="library"] .sleeve-orbit {
+    width: min(100%, calc(980px * var(--layout-scale)), max(510px, calc((100dvh - 250px * var(--layout-scale)) * 2.07)));
+  }
+
+  .opal-app[data-view="library"] .sleeve-meta {
+    --detail-height: calc(26px * var(--layout-scale));
+    min-height: clamp(48px, 10.4cqw, calc(102px * var(--layout-scale)));
+  }
+
+  .opal-app[data-view="library"] .sleeve-meta strong {
+    font-size: clamp(14px, 2.7cqw, calc(24px * var(--layout-scale)));
+  }
+
+  .opal-app[data-view="library"] .sleeve-meta small {
+    font-size: clamp(10px, 1.9cqw, calc(16px * var(--layout-scale)));
+  }
+
+  .opal-app[data-view="library"] .caption-open { font-size: calc(16px * var(--layout-scale)); }
+  .opal-app[data-view="library"] .library-carousel-actions { margin-top: calc(16px * var(--layout-scale)); }
+
+  .player-shell {
+    zoom: var(--layout-scale);
+    width: min(980px, calc(100vw / var(--layout-scale) - 40px));
+    bottom: clamp(14px, calc(3.5vh / var(--layout-scale)), 34px);
+  }
+}

@@ -67,7 +67,9 @@ export function animateCover(stage, source, cover, { details, carousel }) {
   overlay.setAttribute("aria-hidden", "true");
   overlay.src = source.src;
   Object.assign(overlay.style, source.frame);
-  stage.append(overlay);
+  // Frames are measured in viewport pixels. Keep the flying cover outside the
+  // scaled workspace so its position and dimensions aren't scaled a second time.
+  stage.parentElement.append(overlay);
 
   const motion = overlay.animate([source.frame, target.frame], { duration: DURATION, easing: EASING, fill: "both" });
   // At the end of a side landing, hand off to the real sleeve behind its neighbors.

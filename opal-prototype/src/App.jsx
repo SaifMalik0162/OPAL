@@ -270,6 +270,20 @@ function playbackTracks(project, preferredTrackId = "") {
 }
 
 function App({ initialAppearance = DEFAULT_APPEARANCE, canReconcileAppearanceAssets = true }) {
+  useLayoutEffect(() => {
+    function resizeLayout() {
+      // Match the 1240 × 820 windowed composition, with a height limit for
+      // ultrawide and short windows. OS display scaling is already in CSS pixels.
+      const scale = Math.max(1, Math.min(2.5, window.innerWidth / 1240, window.innerHeight / 820));
+      document.documentElement.style.setProperty("--layout-scale", String(scale));
+    }
+    resizeLayout();
+    window.addEventListener("resize", resizeLayout);
+    return () => {
+      window.removeEventListener("resize", resizeLayout);
+      document.documentElement.style.removeProperty("--layout-scale");
+    };
+  }, []);
   const savedPlayback = useMemo(readPlaybackSnapshot, []);
   useEffect(() => {
     const platform = navigator.platform || navigator.userAgent;
@@ -3046,7 +3060,7 @@ function SequenceRoom({ project, playingTrackId, playbackState, elapsedMs, durat
     <div className="sequence-room-topline"><button className="back-action" type="button" onClick={onBack}><ArrowLeft size={16} />Project</button><div className="sequence-room-title"><span className="eyebrow">Sequence</span><h1>{project.title}</h1></div>{CAPSULES_ENABLED && <div className="sequence-room-actions"><button className="button button-capsule" type="button" onClick={onCreateCapsule}><ShareNetwork size={14} />Make capsule</button></div>}</div>
     <div className="sequence-hero">
       <div className="sequence-artwork-wrap"><img src={project.artwork} alt={`${project.title} artwork`} /></div>
-      <div className="sequence-hero-copy"><span className="eyebrow">{status}</span><h2>{current.title}</h2><p>{current.versionName} <span>·</span> {current.duration}</p><div className="sequence-transport"><button type="button" onClick={onPrevious} aria-label="Previous track"><SkipBack size={17} weight="fill" /></button><button className="sequence-play" type="button" onClick={onPlay} aria-label={playbackState === "playing" ? "Pause sequence" : "Play sequence"}>{playbackState === "playing" ? <Pause size={19} weight="fill" /> : <Play size={19} weight="fill" />}</button><button type="button" onClick={onNext} aria-label="Next track"><SkipForward size={17} weight="fill" /></button></div><div className="sequence-progress"><div><span>{formatTime(elapsedMs)}</span><span>{formatTime(durationMs)}</span></div><input aria-label="Sequence playback position" type="range" min="0" max="100" value={progress} onChange={onProgressChange} disabled={!durationMs || !onChange} /></div></div>
+      <div className="sequence-hero-copy"><span className="eyebrow">{status}</span><h2>{current.title}</h2><p>{current.versionName} <span>·</span> {current.duration}</p><div className="sequence-transport"><button type="button" onClick={onPrevious} aria-label="Previous track"><SkipBack size={17} weight="fill" /></button><button className="sequence-play" type="button" onClick={onPlay} aria-label={playbackState === "playing" ? "Pause sequence" : "Play sequence"}>{playbackState === "playing" ? <Pause size={19} weight="fill" /> : <Play size={19} weight="fill" />}</button><button type="button" onClick={onNext} aria-label="Next track"><SkipForward size={17} weight="fill" /></button></div><div className="sequence-progress"><div><span>{formatTime(elapsedMs)}</span><span>{formatTime(durationMs)}</span></div><input aria-label="Sequence playback position" type="range" min="0" max="100" value={progress} onChange={onProgressChange} disabled={!durationMs || !onProgressChange} /></div></div>
     </div>
     <div className="sequence-arc"><div className="sequence-section-heading"><h2>Tracks</h2><span>{tracks.length} {tracks.length === 1 ? "track" : "tracks"}</span></div><div className="sequence-track-list">{tracks.map((track, index) => { const groupId = trackGroupId(track); const following = tracks[index + 1] ?? null; return <React.Fragment key={track.id}><div className={`sequence-track ${track.id === current.id ? "is-current" : ""} ${draggedGroupId === groupId ? "is-dragging" : ""}`} draggable onDragStart={() => setDraggedGroupId(groupId)} onDragEnd={() => setDraggedGroupId("")} onDragOver={(event) => event.preventDefault()} onDrop={() => moveGroup(groupId)}><span className="sequence-track-number">{String(index + 1).padStart(2, "0")}</span><span className="sequence-drag-handle" aria-hidden="true"><DotsSixVertical size={14} /></span><button type="button" className="sequence-track-button" onClick={() => onPlayTrack(project, track, index)}><strong>{track.title}</strong><small>{track.versionName} · {track.duration}</small></button></div>{following && <SequenceTransition project={project} fromTrack={track} toTrack={following} transition={sequenceTransition(project, track, following)} onUpdateTransition={onUpdateTransition} onAuditionTransition={onAuditionTransition} />}</React.Fragment>; })}</div></div>
   </section>;
@@ -3188,7 +3202,7 @@ function CapsuleView({ capsule, project, playingTrackId, playbackState, elapsedM
     <div className="capsule-local-disclosure" role="note"><Info size={15} /><span><strong>Stored in this OPAL library.</strong> Passwords are an opening check only; audio and notes are not encrypted, and this reference does not share anything remotely.</span></div>
     <div className="capsule-hero">
       <div className="capsule-artwork-wrap"><img src={capsule.artwork} alt={`${capsule.projectTitle} artwork`} /><span>{formatCapsuleExpiry(capsule.expiresAt)}</span></div>
-      <div className="capsule-hero-copy"><span className="eyebrow">{status}</span><h2>{capsule.projectTitle}</h2><p>{capsule.message || capsule.projectDescription || "A focused listen through the project."}</p><div className="capsule-hero-meta"><span>{capsule.tracks.length} selected versions</span><span>{capsule.includeNotes ? "Notes included" : "Listening only"}</span></div><div className="capsule-transport"><button type="button" onClick={onPrevious} aria-label="Previous capsule track"><SkipBack size={17} weight="fill" /></button><button className="capsule-play" type="button" onClick={onPlay} aria-label={playbackState === "playing" ? "Pause capsule" : "Play capsule"}>{playbackState === "playing" ? <Pause size={19} weight="fill" /> : <Play size={19} weight="fill" />}</button><button type="button" onClick={onNext} aria-label="Next capsule track"><SkipForward size={17} weight="fill" /></button></div><div className="capsule-progress"><div><span>{formatTime(elapsedMs)}</span><span>{formatTime(durationMs)}</span></div><input aria-label="Capsule playback position" type="range" min="0" max="100" value={progress} onChange={onProgressChange} disabled={!durationMs || !onChange} /></div><button className="capsule-response-cta" type="button" onClick={onOpenResponse}><PaperPlaneTilt size={14} />Respond to this moment</button></div>
+      <div className="capsule-hero-copy"><span className="eyebrow">{status}</span><h2>{capsule.projectTitle}</h2><p>{capsule.message || capsule.projectDescription || "A focused listen through the project."}</p><div className="capsule-hero-meta"><span>{capsule.tracks.length} selected versions</span><span>{capsule.includeNotes ? "Notes included" : "Listening only"}</span></div><div className="capsule-transport"><button type="button" onClick={onPrevious} aria-label="Previous capsule track"><SkipBack size={17} weight="fill" /></button><button className="capsule-play" type="button" onClick={onPlay} aria-label={playbackState === "playing" ? "Pause capsule" : "Play capsule"}>{playbackState === "playing" ? <Pause size={19} weight="fill" /> : <Play size={19} weight="fill" />}</button><button type="button" onClick={onNext} aria-label="Next capsule track"><SkipForward size={17} weight="fill" /></button></div><div className="capsule-progress"><div><span>{formatTime(elapsedMs)}</span><span>{formatTime(durationMs)}</span></div><input aria-label="Capsule playback position" type="range" min="0" max="100" value={progress} onChange={onProgressChange} disabled={!durationMs || !onProgressChange} /></div><button className="capsule-response-cta" type="button" onClick={onOpenResponse}><PaperPlaneTilt size={14} />Respond to this moment</button></div>
       <div className="capsule-next-card"><span className="eyebrow">Next in the presentation</span>{next ? <button type="button" onClick={() => onPlayTrack(capsule, next, currentIndex + 1)}><strong>{next.title}</strong><small>{next.versionName} · {next.duration}</small><span>Play next <ArrowUpRight size={13} /></span></button> : <div className="sequence-finale"><strong>End of capsule</strong><small>The listen resolves here.</small></div>}</div>
     </div>
     <div className="capsule-room-grid">
@@ -3244,13 +3258,14 @@ function TrackMenu({ group, onRename, onAddVersion, onNotes, onInfo, onRemove, o
     const gap = 12;
 
     function revealMenu() {
+      const scale = menu.getBoundingClientRect().width / menu.offsetWidth || 1;
       const viewportBottom = Math.min(window.innerHeight, player?.getBoundingClientRect().top ?? Infinity);
       const visibleBottom = viewportBottom - gap;
-      menu.style.setProperty("--track-menu-available-height", `${Math.max(0, visibleBottom - gap)}px`);
+      menu.style.setProperty("--track-menu-available-height", `${Math.max(0, visibleBottom - gap) / scale}px`);
       // Measure from the anchor so the menu's entrance animation doesn't affect the clearance.
-      const menuBottom = anchor.getBoundingClientRect().top + menu.offsetTop + menu.offsetHeight;
+      const menuBottom = anchor.getBoundingClientRect().top + (menu.offsetTop + menu.offsetHeight) * scale;
       const overflow = Math.max(0, menuBottom - trackList.getBoundingClientRect().bottom);
-      panel.style.setProperty("--track-menu-clearance", `${Math.ceil(overflow)}px`);
+      panel.style.setProperty("--track-menu-clearance", `${Math.ceil(overflow / scale)}px`);
       if (menuBottom > visibleBottom) {
         window.scrollBy({ top: Math.ceil(menuBottom - visibleBottom), behavior: "instant" });
       }
@@ -3310,14 +3325,15 @@ function VersionMenu({ anchor, version, index, versionCount, onMove, onRename, o
       if (!anchor?.isConnected) { closeRef.current(); return; }
       const rect = anchor.getBoundingClientRect();
       const menu = menuRef.current;
+      const scale = Number.parseFloat(getComputedStyle(menu).zoom) || 1;
       const gap = 8;
       const available = window.innerHeight - gap * 2;
-      const height = Math.min(menu.scrollHeight, available);
-      const width = menu.offsetWidth;
+      const height = Math.min(menu.scrollHeight * scale, available);
+      const width = menu.offsetWidth * scale;
       const top = rect.bottom + gap + height <= window.innerHeight - gap
         ? rect.bottom + gap
         : Math.max(gap, rect.top - gap - height);
-      setPosition({ top, left: Math.max(gap, Math.min(rect.right - width, window.innerWidth - width - gap)), maxHeight: available });
+      setPosition({ top: top / scale, left: Math.max(gap, Math.min(rect.right - width, window.innerWidth - width - gap)) / scale, maxHeight: available / scale });
     }
     positionMenu();
     window.addEventListener("resize", positionMenu);
@@ -3593,7 +3609,7 @@ function DialogFrame({ titleId, onClose, children, className = "", backdrop, dis
     };
   }, []);
 
-  return (
+  return createPortal(
     <div
       className="modal-backdrop"
       role="presentation"
@@ -3603,7 +3619,7 @@ function DialogFrame({ titleId, onClose, children, className = "", backdrop, dis
       <section ref={dialogRef} className={`import-prompt glass modal-form ${className}`} role="dialog" aria-modal="true" aria-labelledby={titleId} onMouseDown={(event) => event.stopPropagation()}>
         {children}
       </section>
-    </div>
+    </div>, document.body
   );
 }
 
