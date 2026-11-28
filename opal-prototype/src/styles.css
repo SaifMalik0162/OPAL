@@ -152,11 +152,13 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   grid-template-columns: minmax(0,1fr) auto minmax(0,1fr);
   align-items: center;
   padding: 12px 28px 0;
-  -webkit-app-region: drag;
-  app-region: drag;
 }
 
-.topbar-left, .top-navigation, .topbar-actions {
+/* The Windows/Linux native title bar handles window dragging. */
+html[data-platform="macos"] .topbar,
+html[data-platform="macos"] .topbar-left,
+html[data-platform="macos"] .top-navigation,
+html[data-platform="macos"] .topbar-actions {
   -webkit-app-region: drag;
   app-region: drag;
 }

@@ -944,7 +944,9 @@ function App({ initialAppearance = DEFAULT_APPEARANCE, canReconcileAppearanceAss
   }
 
   function handleWindowMouseDown(event) {
-    if (!isTauri() || event.button !== 0) return;
+    // Only macOS overlays its title bar on this toolbar. Other platforms use
+    // their native title bar so a toolbar misclick must never start a window drag.
+    if (!isTauri() || document.documentElement.dataset.platform !== "macos" || event.button !== 0) return;
     if (event.target?.closest?.("button, input, textarea, label, select, a, [data-popover]")) return;
     getCurrentWindow().startDragging().catch(() => {});
   }
